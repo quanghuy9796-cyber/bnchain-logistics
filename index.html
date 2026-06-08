@@ -1351,6 +1351,7 @@ async function pgBaoCao(c){
 
 // ==================== DANH MỤC ====================
 async function pgKH(c){
+  if(!canSee(['quan_ly','ke_toan','ceo'])){toast('Không có quyền thực hiện','error');return;}
   const{data}=await db.from('khach_hang').select('*').eq('active',true).order('ten_cong_ty');
   const list=data||[];
   c.innerHTML=`
@@ -1362,10 +1363,10 @@ async function pgKH(c){
       <td class="text-blue fw6">${k.ma_kh}</td><td style="font-weight:500">${k.ten_cong_ty}</td>
       <td>${k.nguoi_lien_he||'—'}</td><td>${k.so_dien_thoai||'—'}</td>
       <td>${k.email||'—'}</td><td>${k.ma_so_thue||'—'}</td>
-      <td><div style="display:flex;gap:4px">
+      <td>${canEdit?`<div style="display:flex;gap:4px">
         <button class="btn btn-xs btn-teal" onclick="editKH('${k.id}')"><i class="ti ti-edit"></i></button>
         <button class="btn btn-xs btn-danger" onclick="deleteKH('${k.id}','${k.ten_cong_ty}')"><i class="ti ti-trash"></i></button>
-      </div></td>
+      </div>`:'—'}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
@@ -1394,6 +1395,7 @@ function editKH(id){
   db.from('khach_hang').select('*').eq('id',id).single().then(({data})=>{if(data)openAddKH(data);});
 }
 async function saveKH(id=''){
+  if(!canSee(['quan_ly','ke_toan','ceo'])){toast('Không có quyền thực hiện','error');return;}
   const d={ten_cong_ty:document.getElementById('kh-ten').value,nguoi_lien_he:document.getElementById('kh-nlh').value,so_dien_thoai:document.getElementById('kh-dt').value,email:document.getElementById('kh-email').value,ma_so_thue:document.getElementById('kh-mst').value,dia_chi:document.getElementById('kh-dc').value,ghi_chu:document.getElementById('kh-gc').value};
   if(!d.ten_cong_ty){toast('Nhập tên công ty','error');return;}
   let error;
@@ -1403,6 +1405,7 @@ async function saveKH(id=''){
   toast(id?'Đã cập nhật':'Đã thêm khách hàng');closeModal();await loadMaster();pgKH(document.getElementById('content'));
 }
 async function deleteKH(id,ten){
+  if(!canSee(['quan_ly','ke_toan','ceo'])){toast('Không có quyền thực hiện','error');return;}
   if(!confirm(`Xóa khách hàng "${ten}"?`))return;
   const{error}=await db.from('khach_hang').update({active:false}).eq('id',id);
   if(error){toast('Lỗi: '+error.message,'error');return;}
@@ -1415,6 +1418,7 @@ async function pgThauPhu(c){ pgPhuongTien(c); }
 async function pgXe(c){ pgPhuongTien(c); }
 
 async function pgPhuongTien(c){
+  if(!canSee(['quan_ly','ceo'])){toast('Không có quyền thực hiện','error');return;}
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   const[{data:xeList},{data:tpList},{data:lxList}]=await Promise.all([
     db.from('xe').select('*').eq('active',true).order('bien_so'),
@@ -1424,11 +1428,11 @@ async function pgPhuongTien(c){
   const loaiLabel={'noi_bo':'🚗 Nội bộ','thau_tu_lai':'🚛 Thầu tự lái','thau_thue_lai':'🔄 Thầu thuê lái'};
 
   c.innerHTML=`
-  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+  ${canEdit?`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
     <button class="btn btn-primary" onclick="openAddXe()"><i class="ti ti-plus"></i> Thêm xe</button>
     <button class="btn btn-teal" onclick="openAddTP()"><i class="ti ti-plus"></i> Thêm thầu phụ</button>
     <button class="btn" onclick="openAddLX()"><i class="ti ti-plus"></i> Thêm lái xe</button>
-  </div>
+  </div>`:''}
 
   <h4 style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">
     <i class="ti ti-truck"></i> DANH SÁCH XE (${(xeList||[]).length})
@@ -1443,10 +1447,10 @@ async function pgPhuongTien(c){
       <td>${x.ten_thau_phu||x.ma_thau_phu||'—'}</td>
       <td>${x.ten_lai_xe_mac_dinh||'—'}</td>
       <td>${x.tai_trong||'—'}</td>
-      <td><div style="display:flex;gap:4px">
+      <td>${canEdit?`<div style="display:flex;gap:4px">
         <button class="btn btn-xs btn-teal" onclick="editXe('${x.id}')"><i class="ti ti-edit"></i></button>
         <button class="btn btn-xs btn-danger" onclick="deleteXe('${x.id}','${x.bien_so}')"><i class="ti ti-trash"></i></button>
-      </div></td>
+      </div>`:'—'}</td>
     </tr>`).join('')}</tbody>
   </table></div>
 
@@ -1460,10 +1464,10 @@ async function pgPhuongTien(c){
       <td class="text-blue fw6">${t.ma_thau}</td><td class="fw6">${t.ten_cong_ty}</td>
       <td>${t.nguoi_lien_he||'—'}</td><td>${t.so_dien_thoai||'—'}</td>
       <td>${t.so_tai_khoan||'—'}</td><td>${t.ngan_hang||'—'}</td>
-      <td><div style="display:flex;gap:4px">
+      <td>${canEdit?`<div style="display:flex;gap:4px">
         <button class="btn btn-xs btn-teal" onclick="editTP('${t.id}')"><i class="ti ti-edit"></i></button>
         <button class="btn btn-xs btn-danger" onclick="deleteTP('${t.id}','${t.ma_thau}')"><i class="ti ti-trash"></i></button>
-      </div></td>
+      </div>`:'—'}</td>
     </tr>`).join('')}</tbody>
   </table></div>
 
@@ -1476,10 +1480,10 @@ async function pgPhuongTien(c){
     <tbody>${(lxList||[]).map(l=>`<tr>
       <td class="fw6">${l.ho_ten}</td><td>${l.so_dien_thoai||'—'}</td>
       <td>${l.so_cmnd||'—'}</td><td>${l.bang_lai||'—'}</td><td>${l.ngay_het_han_bang||'—'}</td>
-      <td><div style="display:flex;gap:4px">
+      <td>${canEdit?`<div style="display:flex;gap:4px">
         <button class="btn btn-xs btn-teal" onclick="editLX('${l.id}')"><i class="ti ti-edit"></i></button>
         <button class="btn btn-xs btn-danger" onclick="deleteLX('${l.id}','${l.ho_ten}')"><i class="ti ti-trash"></i></button>
-      </div></td>
+      </div>`:'—'}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
@@ -1509,10 +1513,11 @@ function openAddXe(existing={}){
       <label>Thầu phụ</label>
       <select id="xe-tp"><option value="">-- Chọn --</option>${tpOpts}</select>
     </div>
-    <div class="form-group" id="xe-laixe-group" style="${existing.loai_phan_loai==='thau_tu_lai'?'display:none':''}">
+    <div class="form-group" id="xe-laixe-group" style="${(existing.loai_phan_loai==='thau_tu_lai'||!existing.loai_phan_loai)?'display:none':''}">
       <label>Lái xe mặc định</label>
       <input type="text" id="xe-laixe" value="${existing.ten_lai_xe_mac_dinh||''}" placeholder="Nhập tên lái xe..." list="xe-lx-dl">
       <datalist id="xe-lx-dl">${lxOpts}</datalist>
+      <span style="font-size:10px;color:var(--text-muted)">Gõ tên hoặc chọn từ danh sách</span>
     </div>
     <div class="form-group"><label>Năm SX</label><input id="xe-nam" type="number" value="${existing.nam_sx||2020}"></div>
     <div class="form-group full"><label>Ghi chú</label><textarea id="xe-gc">${existing.ghi_chu||''}</textarea></div>
@@ -1524,26 +1529,31 @@ function openAddXe(existing={}){
 }
 function toggleXeFields(){
   const pl=document.getElementById('xe-pl')?.value;
-  document.getElementById('xe-thau-group').style.display=pl==='noi_bo'?'none':'';
-  document.getElementById('xe-laixe-group').style.display=pl==='thau_tu_lai'?'none':'';
+  const thauGrp=document.getElementById('xe-thau-group');
+  const lxGrp=document.getElementById('xe-laixe-group');
+  if(thauGrp)thauGrp.style.display=pl==='noi_bo'?'none':'';
+  if(lxGrp)lxGrp.style.display=pl==='thau_tu_lai'?'none':'';
 }
 function editXe(id){
   db.from('xe').select('*').eq('id',id).single().then(({data})=>{if(data)openAddXe(data);});
 }
 async function saveXeModal(id=''){
+  if(!canSee(['quan_ly','ceo'])){toast('Không có quyền thực hiện','error');return;}
   const pl=document.getElementById('xe-pl').value;
   const tpSel=document.getElementById('xe-tp');
   const tpMa=tpSel?.value||'';
   const tpTen=tpSel?.options[tpSel.selectedIndex]?.text?.split('—')[1]?.trim()||'';
+  const lxVal=document.getElementById('xe-laixe')?.value||'';
   const d={
     loai_xe:document.getElementById('xe-lx')?.value||'',
     loai_phan_loai:pl,
     tai_trong:document.getElementById('xe-tt')?.value||'',
-    ten_lai_xe_mac_dinh:document.getElementById('xe-laixe')?.value||'',
+    ten_lai_xe_mac_dinh:pl!=='thau_tu_lai'?lxVal:'',
     ma_thau_phu:tpMa,
     ten_thau_phu:tpTen,
     nam_sx:+document.getElementById('xe-nam')?.value||null,
     la_xe_noi_bo:pl==='noi_bo',
+    ghi_chu:document.getElementById('xe-gc')?.value||'',
   };
   let error;
   if(id){({error}=await db.from('xe').update(d).eq('id',id));}
@@ -1552,6 +1562,7 @@ async function saveXeModal(id=''){
   toast(id?'Đã cập nhật xe':'Đã thêm xe');closeModal();pgPhuongTien(document.getElementById('content'));
 }
 async function deleteXe(id,bien){
+  if(!canSee(['quan_ly','ceo'])){toast('Không có quyền thực hiện','error');return;}
   if(!confirm(`Xóa xe "${bien}"?`))return;
   const{error}=await db.from('xe').update({active:false}).eq('id',id);
   if(error){toast('Lỗi: '+error.message,'error');return;}
@@ -1582,6 +1593,7 @@ function editTP(id){
   db.from('thau_phu').select('*').eq('id',id).single().then(({data})=>{if(data)openAddTP(data);});
 }
 async function saveTP(id=''){
+  if(!canSee(['quan_ly','ceo'])){toast('Không có quyền thực hiện','error');return;}
   const d={ten_cong_ty:document.getElementById('tp-ten').value,nguoi_lien_he:document.getElementById('tp-nlh').value,so_dien_thoai:document.getElementById('tp-dt').value,so_tai_khoan:document.getElementById('tp-stk').value,ngan_hang:document.getElementById('tp-nh').value,ghi_chu:document.getElementById('tp-gc').value};
   if(!d.ten_cong_ty){toast('Nhập tên công ty','error');return;}
   let error;
@@ -1591,6 +1603,7 @@ async function saveTP(id=''){
   toast(id?'Đã cập nhật':'Đã thêm thầu phụ');closeModal();await loadMaster();pgPhuongTien(document.getElementById('content'));
 }
 async function deleteTP(id,ma){
+  if(!canSee(['quan_ly','ceo'])){toast('Không có quyền thực hiện','error');return;}
   if(!confirm(`Xóa thầu phụ "${ma}"?`))return;
   const{error}=await db.from('thau_phu').update({active:false}).eq('id',id);
   if(error){toast('Lỗi: '+error.message,'error');return;}
@@ -1619,6 +1632,7 @@ function editLX(id){
   db.from('lai_xe').select('*').eq('id',id).single().then(({data})=>{if(data)openAddLX(data);});
 }
 async function saveLX(id=''){
+  if(!canSee(['quan_ly','ceo'])){toast('Không có quyền thực hiện','error');return;}
   const d={ho_ten:document.getElementById('lx-ten').value,so_dien_thoai:document.getElementById('lx-dt').value,so_cmnd:document.getElementById('lx-cmnd').value,bang_lai:document.getElementById('lx-bang').value,ngay_het_han_bang:document.getElementById('lx-hh').value||null};
   if(!d.ho_ten){toast('Nhập họ tên','error');return;}
   let error;
@@ -1628,6 +1642,7 @@ async function saveLX(id=''){
   toast(id?'Đã cập nhật':'Đã thêm lái xe');closeModal();await loadMaster();pgPhuongTien(document.getElementById('content'));
 }
 async function deleteLX(id,ten){
+  if(!canSee(['quan_ly','ceo'])){toast('Không có quyền thực hiện','error');return;}
   if(!confirm(`Xóa lái xe "${ten}"?`))return;
   const{error}=await db.from('lai_xe').update({active:false}).eq('id',id);
   if(error){toast('Lỗi: '+error.message,'error');return;}
@@ -1680,6 +1695,7 @@ function editNV(id){
   db.from('users').select('*').eq('id',id).single().then(({data})=>{if(data)openAddNV(data);});
 }
 async function saveNV(id=''){
+  if(!canSee(['ceo'])){toast('Không có quyền thực hiện','error');return;}
   const d={ho_ten:document.getElementById('nv-ten').value,vai_tro:document.getElementById('nv-role').value};
   if(!d.ho_ten){toast('Nhập họ tên','error');return;}
   let error;
@@ -1689,6 +1705,7 @@ async function saveNV(id=''){
   toast(id?'Đã cập nhật':'Đã thêm nhân viên');closeModal();await loadMaster();pgNV(document.getElementById('content'));
 }
 async function toggleNV(id,active,ten){
+  if(!canSee(['ceo'])){toast('Không có quyền thực hiện','error');return;}
   if(!confirm(`${active?'Vô hiệu hóa':'Kích hoạt lại'} tài khoản "${ten}"?`))return;
   const{error}=await db.from('users').update({active:!active}).eq('id',id);
   if(error){toast('Lỗi: '+error.message,'error');return;}
