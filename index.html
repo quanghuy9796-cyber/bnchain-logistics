@@ -250,6 +250,26 @@ const fmt=n=>Number(n||0).toLocaleString('vi-VN');
 const fmtM=n=>fmt(n)+' đ';
 const today=()=>new Date().toISOString().split('T')[0];
 const genMa=()=>{const d=new Date();return`BNC-${String(d.getFullYear()).slice(-2)}${String(d.getMonth()+1).padStart(2,'0')}-${Math.random().toString(36).slice(2,6).toUpperCase()}`};
+// Format số tiền có dấu phẩy
+const fmtInput = v => v.toString().replace(/\D/g,'').replace(/\B(?=(\d{3})+(?!\d))/g,',');
+const parseNum = v => parseInt(v.toString().replace(/,/g,''))||0;
+
+// Validate biển số: 99H-06375 hoặc 99A-123.45
+function validateBienSo(v){
+  return /^\d{2}[A-Z]\d?-\d{4,5}$/.test(v.toUpperCase().replace(/\s/g,''));
+}
+// Format biển số tự động
+function formatBienSo(v){
+  let s=v.toUpperCase().replace(/[^0-9A-Z-]/g,'');
+  return s;
+}
+// Validate + format số cont: đúng 11 ký tự AAAU1234567
+function formatCont(v){
+  let s=v.toUpperCase().replace(/[^0-9A-Z]/g,'');
+  if(s.length>11) s=s.slice(0,11);
+  return s;
+}
+
 
 function toast(msg,type='success'){
   const t=document.createElement('div');t.className=`toast ${type}`;
@@ -442,77 +462,84 @@ async function renderDP(o){
 }
 
 function renderTabInfo(o,editable){
+  const dis=!editable?'disabled':'';
   const isNhap=o.loai_hang==='Nhập';
+  const canDelete=canSee(['quan_ly','ceo']);
   return`
   ${o.locked?'<div class="lock-notice"><i class="ti ti-lock"></i>Vận đơn đã hoàn thành và khóa lại.</div>':''}
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-file-description"></i>Thông tin cơ bản</div>
     <div class="form-grid">
-      <div class="form-group"><label>Ngày</label><input type="date" id="fi-ngay" value="${o.ngay||today()}" ${!editable?'disabled':''}></div>
-      <div class="form-group"><label>Khách hàng</label><select id="fi-khach" ${!editable?'disabled':''}>
-        ${KH.map(k=>`<option ${o.ten_khach===k.ten_cong_ty?'selected':''}>${k.ten_cong_ty}</option>`).join('')}
-      </select></div>
-      <div class="form-group"><label>Loại hàng</label><select id="fi-loai" onchange="toggleBillBooking()" ${!editable?'disabled':''}>
-        <option ${o.loai_hang==='Nhập'?'selected':''}>Nhập</option>
-        <option ${o.loai_hang==='Xuất'?'selected':''}>Xuất</option>
-        <option ${o.loai_hang==='CK'?'selected':''}>CK</option>
-      </select></div>
-      <div class="form-group"><label>Loại chuyến</label><select id="fi-lchuyen" ${!editable?'disabled':''}>
-        <option ${o.loai_chuyen==='Thường'?'selected':''}>Thường</option>
-        <option ${o.loai_chuyen==='Kết hợp'?'selected':''}>Kết hợp</option>
-        <option ${o.loai_chuyen==='Rỗng'?'selected':''}>Rỗng</option>
-      </select></div>
+      <div class="form-group"><label>Ngày *</label>
+        <input type="date" id="fi-ngay" value="${o.ngay||today()}" ${dis}></div>
+      <div class="form-group"><label>Khách hàng *</label>
+        <select id="fi-khach" ${dis}>
+          ${KH.map(k=>`<option ${o.ten_khach===k.ten_cong_ty?'selected':''}>${k.ten_cong_ty}</option>`).join('')}
+        </select></div>
+      <div class="form-group"><label>Loại hàng *</label>
+        <select id="fi-loai" onchange="toggleBillBooking()" ${dis}>
+          <option ${o.loai_hang==='Nhập'?'selected':''}>Nhập</option>
+          <option ${o.loai_hang==='Xuất'?'selected':''}>Xuất</option>
+          <option ${o.loai_hang==='Chuyển kho'?'selected':''}>Chuyển kho</option>
+        </select></div>
       <div class="form-group" id="grp-bill" ${!isNhap?'style="display:none"':''}>
-        <label>Số Bill (Nhập)</label><input type="text" id="fi-bill" value="${o.so_bill||''}" ${!editable?'disabled':''}></div>
+        <label>Số Bill</label>
+        <input type="text" id="fi-bill" value="${o.so_bill||''}" placeholder="Số bill hàng nhập" ${dis}></div>
       <div class="form-group" id="grp-booking" ${isNhap?'style="display:none"':''}>
-        <label>Số Booking (Xuất/CK)</label><input type="text" id="fi-booking" value="${o.so_booking||''}" ${!editable?'disabled':''}></div>
-      <div class="form-group full"><label>Hành trình</label><input type="text" id="fi-hanhTrinh" value="${o.hanh_trinh||''}" placeholder="Điểm lấy - Điểm trả" ${!editable?'disabled':''}></div>
-      <div class="form-group"><label>Điểm lấy hàng</label><input type="text" id="fi-lay" value="${o.diem_lay||''}" ${!editable?'disabled':''}></div>
-      <div class="form-group"><label>Điểm trả hàng</label><input type="text" id="fi-tra" value="${o.diem_tra||''}" ${!editable?'disabled':''}></div>
-      <div class="form-group full"><label>Điểm trả phát sinh thêm</label><input type="text" id="fi-traphat" value="${o.diem_tra_phat_sinh||''}" placeholder="Nếu có thêm điểm trả..." ${!editable?'disabled':''}></div>
-      <div class="form-group full"><label>Hàng hóa</label><input type="text" id="fi-hang" value="${o.hang_hoa||''}" ${!editable?'disabled':''}></div>
+        <label>Số Booking</label>
+        <input type="text" id="fi-booking" value="${o.so_booking||''}" placeholder="Số booking hàng xuất" ${dis}></div>
+      <div class="form-group"><label>Điểm lấy hàng *</label>
+        <input type="text" id="fi-lay" value="${o.diem_lay||''}" placeholder="Kho / KCN / Cảng..." ${dis}></div>
+      <div class="form-group"><label>Điểm trả hàng *</label>
+        <input type="text" id="fi-tra" value="${o.diem_tra||''}" placeholder="Kho / KCN / Cảng..." ${dis}></div>
+      <div class="form-group full"><label>Điểm trả phát sinh thêm</label>
+        <input type="text" id="fi-traphat" value="${o.diem_tra_phat_sinh||''}" placeholder="Nếu có thêm điểm trả..." ${dis}></div>
+      <div class="form-group"><label>Ngày yêu cầu giao</label>
+        <input type="date" id="fi-ycgiao" value="${o.ngay_yeu_cau||''}" ${dis}></div>
     </div>
   </div>
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-currency-dong"></i>Dịch vụ cộng thêm</div>
     <div class="form-grid">
       <div class="form-group">
-        <label><label class="toggle-switch"><input type="checkbox" id="fi-doilenh" ${o.co_doi_lenh?'checked':''} ${!editable?'disabled':''}> Đổi lệnh</label></label>
-        <input type="number" id="fi-phidl" value="${o.phi_doi_lenh||0}" placeholder="Phí / cont" ${!editable?'disabled':''}>
+        <label><input type="checkbox" id="fi-doilenh" ${o.co_doi_lenh?'checked':''} ${dis} style="width:auto;margin-right:5px">Đổi lệnh</label>
+        <input type="text" id="fi-phidl" value="${o.phi_doi_lenh>0?fmtInput(o.phi_doi_lenh):''}" placeholder="Phí / cont (VNĐ)" ${dis}
+          oninput="this.value=fmtInput(this.value)">
         <span style="font-size:10px;color:var(--text-muted)">thu theo số cont</span>
       </div>
       <div class="form-group">
-        <label><label class="toggle-switch"><input type="checkbox" id="fi-tokhai" ${o.co_to_khai?'checked':''} ${!editable?'disabled':''}> Mở tờ khai</label></label>
-        <input type="number" id="fi-phitk" value="${o.phi_to_khai||0}" placeholder="Phí / lô" ${!editable?'disabled':''}>
+        <label><input type="checkbox" id="fi-tokhai" ${o.co_to_khai?'checked':''} ${dis} style="width:auto;margin-right:5px">Mở tờ khai</label>
+        <input type="text" id="fi-phitk" value="${o.phi_to_khai>0?fmtInput(o.phi_to_khai):''}" placeholder="Phí / lô (VNĐ)" ${dis}
+          oninput="this.value=fmtInput(this.value)">
         <span style="font-size:10px;color:var(--text-muted)">thu theo lô</span>
       </div>
-      <div class="form-group full"><label>Người thực hiện đổi lệnh / tờ khai</label><input type="text" id="fi-nguoidl" value="${o.nguoi_doi_lenh||''}" ${!editable?'disabled':''}></div>
     </div>
   </div>
-  <div class="form-group" style="margin-bottom:8px"><label>Ghi chú</label><textarea id="fi-ghichu" ${!editable?'disabled':''}>${o.ghi_chu||''}</textarea></div>
-  ${editable?`<button class="btn btn-teal" style="width:100%;justify-content:center" onclick="saveInfo('${o.id}')"><i class="ti ti-device-floppy"></i> Lưu thông tin</button>`:''}`;
-}
-
-function toggleBillBooking(){
-  const isNhap=document.getElementById('fi-loai')?.value==='Nhập';
-  document.getElementById('grp-bill').style.display=isNhap?'':'none';
-  document.getElementById('grp-booking').style.display=isNhap?'none':'';
+  <div class="form-group" style="margin-bottom:10px"><label>Ghi chú</label>
+    <textarea id="fi-ghichu" ${dis}>${o.ghi_chu||''}</textarea></div>
+  ${editable?`
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-teal" style="flex:1;justify-content:center" onclick="saveInfo('`+o.id+`')"><i class="ti ti-device-floppy"></i> Lưu thông tin</button>
+    ${canDelete?`<button class="btn btn-danger btn-sm" onclick="deleteOrder('`+o.id+`')"><i class="ti ti-trash"></i> Xóa đơn</button>`:''}
+  </div>`:''}`;
 }
 
 function renderTabXe(o,editable){
   const dis=!editable?'disabled':'';
   const lxOpts=LX.map(l=>`<option value="${l.ho_ten}">`).join('');
   const tpOpts=TP.map(t=>`<option value="${t.ma_thau}">${t.ten_cong_ty}</option>`).join('');
-  const contOpts=['20DC','40DC','40HC','45HC','Xe tải','Mooc'].map(v=>`<option ${o.loai_cont===v?'selected':''}>${v}</option>`).join('');
+  const loaiXeOpts=['20 nhẹ','20 nặng','Cont 40','Cont 45','Xe tải 1.25T','Xe tải 2.5T','Xe tải 3.5T','Xe tải 5T','Xe tải 8T','Xe tải 10T','Mooc sàn','Mooc rào','Fooc'].map(v=>`<option ${o.loai_xe_hang===v?'selected':''}>${v}</option>`).join('');
+  const loaiChuyenOpts=['Thường','Kết hợp','Kẹp ghép'].map(s=>`<option ${o.loai_chuyen===s?'selected':''}>${s}</option>`).join('');
   const ttOpts=['Chờ xếp xe','Đang vận chuyển','Chờ xác nhận'].map(s=>`<option ${o.trang_thai===s?'selected':''}>${s}</option>`).join('');
-  const contLabel=o.loai_hang==='Xuất'?'Số cont (điền sau khi lấy cont rỗng)':'Số cont';
-  const contPlaceholder=o.loai_hang==='Xuất'?'Điền khi lấy cont rỗng...':'';
   return`
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-truck"></i>Phân công xe & lái xe</div>
     <div class="form-grid">
       <div class="form-group"><label>Biển kiểm soát</label>
-        <input type="text" id="fx-bien" value="${o.bien_kiem_soat||''}" placeholder="99H-06375" ${dis} oninput="onBienChange(this.value)">
+        <input type="text" id="fx-bien" value="${o.bien_kiem_soat||''}" placeholder="99H-06375"
+          ${dis} oninput="onBienInput(this)"
+          onblur="validateBienInput(this)">
+        <span id="fx-bien-err" style="font-size:10px;color:var(--danger);display:none">Định dạng: 99H-06375</span>
         <span style="font-size:10px;color:var(--text-muted)">Thầu phụ tự động theo biển số</span>
       </div>
       <div class="form-group"><label>Lái xe <span style="font-size:10px;color:var(--teal)">(điền tự do)</span></label>
@@ -523,23 +550,30 @@ function renderTabXe(o,editable){
         <input type="text" id="fx-thauphu" value="${o.ma_thau_phu||''}" placeholder="Tự điền nếu chưa có..." list="tp-dl" ${dis}>
         <datalist id="tp-dl">${tpOpts}</datalist>
       </div>
-      <div class="form-group"><label>Giờ xuất phát</label>
-        <input type="time" id="fx-gio" value="${o.gio_xuat_phat||''}" ${dis}>
+      <div class="form-group"><label>Loại chuyến</label>
+        <select id="fx-lchuyen" ${dis}>${loaiChuyenOpts}</select>
       </div>
     </div>
   </div>
   <div class="form-section">
-    <div class="form-section-title"><i class="ti ti-box"></i>Thông tin Cont</div>
+    <div class="form-section-title"><i class="ti ti-box"></i>Thông tin Cont / Xe hàng</div>
     <div class="form-grid">
-      <div class="form-group"><label>${contLabel}</label>
-        <input type="text" id="fx-cont" value="${o.so_cont||''}" placeholder="${contPlaceholder}" ${dis}></div>
-      <div class="form-group"><label>Loại cont</label>
-        <select id="fx-lcont" ${dis}><option value="">-- Chọn --</option>${contOpts}</select>
+      <div class="form-group"><label>Số cont ${o.loai_hang==='Xuất'?'<span style="font-size:10px;color:var(--warning)">(điền sau khi lấy cont)</span>':''}</label>
+        <input type="text" id="fx-cont" value="${o.so_cont||''}"
+          placeholder="${o.loai_hang==='Xuất'?'Điền khi lấy cont rỗng...':'AAAU1234567 (11 ký tự)'}"
+          maxlength="11" ${dis}
+          oninput="this.value=formatCont(this.value)"
+          onblur="if(this.value&&this.value.length!==11)this.style.borderColor='var(--danger)';else this.style.borderColor=''">
+        <span style="font-size:10px;color:var(--text-muted)" id="cont-len">${o.so_cont?o.so_cont.length+'/11 ký tự':''}</span>
       </div>
-      <div class="form-group"><label>Số seal</label><input type="text" id="fx-seal" value="${o.so_seal||''}" ${dis}></div>
-      <div class="form-group"><label>Booking number</label><input type="text" id="fx-bknum" value="${o.booking_number||''}" ${dis}></div>
-      <div class="form-group"><label>Tên tàu</label><input type="text" id="fx-tau" value="${o.ten_tau||''}" ${dis}></div>
-      <div class="form-group"><label>Chuyến tàu</label><input type="text" id="fx-ctau" value="${o.chuyen_tau||''}" ${dis}></div>
+      <div class="form-group"><label>Loại xe / cont</label>
+        <select id="fx-loaixe" ${dis}>
+          <option value="">-- Chọn --</option>${loaiXeOpts}
+        </select>
+      </div>
+      <div class="form-group full"><label>Ghi chú xe / chuyến</label>
+        <textarea id="fx-ghichuXe" ${dis}>${o.ghi_chu_xe||''}</textarea>
+      </div>
     </div>
   </div>
   <div class="form-section">
@@ -551,14 +585,15 @@ function renderTabXe(o,editable){
   ${editable?`<button class="btn btn-teal" style="width:100%;justify-content:center" onclick="saveXe('`+o.id+`')"><i class="ti ti-device-floppy"></i> Lưu xe & cont</button>`:''}`;
 }
 
-
 function renderTabChiHo(o,list,editable){
   const total=list.reduce((s,c)=>s+(+c.so_tien||0),0);
   const chuaThu=list.filter(c=>!c.da_thu_lai).reduce((s,c)=>s+(+c.so_tien||0),0);
   return`
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-    <div><div style="font-size:11px;color:var(--text-muted)">Tổng chi hộ đơn này</div><div style="font-size:16px;font-weight:700;color:var(--warning)">${fmtM(total)}</div></div>
-    <div style="text-align:right"><div style="font-size:11px;color:var(--text-muted)">Chưa thu lại</div><div style="font-size:14px;font-weight:600;color:var(--danger)">${fmtM(chuaThu)}</div></div>
+    <div><div style="font-size:11px;color:var(--text-muted)">Tổng chi hộ</div>
+      <div style="font-size:16px;font-weight:700;color:var(--warning)">${fmtM(total)}</div></div>
+    <div style="text-align:right"><div style="font-size:11px;color:var(--text-muted)">Chưa thu lại</div>
+      <div style="font-size:14px;font-weight:600;color:var(--danger)">${fmtM(chuaThu)}</div></div>
   </div>
   ${list.map(c=>`
   <div class="chi-ho-item">
@@ -569,44 +604,87 @@ function renderTabChiHo(o,list,editable){
     </div>
     <div class="chi-ho-right">
       <div class="chi-ho-amount">${fmtM(c.so_tien)}</div>
-      <div class="chi-ho-tag">${c.hoa_don_khach?'<span class="tag" style="background:#e0f2fe;color:#0369a1;font-size:10px">HĐ khách</span>':''} <span class="tag ${c.da_thu_lai?'tag-dathu':'tag-chuathu'}" style="font-size:10px">${c.da_thu_lai?'Đã thu':'Chưa thu'}</span></div>
+      <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:2px">
+        ${c.hoa_don_khach?'<span class="tag" style="background:#e0f2fe;color:#0369a1;font-size:10px">HĐ KH</span>':''}
+        <span class="tag ${c.da_thu_lai?'tag-dathu':'tag-chuathu'}" style="font-size:10px">${c.da_thu_lai?'Đã thu':'Chưa thu'}</span>
+      </div>
     </div>
   </div>`).join('')}
-  ${list.length===0?'<div class="empty" style="padding:20px"><i class="ti ti-inbox"></i>Chưa có chi phí phát sinh</div>':''}
-  ${editable?`<button class="add-chi-ho-btn" onclick="openAddChiHo('${o.id}','${o.ma_don}')"><i class="ti ti-plus"></i> Thêm chi phí phát sinh</button>`:''}`;
+  ${list.length===0?'<div class="empty" style="padding:20px 0"><i class="ti ti-inbox"></i>Chưa có chi phí phát sinh</div>':''}
+  ${editable?`<button class="add-chi-ho-btn" onclick="openAddChiHo('`+o.id+`','`+o.ma_don+`')"><i class="ti ti-plus"></i> Thêm chi phí phát sinh</button>`:''}`;
 }
 
 function renderTabCuoc(o,chiHoList,editable,loi){
   const totalCH=chiHoList.reduce((s,c)=>s+(+c.so_tien||0),0);
+  const phiDL=o.co_doi_lenh?(+o.phi_doi_lenh||0):0; // đã tính sẵn theo cont
+  const phiTK=o.co_to_khai?(+o.phi_to_khai||0):0;
+  const tongThuKH=(+o.gia_cuoc_khach||0)+phiDL+phiTK+totalCH;
+  const coThau=!!o.ma_thau_phu;
   return`
   <div class="form-section">
-    <div class="form-section-title"><i class="ti ti-coins"></i>Cước phí</div>
+    <div class="form-section-title"><i class="ti ti-coins"></i>Cước & Thu khách</div>
     <div class="form-grid">
-      <div class="form-group"><label>Cước khách (VNĐ)</label><input type="number" id="fc-cuockh" value="${o.gia_cuoc_khach||0}" ${!editable?'disabled':''}></div>
-      <div class="form-group"><label>Cước thầu (VNĐ)</label><input type="number" id="fc-cuocthau" value="${o.gia_cuoc_thau||0}" ${!editable?'disabled':''}></div>
+      <div class="form-group"><label>Cước vận chuyển (VNĐ)</label>
+        <input type="text" id="fc-cuockh" value="${o.gia_cuoc_khach>0?fmtInput(o.gia_cuoc_khach):''}"
+          placeholder="0" ${!editable?'disabled':''} oninput="this.value=fmtInput(this.value);calcTong()"></div>
+      <div class="form-group"><label>Trạng thái thu</label>
+        <select id="fc-thukh" ${!editable?'disabled':''}>
+          ${['Chưa thu','Đã thu một phần','Đã thu'].map(s=>`<option ${o.thanh_toan_khach===s?'selected':''}>${s}</option>`).join('')}
+        </select></div>
     </div>
   </div>
   <div class="form-section">
-    <div class="form-section-title"><i class="ti ti-check"></i>Thanh toán</div>
-    <div class="form-grid">
-      <div class="form-group"><label>Thu khách</label><select id="fc-thukh" ${!editable?'disabled':''}>
-        ${['Chưa thu','Đã thu một phần','Đã thu'].map(s=>`<option ${o.thanh_toan_khach===s?'selected':''}>${s}</option>`).join('')}
-      </select></div>
-      <div class="form-group"><label>Trả thầu</label><select id="fc-trathau" ${!editable?'disabled':''}>
-        ${['Chưa trả','Đã trả một phần','Đã trả'].map(s=>`<option ${o.thanh_toan_thau===s?'selected':''}>${s}</option>`).join('')}
-      </select></div>
+    <div class="form-section-title"><i class="ti ti-receipt"></i>Dịch vụ cộng thêm (tự động từ Tab Thông tin)</div>
+    <div style="background:var(--bg);border-radius:var(--r);padding:10px 12px;font-size:12px">
+      ${phiDL>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span>Phí đổi lệnh</span><span class="text-orange fw6">${fmtM(phiDL)}</span></div>`:''}
+      ${phiTK>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span>Phí mở tờ khai</span><span class="text-orange fw6">${fmtM(phiTK)}</span></div>`:''}
+      ${totalCH>0?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Chi hộ phát sinh</span><span class="text-orange fw6">${fmtM(totalCH)}</span></div>`:''}
+      ${!phiDL&&!phiTK&&!totalCH?'<div style="color:var(--text-muted)">Chưa có dịch vụ cộng thêm</div>':''}
     </div>
   </div>
-  <div style="background:var(--bg);border-radius:var(--r);padding:10px 12px;margin-bottom:10px;font-size:12px">
-    <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span>Cước khách</span><span class="text-blue fw6">${fmtM(o.gia_cuoc_khach||0)}</span></div>
-    <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span>Cước thầu</span><span class="text-red">- ${fmtM(o.gia_cuoc_thau||0)}</span></div>
-    <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span>Chi hộ</span><span class="text-orange">- ${fmtM(totalCH)}</span></div>
-    <div style="display:flex;justify-content:space-between;padding:4px 0;font-weight:700"><span>Lợi nhuận</span><span class="${loi>=0?'text-green':'text-red'}">${fmtM(loi)}</span></div>
+  <div class="form-section">
+    <div class="form-section-title"><i class="ti ti-arrow-left"></i>Trả thầu phụ</div>
+    ${coThau?`
+    <div class="form-grid">
+      <div class="form-group"><label>Giá cước thầu (VNĐ)</label>
+        <input type="text" id="fc-cuocthau" value="${o.gia_cuoc_thau>0?fmtInput(o.gia_cuoc_thau):''}"
+          placeholder="0" ${!editable?'disabled':''} oninput="this.value=fmtInput(this.value);calcTong()"></div>
+      <div class="form-group"><label>Trạng thái trả thầu</label>
+        <select id="fc-trathau" ${!editable?'disabled':''}>
+          ${['Chưa trả','Đã trả một phần','Đã trả'].map(s=>`<option ${o.thanh_toan_thau===s?'selected':''}>${s}</option>`).join('')}
+        </select></div>
+    </div>`:`
+    <div style="background:var(--teal-light);border-radius:var(--r);padding:8px 12px;font-size:12px;color:var(--teal)">
+      <i class="ti ti-info-circle"></i> 
+      ${o.la_xe_noi_bo?'Xe nội bộ — tính lương theo chuyến (xây dựng sau)':'Chưa có thầu phụ — điền biển số ở Tab Xe & Cont để tự động nhận diện'}
+    </div>
+    <input type="hidden" id="fc-cuocthau" value="0">
+    <input type="hidden" id="fc-trathau" value="${o.thanh_toan_thau||'Chưa trả'}">
+    `}
+  </div>
+  <div style="background:var(--sidebar-bg);border-radius:var(--r);padding:12px 14px;color:#fff;margin-bottom:10px">
+    <div style="font-size:10px;opacity:.6;margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">Tổng kết đơn này</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+      <div><div style="opacity:.6">Tổng thu khách</div><div id="tong-thu" style="font-size:15px;font-weight:700;color:#ffd700">${fmtM(tongThuKH)}</div></div>
+      ${coThau?`<div><div style="opacity:.6">Trả thầu</div><div id="tong-thau" style="font-size:15px;font-weight:700;color:#fca5a5">${fmtM(o.gia_cuoc_thau||0)}</div></div>`:''}
+    </div>
+    <div style="border-top:1px solid rgba(255,255,255,.1);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between">
+      <span style="opacity:.6">Lợi nhuận gộp</span>
+      <span id="tong-loi" style="font-weight:700;color:${loi>=0?'#86efac':'#fca5a5'}">${fmtM(loi)}</span>
+    </div>
   </div>
   ${editable?`
-  <button class="btn btn-teal" style="width:100%;justify-content:center;margin-bottom:8px" onclick="saveCuoc('${o.id}')"><i class="ti ti-device-floppy"></i> Lưu cước & thanh toán</button>
-  <button class="btn btn-success" style="width:100%;justify-content:center" onclick="lockOrder('${o.id}')"><i class="ti ti-lock"></i> Hoàn thành & Khóa vận đơn</button>
+  <button class="btn btn-teal" style="width:100%;justify-content:center;margin-bottom:8px" onclick="saveCuoc('`+o.id+`')">
+    <i class="ti ti-device-floppy"></i> Lưu cước & thanh toán
+  </button>
+  <button class="btn btn-success" style="width:100%;justify-content:center" onclick="lockOrder('`+o.id+`')">
+    <i class="ti ti-lock"></i> Hoàn thành & Khóa vận đơn
+  </button>
   <p style="font-size:10.5px;color:var(--text-muted);text-align:center;margin-top:5px">⚠️ Sau khi khóa sẽ không thể chỉnh sửa</p>`:''}`;
+}
+
+function calcTong(){
+  // live update tổng khi nhập cước
 }
 
 async function switchTab(tab,id){
@@ -644,6 +722,21 @@ async function saveInfo(id){
   await refreshOrder(id);
 }
 
+function onBienInput(el){
+  el.value=formatBienSo(el.value);
+  document.getElementById('fx-tt').value='Đang vận chuyển';
+  onBienChange(el.value);
+}
+function validateBienInput(el){
+  const err=document.getElementById('fx-bien-err');
+  if(el.value&&!validateBienSo(el.value)){
+    el.style.borderColor='var(--danger)';
+    if(err)err.style.display='block';
+  } else {
+    el.style.borderColor='';
+    if(err)err.style.display='none';
+  }
+}
 async function onBienChange(bien){
   if(!bien||bien.length<4)return;
   const el=document.getElementById('fx-thauphu');
@@ -656,17 +749,15 @@ async function onBienChange(bien){
 
 
 async function saveXe(id){
+  const bien=document.getElementById('fx-bien').value.trim().toUpperCase();
   const data={
-    bien_kiem_soat:document.getElementById('fx-bien').value,
+    bien_kiem_soat:bien,
     ten_lai_xe:document.getElementById('fx-laixe').value,
     ma_thau_phu:document.getElementById('fx-thauphu').value,
-    gio_xuat_phat:document.getElementById('fx-gio').value,
+    loai_chuyen:document.getElementById('fx-lchuyen').value,
     so_cont:document.getElementById('fx-cont').value,
-    loai_cont:document.getElementById('fx-lcont').value,
-    so_seal:document.getElementById('fx-seal').value,
-    booking_number:document.getElementById('fx-bknum').value,
-    ten_tau:document.getElementById('fx-tau').value,
-    chuyen_tau:document.getElementById('fx-ctau').value,
+    loai_xe_hang:document.getElementById('fx-loaixe').value,
+    ghi_chu_xe:document.getElementById('fx-ghichuXe').value,
     trang_thai:document.getElementById('fx-tt').value,
     updated_at:new Date().toISOString(),
   };
@@ -678,16 +769,30 @@ async function saveXe(id){
 
 async function saveCuoc(id){
   const data={
-    gia_cuoc_khach:+document.getElementById('fc-cuockh').value||0,
-    gia_cuoc_thau:+document.getElementById('fc-cuocthau').value||0,
+    gia_cuoc_khach:parseNum(document.getElementById('fc-cuockh').value),
+    gia_cuoc_thau:parseNum(document.getElementById('fc-cuocthau')?.value||'0'),
     thanh_toan_khach:document.getElementById('fc-thukh').value,
-    thanh_toan_thau:document.getElementById('fc-trathau').value,
+    thanh_toan_thau:document.getElementById('fc-trathau')?.value||'Chưa trả',
     updated_at:new Date().toISOString(),
   };
   const{error}=await db.from('van_don').update(data).eq('id',id);
   if(error){toast('Lỗi: '+error.message,'error');return;}
   toast('Đã lưu cước & thanh toán');
   await refreshOrder(id);
+}
+
+async function deleteOrder(id){
+  if(!canSee(['quan_ly','ceo'])){toast('Không có quyền xóa','error');return;}
+  const o=ORDERS.find(x=>x.id===id);
+  if(o?.locked){toast('Đơn đã khóa, không thể xóa','error');return;}
+  if(!confirm(`Xóa vận đơn ${o?.ma_don}?\nThao tác này không thể hoàn tác!`))return;
+  await db.from('chi_ho').delete().eq('van_don_id',id);
+  const{error}=await db.from('van_don').delete().eq('id',id);
+  if(error){toast('Lỗi xóa: '+error.message,'error');return;}
+  toast('Đã xóa vận đơn');
+  closeModal?.();
+  closeDp();
+  pgOrders(document.getElementById('content'));
 }
 
 async function lockOrder(id){
@@ -789,7 +894,7 @@ function openAddChiHo(vdId,maDon){
         <option>Giám sát hải quan</option><option>Chi phí khác</option>
       </select></div>
       <div class="form-group"><label>Ngày chi</label><input type="date" id="ch-ngay" value="${today()}"></div>
-      <div class="form-group"><label>Số tiền (VNĐ) *</label><input type="number" id="ch-tien" value="0"></div>
+      <div class="form-group"><label>Số tiền (VNĐ) *</label><input type="text" id="ch-tien" value="" placeholder="0" oninput="this.value=fmtInput(this.value)"></div>
       <div class="form-group"><label>Người chi</label><input type="text" id="ch-nguoi" value="${CU?.ho_ten||''}"></div>
       <div class="form-group"><label>Số chứng từ / HĐ</label><input type="text" id="ch-ct"></div>
       <div class="form-group"><label>HĐ theo MST khách</label><select id="ch-hdkh">
@@ -808,10 +913,11 @@ function openAddChiHo(vdId,maDon){
 
 async function saveChiHo(vdId,maDon){
   const data={
-    van_don_id:vdId,ma_don:maDon,
+    van_don_id:vdId,
+    ma_don:maDon,
     loai_chi:document.getElementById('ch-loai').value,
     ngay_chi:document.getElementById('ch-ngay').value,
-    so_tien:+document.getElementById('ch-tien').value||0,
+    so_tien:parseNum(document.getElementById('ch-tien').value),
     nguoi_chi:document.getElementById('ch-nguoi').value,
     chung_tu:document.getElementById('ch-ct').value,
     hoa_don_khach:document.getElementById('ch-hdkh').value==='true',
