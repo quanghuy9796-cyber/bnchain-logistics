@@ -1646,7 +1646,7 @@ async function processImageFile(file){
         method:'POST',
         headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
         body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',
+          model:'claude-haiku-4-5-20251001',
           max_tokens:1000,
           messages:[{
             role:'user',
@@ -2190,21 +2190,21 @@ async function processOneHD(file){
         role:'user',
         content:[
           {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
-          {type:'text',text:`Đây là hóa đơn dịch vụ logistics tại cảng Hải Phòng, Việt Nam.
-Đọc và trả về JSON (chỉ JSON, không giải thích):
+          {type:'text',text:`Đây là hóa đơn/biên lai dịch vụ logistics tại cảng Hải Phòng, Việt Nam. File có thể có nhiều trang.
+Đọc TẤT CẢ các trang và trả về JSON duy nhất (chỉ JSON thuần, không markdown, không giải thích):
 {
-  "so_hd": "số hóa đơn hoặc số phiếu",
-  "ngay_hd": "ngày YYYY-MM-DD",
-  "loai_dv": "loại dịch vụ (Nâng hàng/Hạ vỏ/Nâng vỏ/Hạ hàng/Lưu cont/CSHT/Phí cảng/Giám sát HQ)",
-  "tong_tien": số tiền (chỉ số nguyên),
-  "so_cont_list": ["AAAU1234567", "BBBU7654321"],
-  "so_cont_count": số lượng cont nếu không đọc được từng cont,
-  "loai_cont": "20/40 nếu đọc được",
-  "mst_khach": "mã số thuế khách hàng nếu có",
-  "ten_don_vi_xuat": "tên đơn vị xuất HĐ",
-  "ghi_chu": "thông tin thêm quan trọng",
-  "confidence": "cao/trung_binh/thap"
-}`}
+  "so_hd": "số hóa đơn hoặc số biên lai (vd: 30486 hoặc 1462063)",
+  "ngay_hd": "ngày trên HĐ format YYYY-MM-DD",
+  "loai_dv": "loại dịch vụ chính: Nâng hàng / Hạ vỏ / Nâng vỏ / Hạ hàng / CSHT / Lưu cont / Phí cảng / Giám sát HQ",
+  "tong_tien": số tiền VNĐ cuối cùng phải thanh toán (số nguyên, không dấu phẩy, không VAT label),
+  "so_cont_list": ["POLU4510295","FFAU7443981"] (mảng số cont tìm được - thường 11 ký tự chữ+số),
+  "loai_cont": "20DC hoặc 40HC hoặc 40DC v.v",
+  "mst_khach": "mã số thuế đơn vị MUA (không phải bán)",
+  "ten_don_vi_xuat": "tên đơn vị BÁN/xuất hóa đơn",
+  "ghi_chu": "thông tin thêm: tờ khai, loại hình, ghi chú quan trọng",
+  "confidence": "cao nếu đọc rõ số cont / trung_binh nếu không chắc / thap nếu mờ hoặc không có"
+}
+Lưu ý: số cont thường xuất hiện sau chữ "Công-te-nơ số:" hoặc trong tên dịch vụ như POLU4510295-40HC-GP`}
         ]
       }]
     })
