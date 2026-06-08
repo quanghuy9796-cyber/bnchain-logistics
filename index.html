@@ -504,41 +504,47 @@ function renderTabXe(o,editable){
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-truck"></i>Phân công xe & lái xe</div>
     <div class="form-grid">
-      <div class="form-group"><label>Biển kiểm soát</label><input type="text" id="fx-bien" value="${o.bien_kiem_soat||''}" placeholder="99H-06375" ${!editable?'disabled':''}></div>
-      <div class="form-group"><label>Lái xe</label><select id="fx-laixe" ${!editable?'disabled':''}>
-        <option value="">-- Chọn --</option>
-        ${LX.map(l=>`<option ${o.ten_lai_xe===l.ho_ten?'selected':''}>${l.ho_ten}</option>`).join('')}
-      </select></div>
-      <div class="form-group"><label>Thầu phụ</label><select id="fx-thauphu" ${!editable?'disabled':''}>
-        <option value="">-- Chọn --</option>
-        ${TP.map(t=>`<option value="${t.ma_thau}" ${o.ma_thau_phu===t.ma_thau?'selected':''}>${t.ma_thau} — ${t.ten_cong_ty}</option>`).join('')}
-      </select></div>
-      <div class="form-group"><label>Giờ xuất phát</label><input type="time" id="fx-gio" value="${o.gio_xuat_phat||''}" ${!editable?'disabled':''}></div>
+      <div class="form-group"><label>Biển kiểm soát</label>
+        <input type="text" id="fx-bien" value="${o.bien_kiem_soat||''}" placeholder="99H-06375" ${!editable?'disabled':'oninput="onBienChange(this.value)"'}> 
+        <span style="font-size:10px;color:var(--text-muted)">Thầu phụ tự động điền theo biển số</span>
+      </div>
+      <div class="form-group"><label>Lái xe <span style="font-size:10px;color:var(--teal)">(điền tự do)</span></label>
+        <input type="text" id="fx-laixe" value="${o.ten_lai_xe||''}" placeholder="Nhập tên lái xe..." list="laixe-datalist" ${!editable?'disabled':''}>
+        <datalist id="laixe-datalist">${LX.map(l=>`<option value="${l.ho_ten}">`).join('')}</datalist>
+      </div>
+      <div class="form-group"><label>Thầu phụ <span style="font-size:10px;color:var(--teal)">(tự động / tự điền)</span></label>
+        <input type="text" id="fx-thauphu" value="${o.ma_thau_phu||''}" placeholder="Tự điền nếu chưa có dữ liệu..." list="tp-datalist" ${!editable?'disabled':''}>
+        <datalist id="tp-datalist">${TP.map(t=>`<option value="${t.ma_thau}">${t.ten_cong_ty}</option>`).join('')}</datalist>
+      </div>
+      <div class="form-group"><label>Giờ xuất phát</label><input type="time" id="fx-gio" value="${o.gio_xuat_phat||''}" ${!editable?'disabled':''} ></div>
     </div>
   </div>
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-box"></i>Thông tin Cont</div>
     <div class="form-grid">
       <div class="form-group"><label>Số cont ${o.loai_hang==='Xuất'?'(điền sau khi lấy cont rỗng)':''}</label>
-        <input type="text" id="fx-cont" value="${o.so_cont||''}" placeholder="${o.loai_hang==='Xuất'?'Điền khi lấy cont...':''}" ${!editable?'disabled':''}></div>
-      <div class="form-group"><label>Loại cont</label><select id="fx-lcont" ${!editable?'disabled':''}>
+        <input type="text" id="fx-cont" value="${o.so_cont||''}" placeholder="${o.loai_hang==='Xuất'?'Điền khi lấy cont...':\'\'}" ${!editable?'disabled':''} ></div>
+      <div class="form-group"><label>Loại cont</label><select id="fx-lcont" ${!editable?'disabled':''} >
         <option value="">-- Chọn --</option>
-        ${['20DC','40DC','40HC','45HC','Xe tải','Mooc'].map(v=>`<option ${o.loai_cont===v?'selected':''}>${v}</option>`).join('')}
+        ${['20DC','40DC','40HC','45HC','Xe tải','Mooc'].map(v=>`<option ${o.loai_cont===v?'selected':''} >${v}</option>`).join('')}
       </select></div>
-      <div class="form-group"><label>Số seal</label><input type="text" id="fx-seal" value="${o.so_seal||''}" ${!editable?'disabled':''}></div>
-      <div class="form-group"><label>Booking number</label><input type="text" id="fx-bknum" value="${o.booking_number||''}" ${!editable?'disabled':''}></div>
-      <div class="form-group"><label>Tên tàu</label><input type="text" id="fx-tau" value="${o.ten_tau||''}" ${!editable?'disabled':''}></div>
-      <div class="form-group"><label>Chuyến tàu</label><input type="text" id="fx-ctau" value="${o.chuyen_tau||''}" ${!editable?'disabled':''}></div>
+      <div class="form-group"><label>Số seal</label><input type="text" id="fx-seal" value="${o.so_seal||''}" ${!editable?'disabled':''} ></div>
+      <div class="form-group"><label>Booking number</label><input type="text" id="fx-bknum" value="${o.booking_number||''}" ${!editable?'disabled':''} ></div>
+      <div class="form-group"><label>Tên tàu</label><input type="text" id="fx-tau" value="${o.ten_tau||''}" ${!editable?'disabled':''} ></div>
+      <div class="form-group"><label>Chuyến tàu</label><input type="text" id="fx-ctau" value="${o.chuyen_tau||''}" ${!editable?'disabled':''} ></div>
     </div>
   </div>
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-flag"></i>Trạng thái vận đơn</div>
-    <div class="form-group"><label>Trạng thái</label><select id="fx-tt" ${!editable?'disabled':''}>
-      ${['Chờ xếp xe','Đang vận chuyển','Chờ xác nhận'].map(s=>`<option ${o.trang_thai===s?'selected':''}>${s}</option>`).join('')}
-    </select></div>
+    <div class="form-group"><label>Trạng thái <span style="font-size:10px;color:var(--teal)">(tự chuyển khi có biển số)</span></label>
+      <select id="fx-tt" ${!editable?'disabled':''} >
+        ${['Chờ xếp xe','Đang vận chuyển','Chờ xác nhận'].map(s=>`<option ${o.trang_thai===s?'selected':''} >${s}</option>`).join('')}
+      </select>
+    </div>
   </div>
   ${editable?`<button class="btn btn-teal" style="width:100%;justify-content:center" onclick="saveXe('${o.id}')"><i class="ti ti-device-floppy"></i> Lưu xe & cont</button>`:''}`;
 }
+
 
 function renderTabChiHo(o,list,editable){
   const total=list.reduce((s,c)=>s+(+c.so_tien||0),0);
@@ -630,6 +636,19 @@ async function saveInfo(id){
   if(error){toast('Lỗi: '+error.message,'error');return;}
   toast('Đã lưu thông tin');
   await refreshOrder(id);
+}
+
+async function onBienChange(bien){
+  if(!bien || bien.length < 4) return;
+  // Auto lookup thau phu from xe_thau_phu table
+  const{data}=await db.from('xe_thau_phu').select('*').eq('bien_so',bien.toUpperCase()).single();
+  if(data){
+    const tpEl=document.getElementById('fx-thauphu');
+    if(tpEl && !tpEl.value) tpEl.value=data.ma_thau;
+  }
+  // Auto set trang thai -> Dang van chuyen
+  const ttEl=document.getElementById('fx-tt');
+  if(ttEl) ttEl.value='Đang vận chuyển';
 }
 
 async function saveXe(id){
