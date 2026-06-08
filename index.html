@@ -1536,15 +1536,14 @@ async function saveXeModal(id=''){
   const tpMa=tpSel?.value||'';
   const tpTen=tpSel?.options[tpSel.selectedIndex]?.text?.split('—')[1]?.trim()||'';
   const d={
-    loai_xe:document.getElementById('xe-lx').value,
+    loai_xe:document.getElementById('xe-lx')?.value||'',
     loai_phan_loai:pl,
-    tai_trong:document.getElementById('xe-tt').value,
+    tai_trong:document.getElementById('xe-tt')?.value||'',
     ten_lai_xe_mac_dinh:document.getElementById('xe-laixe')?.value||'',
     ma_thau_phu:tpMa,
     ten_thau_phu:tpTen,
-    nam_sx:+document.getElementById('xe-nam').value||null,
+    nam_sx:+document.getElementById('xe-nam')?.value||null,
     la_xe_noi_bo:pl==='noi_bo',
-    ghi_chu:document.getElementById('xe-gc').value,
   };
   let error;
   if(id){({error}=await db.from('xe').update(d).eq('id',id));}
