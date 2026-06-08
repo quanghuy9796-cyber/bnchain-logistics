@@ -696,24 +696,22 @@ function closeDp(){SEL=null;document.getElementById('dp').style.display='none';}
 
 // SAVE FUNCTIONS
 async function saveInfo(id){
+  const loai=document.getElementById('fi-loai').value;
   const data={
     ngay:document.getElementById('fi-ngay').value,
     ten_khach:document.getElementById('fi-khach').value,
-    loai_hang:document.getElementById('fi-loai').value,
-    loai_chuyen:document.getElementById('fi-lchuyen').value,
-    so_bill:document.getElementById('fi-bill')?.value||null,
-    so_booking:document.getElementById('fi-booking')?.value||null,
-    hanh_trinh:document.getElementById('fi-hanhTrinh').value,
+    loai_hang:loai,
+    so_bill:loai==='Nhập'?(document.getElementById('fi-bill')?.value||null):null,
+    so_booking:loai!=='Nhập'?(document.getElementById('fi-booking')?.value||null):null,
     diem_lay:document.getElementById('fi-lay').value,
     diem_tra:document.getElementById('fi-tra').value,
-    diem_tra_phat_sinh:document.getElementById('fi-traphat').value,
-    hang_hoa:document.getElementById('fi-hang').value,
+    diem_tra_phat_sinh:document.getElementById('fi-traphat')?.value||null,
+    ngay_yeu_cau:document.getElementById('fi-ycgiao')?.value||null,
     co_doi_lenh:document.getElementById('fi-doilenh').checked,
-    phi_doi_lenh:+document.getElementById('fi-phidl').value||0,
+    phi_doi_lenh:parseNum(document.getElementById('fi-phidl')?.value||'0'),
     co_to_khai:document.getElementById('fi-tokhai').checked,
-    phi_to_khai:+document.getElementById('fi-phitk').value||0,
-    nguoi_doi_lenh:document.getElementById('fi-nguoidl').value,
-    ghi_chu:document.getElementById('fi-ghichu').value,
+    phi_to_khai:parseNum(document.getElementById('fi-phitk')?.value||'0'),
+    ghi_chu:document.getElementById('fi-ghichu')?.value||null,
     updated_at:new Date().toISOString(),
   };
   const{error}=await db.from('van_don').update(data).eq('id',id);
