@@ -614,6 +614,10 @@ function renderTabChiHo(o,list,editable){
     </div>
     <div class="chi-ho-right">
       <div class="chi-ho-amount">${fmtM(c.tien_thu_khach||c.so_tien)}</div>
+      ${editable?`<div style="display:flex;gap:4px;justify-content:flex-end;margin-top:4px">
+        <button class="btn btn-xs btn-teal" onclick="editChiHo('${c.id}','`+`${c.van_don_id}','${c.ma_don}')"><i class="ti ti-edit"></i></button>
+        <button class="btn btn-xs btn-danger" onclick="deleteChiHo('${c.id}','${c.van_don_id}')"><i class="ti ti-trash"></i></button>
+      </div>`:''}
     </div>
   </div>`).join('')}
   ${list.length===0?'<div class="empty" style="padding:20px 0"><i class="ti ti-inbox"></i>Chưa có chi phí phát sinh</div>':''}
@@ -980,7 +984,7 @@ function openAddChiHo(vdId,maDon){
             <input type="text" id="ch-trathau" placeholder="0"
               oninput="this.value=fmtInput(this.value)"
               style="border-color:var(--warning)">
-            <span style="font-size:10px;color:var(--warning)">Trừ vào cước trả thầu</span>
+            <span style="font-size:10px;color:var(--warning)">BN Chain trả thầu khoản này</span>
           </div>`:`<input type="hidden" id="ch-trathau" value="0">`}
           ${coLaiXe?`
           <div class="form-group">
@@ -1022,6 +1026,106 @@ function autoFillTraThau(){
   if(thuEl&&thauEl&&!thauEl.value){
     thauEl.value=thuEl.value;
   }
+}
+
+
+async function editChiHo(chiHoId, vdId, maDon){
+  const{data}=await db.from('chi_ho').select('*').eq('id',chiHoId).single();
+  if(!data)return;
+  const o=ORDERS.find(x=>x.id===vdId)||{};
+  const plXe=o.loai_phan_loai_xe||'';
+  const coThau=!!o.ma_thau_phu||plXe==='thau_tu_lai'||plXe==='thau_thue_lai';
+  const coLaiXe=plXe==='noi_bo'||plXe==='thau_thue_lai';
+  const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
+  bg.innerHTML=`<div class="modal" style="width:460px">
+  <div class="modal-head"><h3><i class="ti ti-edit" style="color:var(--teal)"></i> Sửa chi phí phát sinh</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  <div class="modal-body">
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;background:var(--bg);padding:7px 10px;border-radius:var(--r)">Vận đơn: <strong>${maDon}</strong></div>
+    <div class="form-grid">
+      <div class="form-group full"><label>Loại chi *</label><select id="ch-loai">
+        <option ${data.loai_chi==='Cao tốc / Vé đường'?'selected':''}>Cao tốc / Vé đường</option>
+        <option ${data.loai_chi==='Công nhân bốc xếp'?'selected':''}>Công nhân bốc xếp</option>
+        <option ${data.loai_chi==='Lưu ca'?'selected':''}>Lưu ca</option>
+        <option ${data.loai_chi==='Lưu bãi / Lưu cont'?'selected':''}>Lưu bãi / Lưu cont</option>
+        <option ${data.loai_chi==='Phí cảng'?'selected':''}>Phí cảng</option>
+        <option ${data.loai_chi==='Nâng hạ cont'?'selected':''}>Nâng hạ cont</option>
+        <option ${data.loai_chi==='Giám sát hải quan'?'selected':''}>Giám sát hải quan</option>
+        <option ${data.loai_chi==='Chi phí khác'?'selected':''}>Chi phí khác</option>
+      </select></div>
+      <div style="grid-column:1/-1;background:var(--bg);border-radius:var(--r);padding:10px 12px;border:1px solid var(--border)">
+        <div style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px"><i class="ti ti-coins"></i> Số tiền</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Thu khách (VNĐ) *</label>
+            <input type="text" id="ch-thukh" value="${fmtInput(data.tien_thu_khach||data.so_tien||0)}"
+              oninput="this.value=fmtInput(this.value)" style="border-color:var(--teal)">
+          </div>
+          ${coThau?`<div class="form-group">
+            <label>Trả thầu (VNĐ)</label>
+            <input type="text" id="ch-trathau" value="${fmtInput(data.tien_tra_thau||0)}"
+              oninput="this.value=fmtInput(this.value)" style="border-color:var(--warning)">
+            <span style="font-size:10px;color:var(--warning)">BN Chain trả thầu khoản này</span>
+          </div>`:`<input type="hidden" id="ch-trathau" value="0">`}
+          ${coLaiXe?`<div class="form-group">
+            <label>Trả lái xe (VNĐ)</label>
+            <input type="text" id="ch-tralaixe" value="${fmtInput(data.tien_tra_laixe||0)}"
+              oninput="this.value=fmtInput(this.value)" style="border-color:#8b5cf6">
+          </div>`:`<input type="hidden" id="ch-tralaixe" value="0">`}
+          <div class="form-group">
+            <label>Người chi</label>
+            <input type="text" id="ch-nguoi" value="${data.nguoi_chi||''}">
+          </div>
+        </div>
+      </div>
+      <div class="form-group"><label>Số chứng từ / HĐ</label><input type="text" id="ch-ct" value="${data.chung_tu||''}"></div>
+      <div class="form-group"><label>HĐ theo MST khách</label>
+        <select id="ch-hdkh">
+          <option value="false" ${!data.hoa_don_khach?'selected':''}>Không</option>
+          <option value="true" ${data.hoa_don_khach?'selected':''}>Có — HĐ theo MST khách</option>
+        </select>
+      </div>
+      <div class="form-group full"><label>Ghi chú</label><textarea id="ch-ghichu" rows="2">${data.ghi_chu||''}</textarea></div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">Hủy</button>
+    <button class="btn btn-primary" onclick="updateChiHo('${chiHoId}','${vdId}')"><i class="ti ti-device-floppy"></i> Cập nhật</button>
+  </div>
+  </div>`;
+  document.body.appendChild(bg);
+}
+
+async function updateChiHo(chiHoId, vdId){
+  const thuKH=parseNum(document.getElementById('ch-thukh').value);
+  const traThau=parseNum(document.getElementById('ch-trathau')?.value||'0');
+  const traLX=parseNum(document.getElementById('ch-tralaixe')?.value||'0');
+  if(!thuKH){toast('Vui lòng nhập số tiền thu khách','error');return;}
+  const data={
+    loai_chi:document.getElementById('ch-loai').value,
+    so_tien:thuKH,
+    tien_thu_khach:thuKH,
+    tien_tra_thau:traThau,
+    tien_tra_laixe:traLX,
+    nguoi_chi:document.getElementById('ch-nguoi').value,
+    chung_tu:document.getElementById('ch-ct').value,
+    hoa_don_khach:document.getElementById('ch-hdkh').value==='true',
+    ghi_chu:document.getElementById('ch-ghichu').value,
+  };
+  const{error}=await db.from('chi_ho').update(data).eq('id',chiHoId);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast('Đã cập nhật chi phí');
+  closeModal();
+  const o=ORDERS.find(x=>x.id===vdId);
+  if(o){DP_TAB='chiho';await renderDP(o);}
+}
+
+async function deleteChiHo(chiHoId, vdId){
+  if(!confirm('Xóa khoản chi phí này?'))return;
+  const{error}=await db.from('chi_ho').delete().eq('id',chiHoId);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast('Đã xóa chi phí');
+  const o=ORDERS.find(x=>x.id===vdId);
+  if(o){DP_TAB='chiho';await renderDP(o);}
 }
 
 
