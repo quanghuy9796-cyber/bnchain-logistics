@@ -1424,55 +1424,208 @@ async function pgTraThau(c){
 // ==================== BÁO CÁO ====================
 async function pgBaoCao(c){
   if(!canSee(['ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
-  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   const now=new Date();
-  const y=now.getFullYear(),m=now.getMonth()+1;
-  const ms=String(m).padStart(2,'0');
-  const[{data:orders},{data:chiHoAll}]=await Promise.all([
-    db.from('van_don').select('*').gte('ngay',`${y}-${ms}-01`).lte('ngay',`${y}-${ms}-31`),
-    db.from('chi_ho').select('*').gte('ngay_chi',`${y}-${ms}-01`).lte('ngay_chi',`${y}-${ms}-31`),
-  ]);
-  const list=orders||[];
-  const dt=list.reduce((s,o)=>s+(+o.gia_cuoc_khach||0),0);
-  const thau=list.reduce((s,o)=>s+(+o.gia_cuoc_thau||0),0);
-  const ch=(chiHoAll||[]).reduce((s,o)=>s+(+o.so_tien||0),0);
-  const dl=list.filter(o=>o.co_doi_lenh).reduce((s,o)=>s+(+o.phi_doi_lenh||0),0);
-  const tk=list.filter(o=>o.co_to_khai).reduce((s,o)=>s+(+o.phi_to_khai||0),0);
-  const tongThu=dt+dl+tk;
-  const loi=tongThu-thau-ch;
+  const curM=String(now.getMonth()+1).padStart(2,'0');
+  const curY=now.getFullYear();
 
-  const khMap={};
-  list.forEach(o=>{if(!khMap[o.ten_khach])khMap[o.ten_khach]={dt:0,thau:0,so:0};khMap[o.ten_khach].dt+=+o.gia_cuoc_khach||0;khMap[o.ten_khach].thau+=+o.gia_cuoc_thau||0;khMap[o.ten_khach].so++;});
+  // Build month options
+  const thOpts=Array.from({length:12},(_,i)=>{
+    const d=new Date(curY,now.getMonth()-i,1);
+    const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    return`<option value="${v}">Tháng ${d.getMonth()+1}/${d.getFullYear()}</option>`;
+  }).join('');
 
   c.innerHTML=`
-  <div style="background:linear-gradient(135deg,#1a2f38,var(--teal-dark));border-radius:var(--rl);padding:18px 20px;color:#fff;margin-bottom:16px">
-    <div style="font-size:11px;opacity:.6;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Kết quả tháng ${m}/${y}</div>
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px">
-      <div><div style="font-size:10px;opacity:.6">Cước KH</div><div style="font-size:17px;font-weight:700">${fmt(Math.round(dt/1e6))}tr</div></div>
-      <div><div style="font-size:10px;opacity:.6">Phí dịch vụ</div><div style="font-size:17px;font-weight:700">${fmt(Math.round((dl+tk)/1e6))}tr</div></div>
-      <div><div style="font-size:10px;opacity:.6">Chi thầu</div><div style="font-size:17px;font-weight:700">-${fmt(Math.round(thau/1e6))}tr</div></div>
-      <div><div style="font-size:10px;opacity:.6">Chi hộ</div><div style="font-size:17px;font-weight:700">-${fmt(Math.round(ch/1e6))}tr</div></div>
-      <div><div style="font-size:10px;opacity:.6">Lợi nhuận</div><div style="font-size:20px;font-weight:700;color:#ffd700">${fmt(Math.round(loi/1e6))}tr</div><div style="font-size:10px;opacity:.7">biên ${tongThu>0?Math.round(loi/tongThu*100):0}%</div></div>
+  <div class="toolbar" style="margin-bottom:16px">
+    <select class="filter-sel" id="bc-thang" style="min-width:140px">${thOpts}</select>
+    <span style="font-size:12px;color:var(--text-muted)">hoặc tùy chỉnh:</span>
+    <input type="date" id="bc-from" style="width:auto" value="${curY}-${curM}-01">
+    <span style="font-size:12px;color:var(--text-muted)">—</span>
+    <input type="date" id="bc-to" style="width:auto" value="${curY}-${curM}-${new Date(curY,now.getMonth()+1,0).getDate()}">
+    <button class="btn btn-primary" onclick="loadBaoCao()"><i class="ti ti-chart-bar"></i> Xem báo cáo</button>
+  </div>
+  <div id="bc-content"><div class="empty"><i class="ti ti-chart-bar"></i>Chọn thời gian và bấm Xem báo cáo</div></div>`;
+
+  // Sync month picker with date inputs
+  document.getElementById('bc-thang').onchange=function(){
+    const[y,m]=this.value.split('-');
+    const lastDay=new Date(+y,+m,0).getDate();
+    document.getElementById('bc-from').value=`${y}-${m}-01`;
+    document.getElementById('bc-to').value=`${y}-${m}-${String(lastDay).padStart(2,'0')}`;
+  };
+
+  // Auto load current month
+  loadBaoCao();
+}
+
+async function loadBaoCao(){
+  const from=document.getElementById('bc-from').value;
+  const to=document.getElementById('bc-to').value;
+  const bc=document.getElementById('bc-content');
+  if(!bc)return;
+  bc.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải dữ liệu...</div>';
+
+  const[{data:orders},{data:chiHoAll}]=await Promise.all([
+    db.from('van_don').select('*').gte('ngay',from).lte('ngay',to).eq('locked',true).order('ngay'),
+    db.from('chi_ho').select('*').gte('ngay_chi',from).lte('ngay_chi',to),
+  ]);
+  const list=orders||[];
+  const chiHo=chiHoAll||[];
+
+  if(!list.length){
+    bc.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có dữ liệu hoàn thành trong khoảng thời gian này</div>';
+    return;
+  }
+
+  // ── TÍNH TOÁN ──
+  const tongCuocKH=list.reduce((s,o)=>s+(+o.gia_cuoc_khach||0),0);
+  const tongCuocThau=list.reduce((s,o)=>s+(+o.gia_cuoc_thau||0),0);
+  const tongChiHo=chiHo.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
+  const tongDV=list.reduce((s,o)=>s+(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0),0);
+  const tongThu=tongCuocKH+tongChiHo+tongDV;
+  const loiNhuan=tongThu-tongCuocThau;
+
+  // Theo khách hàng
+  const khMap={};
+  list.forEach(o=>{
+    if(!khMap[o.ten_khach])khMap[o.ten_khach]={cuoc:0,soChuyen:0};
+    khMap[o.ten_khach].cuoc+=+o.gia_cuoc_khach||0;
+    khMap[o.ten_khach].soChuyen++;
+  });
+  const khSorted=Object.entries(khMap).sort((a,b)=>b[1].cuoc-a[1].cuoc);
+
+  // Theo đầu xe
+  const xeMap={};
+  list.forEach(o=>{
+    const key=o.bien_kiem_soat||'Chưa có biển';
+    if(!xeMap[key])xeMap[key]={cuocThau:0,soChuyen:0,ketHop:0,thuong:0,bien:key,thau:o.ma_thau_phu||''};
+    xeMap[key].cuocThau+=+o.gia_cuoc_thau||0;
+    xeMap[key].soChuyen++;
+    if(o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép')xeMap[key].ketHop++;
+    else xeMap[key].thuong++;
+  });
+  const xeSorted=Object.entries(xeMap).sort((a,b)=>b[1].cuocThau-a[1].cuocThau);
+
+  // Bar chart helper (pure CSS)
+  const maxKH=Math.max(...khSorted.map(([,v])=>v.cuoc),1);
+  const maxXe=Math.max(...xeSorted.map(([,v])=>v.cuocThau),1);
+  const maxChuyen=Math.max(...khSorted.map(([,v])=>v.soChuyen),1);
+  const bar=(val,max,color)=>`<div style="background:var(--bg);border-radius:4px;height:8px;width:100%;margin-top:4px"><div style="background:${color};height:8px;border-radius:4px;width:${Math.round(val/max*100)}%;transition:width .3s"></div></div>`;
+
+  bc.innerHTML=`
+  <!-- SUMMARY CARDS -->
+  <div class="stats-row stats-4" style="margin-bottom:16px">
+    <div class="stat-card"><div class="stat-icon" style="background:#e8f4f7;color:var(--teal)"><i class="ti ti-trending-up"></i></div>
+      <div class="stat-lbl">Tổng thu khách</div>
+      <div class="stat-val text-blue">${fmt(Math.round(tongThu/1e6))}tr</div>
+      <div class="stat-sub">Cước + Chi hộ + DV</div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:#fef3c7;color:var(--warning)"><i class="ti ti-truck"></i></div>
+      <div class="stat-lbl">Tổng trả thầu</div>
+      <div class="stat-val text-red">${fmt(Math.round(tongCuocThau/1e6))}tr</div>
+      <div class="stat-sub">${xeSorted.length} đầu xe</div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:#dcfce7;color:var(--success)"><i class="ti ti-coins"></i></div>
+      <div class="stat-lbl">Lợi nhuận gộp</div>
+      <div class="stat-val ${loiNhuan>=0?'text-green':'text-red'}">${fmt(Math.round(loiNhuan/1e6))}tr</div>
+      <div class="stat-sub">Biên ${tongThu>0?Math.round(loiNhuan/tongThu*100):0}%</div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:var(--primary-light);color:var(--primary)"><i class="ti ti-list-details"></i></div>
+      <div class="stat-lbl">Tổng chuyến</div>
+      <div class="stat-val">${list.length}</div>
+      <div class="stat-sub">${list.filter(o=>o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép').length} kết hợp/kẹp ghép</div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+
+    <!-- BIỂU ĐỒ CƯỚC KHÁCH -->
+    <div class="tbl-wrap">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">💰 Cước khách theo KH</span>
+        <span style="font-size:11px;color:var(--text-muted)">${fmt(Math.round(tongCuocKH/1e6))}tr tổng</span>
+      </div>
+      <div style="padding:10px 14px">
+        ${khSorted.map(([k,v])=>`
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px">
+            <span style="font-weight:500">${k}</span>
+            <span class="text-blue fw6">${fmt(Math.round(v.cuoc/1e6))}tr</span>
+          </div>
+          ${bar(v.cuoc,maxKH,'var(--teal)')}
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- BIỂU ĐỒ SỐ CHUYẾN KHÁCH -->
+    <div class="tbl-wrap">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">🚢 Số chuyến theo KH</span>
+        <span style="font-size:11px;color:var(--text-muted)">${list.length} tổng</span>
+      </div>
+      <div style="padding:10px 14px">
+        ${khSorted.map(([k,v])=>`
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px">
+            <span style="font-weight:500">${k}</span>
+            <span class="fw6">${v.soChuyen} chuyến</span>
+          </div>
+          ${bar(v.soChuyen,maxChuyen,'var(--primary)')}
+        </div>`).join('')}
+      </div>
     </div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-    <div class="tbl-wrap">
-      <div style="padding:10px 14px;font-size:12px;font-weight:600;color:var(--text-muted);border-bottom:1px solid var(--border)">THEO KHÁCH HÀNG</div>
-      <table class="tbl"><thead><tr><th>Khách hàng</th><th>Đơn</th><th>Doanh thu</th><th>Lãi gộp</th></tr></thead>
-      <tbody>${Object.entries(khMap).sort((a,b)=>b[1].dt-a[1].dt).map(([k,v])=>`
-      <tr><td style="font-weight:500">${k}</td><td>${v.so}</td><td class="text-blue fw6">${fmt(Math.round(v.dt/1e6))}tr</td><td class="text-green">${fmt(Math.round((v.dt-v.thau)/1e6))}tr</td></tr>`).join('')}
-      </tbody></table>
+
+  <!-- BIỂU ĐỒ THEO ĐẦU XE -->
+  <div class="tbl-wrap">
+    <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+      <span style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">🚛 Cước thầu & Tỉ lệ kết hợp theo đầu xe</span>
     </div>
-    <div class="tbl-wrap">
-      <div style="padding:10px 14px;font-size:12px;font-weight:600;color:var(--text-muted);border-bottom:1px solid var(--border)">THEO LOẠI HÀNG</div>
-      <table class="tbl"><thead><tr><th>Loại</th><th>Đơn</th><th>Doanh thu</th></tr></thead>
-      <tbody>${['Nhập','Xuất','CK'].map(l=>{const v=list.filter(o=>o.loai_hang===l);const s=v.reduce((a,o)=>a+(+o.gia_cuoc_khach||0),0);return v.length?`<tr><td>${loaiTag(l)}</td><td>${v.length}</td><td class="text-blue fw6">${fmt(Math.round(s/1e6))}tr</td></tr>`:''}).join('')}
-      </tbody></table>
-    </div>
+    <table class="tbl">
+      <colgroup>
+        <col style="width:110px"><col style="width:130px"><col style="width:60px">
+        <col style="width:100px"><col style="width:80px"><col style="width:80px">
+        <col style="width:80px"><col style="width:180px">
+      </colgroup>
+      <thead><tr>
+        <th>Biển số</th><th>Thầu phụ</th><th>Chuyến</th>
+        <th>Cước thầu</th><th>Thường</th><th>KH/KG</th>
+        <th>Tỉ lệ KH</th><th>Biểu đồ tỉ lệ</th>
+      </tr></thead>
+      <tbody>
+      ${xeSorted.map(([bien,v])=>{
+        const tiLe=v.soChuyen>0?Math.round(v.ketHop/v.soChuyen*100):0;
+        const mauTiLe=tiLe>=50?'var(--success)':tiLe>=30?'var(--warning)':'var(--danger)';
+        return`<tr>
+          <td class="text-blue fw6">${bien}</td>
+          <td style="font-size:11px">${v.thau||'—'}</td>
+          <td class="fw6">${v.soChuyen}</td>
+          <td class="text-red fw6">${fmt(Math.round(v.cuocThau/1e6))}tr</td>
+          <td>${v.thuong}</td>
+          <td style="color:var(--success);font-weight:600">${v.ketHop}</td>
+          <td><span style="font-weight:700;color:${mauTiLe}">${tiLe}%</span></td>
+          <td>
+            <div style="background:var(--bg);border-radius:4px;height:10px;width:100%;display:flex;overflow:hidden">
+              <div style="background:var(--success);height:10px;width:${tiLe}%;transition:width .3s" title="Kết hợp/Kẹp ghép: ${v.ketHop}"></div>
+              <div style="background:#e2e8f0;height:10px;flex:1" title="Thường: ${v.thuong}"></div>
+            </div>
+            <div style="display:flex;gap:8px;font-size:10px;margin-top:2px;color:var(--text-muted)">
+              <span style="color:var(--success)">■ KH/KG ${v.ketHop}</span>
+              <span>■ Thường ${v.thuong}</span>
+            </div>
+          </td>
+        </tr>`;
+      }).join('')}
+      <tr style="background:#f5f9fb;font-weight:600">
+        <td colspan="3">Tổng cộng</td>
+        <td class="text-red">${fmt(Math.round(tongCuocThau/1e6))}tr</td>
+        <td>${list.filter(o=>o.loai_chuyen==='Thường'||o.loai_chuyen==='Rỗng').length}</td>
+        <td style="color:var(--success)">${list.filter(o=>o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép').length}</td>
+        <td style="font-weight:700;color:var(--teal)">${list.length>0?Math.round(list.filter(o=>o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép').length/list.length*100):0}%</td>
+        <td></td>
+      </tr>
+      </tbody>
+    </table>
   </div>`;
 }
 
-// ==================== DANH MỤC ====================
+
 async function pgKH(c){
   if(!canSee(['quan_ly','ke_toan','ceo'])){toast('Không có quyền thực hiện','error');return;}
   const{data}=await db.from('khach_hang').select('*').eq('active',true).order('ten_cong_ty');
