@@ -2178,20 +2178,22 @@ async function processOneHD(file){
   
   const isImage=file.type.startsWith('image/');
   const mediaType=isImage?file.type:'application/pdf';
-  
-  // Call Claude API via proxy
-  console.log('Calling proxy:', PROXY_URL);
-  console.log('File type:', mediaType, 'Size:', base64.length);
+  // Haiku chỉ hỗ trợ ảnh, Sonnet hỗ trợ cả PDF (document type)
+  const aiModel=isImage?'claude-haiku-4-5-20251001':'claude-sonnet-4-20250514';
+  const contentBlock=isImage
+    ?{type:'image',source:{type:'base64',media_type:mediaType,data:base64}}
+    :{type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}};
+
   const response=await fetch(PROXY_URL,{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
-      model:'claude-haiku-4-5-20251001',
+      model:aiModel,
       max_tokens:1000,
       messages:[{
         role:'user',
         content:[
-          {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
+          contentBlock,
           {type:'text',text:`Đây là hóa đơn/biên lai dịch vụ logistics tại cảng Hải Phòng, Việt Nam. File có thể có nhiều trang.
 Đọc TẤT CẢ các trang và trả về JSON duy nhất (chỉ JSON thuần, không markdown, không giải thích):
 {
