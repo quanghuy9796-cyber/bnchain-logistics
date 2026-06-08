@@ -289,6 +289,8 @@ function thuTag(t){
 }
 function canSee(roles){return roles.includes(CU?.vai_tro);}
 function canEdit(o){
+  // CEO và quan_ly có thể sửa kể cả đã khóa
+  if(o?.locked && canSee(['quan_ly','ceo'])) return true;
   if(o?.locked) return false;
   return canSee(['nhan_vien','quan_ly','ke_toan','ceo']);
 }
@@ -464,7 +466,7 @@ function renderTabInfo(o,editable){
   const isNhap=o.loai_hang==='Nhập';
   const canDelete=canSee(['quan_ly','ceo']);
   return`
-  ${o.locked?'<div class="lock-notice"><i class="ti ti-lock"></i>Vận đơn đã hoàn thành và khóa lại.</div>':''}
+  ${o.locked?`<div class="lock-notice" style="display:flex;justify-content:space-between;align-items:center"><span><i class="ti ti-lock"></i> Vận đơn đã hoàn thành và khóa lại.</span>${canSee(['quan_ly','ceo'])?`<button class="btn btn-xs btn-danger" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa</button>`:''}</div>`:''}
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-file-description"></i>Thông tin cơ bản</div>
     <div class="form-grid">
@@ -699,7 +701,11 @@ function renderTabCuoc(o,chiHoList,editable,loi){
   <button class="btn btn-success" style="width:100%;justify-content:center" onclick="lockOrder('`+o.id+`')">
     <i class="ti ti-lock"></i> Hoàn thành & Khóa vận đơn
   </button>
-  <p style="font-size:10.5px;color:var(--text-muted);text-align:center;margin-top:5px">⚠️ Sau khi khóa sẽ không thể chỉnh sửa</p>`:''}`;
+  <p style="font-size:10.5px;color:var(--text-muted);text-align:center;margin-top:5px">⚠️ Sau khi khóa sẽ không thể chỉnh sửa</p>`:''}
+  ${o.locked&&canSee(['quan_ly','ceo'])?`
+  <button class="btn btn-danger" style="width:100%;justify-content:center;margin-top:6px" onclick="unlockOrder('`+o.id+`')">
+    <i class="ti ti-lock-open"></i> Mở khóa để chỉnh sửa
+  </button>`:''}`;
 }
 
 function calcTong(){
@@ -828,7 +834,7 @@ async function saveCuoc(id){
 async function deleteOrder(id){
   if(!canSee(['quan_ly','ceo'])){toast('Không có quyền xóa','error');return;}
   const o=ORDERS.find(x=>x.id===id);
-  if(o?.locked){toast('Đơn đã khóa, không thể xóa','error');return;}
+  if(o?.locked&&!canSee(['quan_ly','ceo'])){toast('Đơn đã khóa, không thể xóa','error');return;}
   if(!confirm(`Xóa vận đơn ${o?.ma_don}?\nThao tác này không thể hoàn tác!`))return;
   await db.from('chi_ho').delete().eq('van_don_id',id);
   const{error}=await db.from('van_don').delete().eq('id',id);
@@ -837,6 +843,19 @@ async function deleteOrder(id){
   closeModal?.();
   closeDp();
   pgOrders(document.getElementById('content'));
+}
+
+async function unlockOrder(id){
+  if(!canSee(['quan_ly','ceo'])){toast('Không có quyền','error');return;}
+  if(!confirm('Mở khóa vận đơn này để chỉnh sửa?\nTrạng thái sẽ chuyển về "Chờ xác nhận"'))return;
+  const{error}=await db.from('van_don').update({
+    locked:false, locked_at:null, locked_by:null,
+    trang_thai:'Chờ xác nhận',
+    updated_at:new Date().toISOString()
+  }).eq('id',id);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast('Đã mở khóa — có thể chỉnh sửa');
+  await refreshOrder(id);
 }
 
 async function lockOrder(id){
