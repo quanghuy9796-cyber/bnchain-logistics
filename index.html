@@ -1517,7 +1517,7 @@ function openAddXe(existing={}){
       <label>Thầu phụ</label>
       <select id="xe-tp"><option value="">-- Chọn --</option>${tpOpts}</select>
     </div>
-    <div class="form-group" id="xe-laixe-group" style="${(existing.loai_phan_loai==='thau_tu_lai'||!existing.loai_phan_loai)?'display:none':''}">
+    <div class="form-group" id="xe-laixe-group">
       <label>Lái xe mặc định</label>
       <input type="text" id="xe-laixe" value="${existing.ten_lai_xe_mac_dinh||''}" placeholder="Nhập tên lái xe..." list="xe-lx-dl">
       <datalist id="xe-lx-dl">${lxOpts}</datalist>
