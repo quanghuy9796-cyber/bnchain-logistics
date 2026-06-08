@@ -856,23 +856,30 @@ function openForm(){
   bg.innerHTML=`<div class="modal">
   <div class="modal-head"><h3><i class="ti ti-plus" style="color:var(--primary)"></i>Thêm vận đơn mới</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body">
+    <div class="form-section-title" style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px"><i class="ti ti-file-description"></i> Thông tin cơ bản</div>
     <div class="form-grid">
       <div class="form-group"><label>Ngày *</label><input type="date" id="nf-ngay" value="${today()}"></div>
       <div class="form-group"><label>Khách hàng *</label><select id="nf-khach"><option value="">-- Chọn --</option>${khopts}</select></div>
       <div class="form-group"><label>Loại hàng *</label><select id="nf-loai" onchange="toggleNFBill()">
-        <option>Nhập</option><option>Xuất</option><option>CK</option>
+        <option>Nhập</option><option>Xuất</option><option>Chuyển kho</option>
       </select></div>
-      <div class="form-group"><label>Loại chuyến</label><select id="nf-lchuyen">
-        <option>Thường</option><option>Kết hợp</option><option>Rỗng</option>
-      </select></div>
-      <div class="form-group" id="nfgrp-bill"><label>Số Bill</label><input type="text" id="nf-bill" placeholder="Số bill hàng nhập"></div>
-      <div class="form-group" id="nfgrp-bk" style="display:none"><label>Số Booking</label><input type="text" id="nf-booking" placeholder="Số booking hàng xuất"></div>
-      <div class="form-group full"><label>Hành trình *</label><input type="text" id="nf-hanh" placeholder="Điểm lấy hàng - Điểm trả hàng"></div>
-      <div class="form-group"><label>Điểm lấy hàng</label><input type="text" id="nf-lay"></div>
-      <div class="form-group"><label>Điểm trả hàng</label><input type="text" id="nf-tra"></div>
-      <div class="form-group"><label>Hàng hóa</label><input type="text" id="nf-hang"></div>
-      <div class="form-group"><label>Ngày yêu cầu giao</label><input type="date" id="nf-ycgiao"></div>
+      <div class="form-group" id="nfgrp-bill"><label>Số Bill / Booking</label><input type="text" id="nf-bill" placeholder="Nhập số bill hoặc booking..."></div>
+      <div class="form-group"><label>Điểm lấy hàng *</label><input type="text" id="nf-lay" placeholder="Kho / KCN / Cảng..."></div>
+      <div class="form-group"><label>Điểm trả hàng *</label><input type="text" id="nf-tra" placeholder="Kho / KCN / Cảng..."></div>
       <div class="form-group full"><label>Ghi chú</label><textarea id="nf-ghichu" rows="2"></textarea></div>
+    </div>
+    <div class="form-section-title" style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 8px"><i class="ti ti-currency-dong"></i> Dịch vụ kèm theo</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label><input type="checkbox" id="nf-doilenh" style="width:auto;margin-right:5px">Đổi lệnh</label>
+        <input type="text" id="nf-phidl" placeholder="Phí / cont (VNĐ)" oninput="this.value=fmtInput(this.value)">
+        <span style="font-size:10px;color:var(--text-muted)">thu theo số cont</span>
+      </div>
+      <div class="form-group">
+        <label><input type="checkbox" id="nf-tokhai" style="width:auto;margin-right:5px">Mở tờ khai</label>
+        <input type="text" id="nf-phitk" placeholder="Phí / lô (VNĐ)" oninput="this.value=fmtInput(this.value)">
+        <span style="font-size:10px;color:var(--text-muted)">thu theo lô</span>
+      </div>
     </div>
   </div>
   <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="saveNew()"><i class="ti ti-device-floppy"></i> Tạo vận đơn</button></div>
@@ -881,30 +888,40 @@ function openForm(){
 }
 
 function toggleNFBill(){
-  const isNhap=document.getElementById('nf-loai')?.value==='Nhập';
-  document.getElementById('nfgrp-bill').style.display=isNhap?'':'none';
-  document.getElementById('nfgrp-bk').style.display=isNhap?'none':'';
+  // Single field for both bill/booking - just update placeholder
+  const loai=document.getElementById('nf-loai')?.value;
+  const billEl=document.getElementById('nf-bill');
+  if(billEl){
+    if(loai==='Nhập') billEl.placeholder='Số bill hàng nhập...';
+    else if(loai==='Xuất') billEl.placeholder='Số booking hàng xuất...';
+    else billEl.placeholder='Số bill / booking...';
+  }
 }
 
 async function saveNew(){
   const khach=document.getElementById('nf-khach').value;
   const hanh=document.getElementById('nf-hanh').value;
+  const lay=document.getElementById('nf-lay').value;
+  const tra=document.getElementById('nf-tra').value;
   if(!khach){toast('Vui lòng chọn khách hàng','error');return;}
-  if(!hanh){toast('Vui lòng nhập hành trình','error');return;}
+  if(!lay){toast('Vui lòng nhập điểm lấy hàng','error');return;}
+  if(!tra){toast('Vui lòng nhập điểm trả hàng','error');return;}
   const loai=document.getElementById('nf-loai').value;
+  const billVal=document.getElementById('nf-bill')?.value||null;
   const data={
     ma_don:genMa(),
     ngay:document.getElementById('nf-ngay').value,
     ten_khach:khach,
     loai_hang:loai,
-    loai_chuyen:document.getElementById('nf-lchuyen').value,
-    so_bill:loai==='Nhập'?document.getElementById('nf-bill').value:null,
-    so_booking:loai!=='Nhập'?document.getElementById('nf-booking').value:null,
-    hanh_trinh:hanh,
+    so_bill:loai==='Nhập'?billVal:null,
+    so_booking:loai!=='Nhập'?billVal:null,
     diem_lay:document.getElementById('nf-lay').value,
     diem_tra:document.getElementById('nf-tra').value,
-    hang_hoa:document.getElementById('nf-hang').value,
-    ngay_yeu_cau:document.getElementById('nf-ycgiao').value||null,
+    hanh_trinh:(document.getElementById('nf-lay').value||'')+(document.getElementById('nf-tra').value?' - '+document.getElementById('nf-tra').value:''),
+    co_doi_lenh:document.getElementById('nf-doilenh').checked,
+    phi_doi_lenh:parseNum(document.getElementById('nf-phidl')?.value||'0'),
+    co_to_khai:document.getElementById('nf-tokhai').checked,
+    phi_to_khai:parseNum(document.getElementById('nf-phitk')?.value||'0'),
     ghi_chu:document.getElementById('nf-ghichu').value,
     trang_thai:'Chờ xếp xe',
     thanh_toan_khach:'Chưa thu',
