@@ -1695,7 +1695,6 @@ Hãy đọc và trích xuất thông tin, trả về JSON với format sau (ch�
 
       toast('AI đọc xong! Kiểm tra lại trước khi lưu','success');
     }catch(err){
-      console.error('AI Error:', err);
       document.getElementById('scan-loading').style.display='none';
       document.getElementById('scan-result').style.display='block';
       document.getElementById('scan-save-btn').style.display='flex';
@@ -2024,7 +2023,7 @@ async function loadBaoCao(){
 
 
 // ==================== UPLOAD HÓA ĐƠN ====================
-const PROXY_URL='https://claude-proxy.quanghuy9796.workers.dev';
+const PROXY_URL='/api/claude';
 
 async function pgHoaDon(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
