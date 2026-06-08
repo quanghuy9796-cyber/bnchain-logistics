@@ -203,9 +203,7 @@ textarea{resize:vertical;min-height:54px}
   <div class="nav-sec">
     <div class="nav-lbl">Danh mục</div>
     <div class="nav-item" onclick="nav('kh',this)"><i class="ti ti-building"></i>Khách hàng</div>
-    <div class="nav-item" onclick="nav('laixe',this)"><i class="ti ti-id-badge"></i>Lái xe</div>
-    <div class="nav-item" onclick="nav('thauphu',this)"><i class="ti ti-users"></i>Thầu phụ</div>
-    <div class="nav-item" onclick="nav('xe',this)"><i class="ti ti-truck"></i>Xe</div>
+    <div class="nav-item" onclick="nav('xe',this)"><i class="ti ti-truck"></i>Phương tiện & Lái xe</div>
     <div class="nav-item" onclick="nav('nv',this)"><i class="ti ti-user-circle"></i>Nhân viên</div>
   </div>
   <div class="nav-bottom">
@@ -542,10 +540,16 @@ function renderTabXe(o,editable){
         <span id="fx-bien-err" style="font-size:10px;color:var(--danger);display:none">Định dạng: 99H-06375</span>
         <span style="font-size:10px;color:var(--text-muted)">Thầu phụ tự động theo biển số</span>
       </div>
-      <div class="form-group"><label>Lái xe <span style="font-size:10px;color:var(--teal)">(điền tự do)</span></label>
+      <div class="form-group" id="fx-laixe-group" style="${o.loai_phan_loai_xe==='thau_tu_lai'?'display:none':''}">
+        <label>Lái xe <span style="font-size:10px;color:var(--teal)">(điền tự do)</span></label>
         <input type="text" id="fx-laixe" value="${o.ten_lai_xe||''}" placeholder="Nhập tên lái xe..." list="laixe-dl" ${dis}>
         <datalist id="laixe-dl">${lxOpts}</datalist>
+        <span style="font-size:10px;color:var(--text-muted)">
+          ${o.loai_phan_loai_xe==='noi_bo'?'🚗 Xe nội bộ':o.loai_phan_loai_xe==='thau_thue_lai'?'🚛 Thầu thuê lái (BN Chain tính lương)':''}
+        </span>
       </div>
+      <input type="hidden" id="fx-phanloai" value="${o.loai_phan_loai_xe||''}">
+      <input type="hidden" id="fx-noibo" value="${o.la_xe_noi_bo?'true':'false'}">
       <div class="form-group"><label>Thầu phụ <span style="font-size:10px;color:var(--teal)">(tự động / tự điền)</span></label>
         <input type="text" id="fx-thauphu" value="${o.ma_thau_phu||''}" placeholder="Tự điền nếu chưa có..." list="tp-dl" ${dis}>
         <datalist id="tp-dl">${tpOpts}</datalist>
@@ -623,7 +627,8 @@ function renderTabCuoc(o,chiHoList,editable,loi){
   const phiDL=o.co_doi_lenh?(+o.phi_doi_lenh||0):0;
   const phiTK=o.co_to_khai?(+o.phi_to_khai||0):0;
   const tongThuKH=(+o.gia_cuoc_khach||0)+phiDL+phiTK+totalCH;
-  const thucTraThau=(+o.gia_cuoc_thau||0)+totalTraThau;
+  const isThauThueLai=o.loai_phan_loai_xe==='thau_thue_lai';
+  const thucTraThau=(+o.gia_cuoc_thau||0)+totalTraThau-(isThauThueLai?totalTraLX:0);
   const coThau=!!o.ma_thau_phu;
   return`
   <div class="form-section">
@@ -675,7 +680,7 @@ function renderTabCuoc(o,chiHoList,editable,loi){
         <div style="opacity:.6">Thực trả thầu</div>
         <div style="font-size:13px;font-weight:700;color:#fca5a5">${fmtM(thucTraThau)}</div>
         ${totalTraThau>0?`<div style="font-size:10px;opacity:.6">Cước ${fmtM(o.gia_cuoc_thau||0)} + Chi hộ ${fmtM(totalTraThau)}</div>`:''}
-        ${totalTraLX>0?`<div style="font-size:10px;color:#c4b5fd;margin-top:2px">Trả lái xe: ${fmtM(totalTraLX)}</div>`:''}
+        ${totalTraLX>0?`<div style="font-size:10px;color:#c4b5fd;margin-top:2px">${isThauThueLai?'− Lương LX (trừ vào thầu)':'Trả lái xe'}: ${fmtM(totalTraLX)}</div>`:''}
       </div>`:''}
     </div>
     <div style="border-top:1px solid rgba(255,255,255,.1);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between">
@@ -747,26 +752,50 @@ function validateBienInput(el){
 }
 async function onBienChange(bien){
   if(!bien||bien.length<4)return;
-  const el=document.getElementById('fx-thauphu');
+  // Set trang thai
   const ttEl=document.getElementById('fx-tt');
   if(ttEl)ttEl.value='Đang vận chuyển';
-  if(!el||el.value)return;
-  const{data}=await db.from('xe_thau_phu').select('*').eq('bien_so',bien.toUpperCase()).maybeSingle();
-  if(data&&data.ma_thau)el.value=data.ma_thau;
+  // Lookup xe table
+  const{data:xe}=await db.from('xe').select('*').ilike('bien_so',bien.trim()).maybeSingle();
+  if(!xe)return;
+  // Auto fill thau phu
+  const tpEl=document.getElementById('fx-thauphu');
+  if(tpEl&&!tpEl.value&&xe.ma_thau_phu)tpEl.value=xe.ma_thau_phu;
+  // Auto fill lai xe
+  const lxEl=document.getElementById('fx-laixe');
+  if(lxEl&&!lxEl.value&&xe.ten_lai_xe_mac_dinh)lxEl.value=xe.ten_lai_xe_mac_dinh;
+  // Store loai phan loai on hidden field
+  const plEl=document.getElementById('fx-phanloai');
+  if(plEl)plEl.value=xe.loai_phan_loai||'thau_tu_lai';
+  // Auto fill loai xe hang
+  const lxhEl=document.getElementById('fx-loaixe');
+  if(lxhEl&&!lxhEl.value&&xe.loai_xe)lxhEl.value=xe.loai_xe;
+  // Show/hide lai xe field based on type
+  const lxGroup=document.getElementById('fx-laixe-group');
+  if(lxGroup){
+    const show=xe.loai_phan_loai!=='thau_tu_lai';
+    lxGroup.style.display=show?'':'none';
+  }
+  // Set la_xe_noi_bo
+  const nbEl=document.getElementById('fx-noibo');
+  if(nbEl)nbEl.value=xe.loai_phan_loai==='noi_bo'?'true':'false';
 }
 
 
 async function saveXe(id){
   const bien=document.getElementById('fx-bien').value.trim().toUpperCase();
+  const plVal=document.getElementById('fx-phanloai')?.value||'';
   const data={
     bien_kiem_soat:bien,
-    ten_lai_xe:document.getElementById('fx-laixe').value,
+    ten_lai_xe:document.getElementById('fx-laixe')?.value||'',
     ma_thau_phu:document.getElementById('fx-thauphu').value,
     loai_chuyen:document.getElementById('fx-lchuyen').value,
     so_cont:document.getElementById('fx-cont').value,
     loai_xe_hang:document.getElementById('fx-loaixe').value,
     ghi_chu_xe:document.getElementById('fx-ghichuXe').value,
     trang_thai:document.getElementById('fx-tt').value,
+    loai_phan_loai_xe:plVal,
+    la_xe_noi_bo:plVal==='noi_bo',
     updated_at:new Date().toISOString(),
   };
   const{error}=await db.from('van_don').update(data).eq('id',id);
@@ -891,8 +920,11 @@ function closeModal(){document.getElementById('modal-bg')?.remove();}
 // CHI HO MODAL
 function openAddChiHo(vdId,maDon){
   const o=ORDERS.find(x=>x.id===vdId)||{};
-  const isNoiBo=o.la_xe_noi_bo||false;
-  const coThau=!!o.ma_thau_phu;
+  const plXe=o.loai_phan_loai_xe||'';
+  const isNoiBo=plXe==='noi_bo';
+  const isThauThueLai=plXe==='thau_thue_lai';
+  const coThau=!!o.ma_thau_phu||plXe==='thau_tu_lai'||plXe==='thau_thue_lai';
+  const coLaiXe=isNoiBo||isThauThueLai;
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
   bg.innerHTML=`<div class="modal" style="width:460px">
   <div class="modal-head"><h3><i class="ti ti-receipt" style="color:var(--warning)"></i>Thêm chi phí phát sinh</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
@@ -923,21 +955,21 @@ function openAddChiHo(vdId,maDon){
               style="border-color:var(--teal)">
             <span style="font-size:10px;color:var(--teal)">Vào bảng kê thu khách</span>
           </div>
-          ${!isNoiBo&&coThau?`
+          ${coThau?`
           <div class="form-group">
-            <label>Trả thầu (VNĐ) <span style="font-size:10px;color:var(--warning)">· ${o.ma_thau_phu}</span></label>
+            <label>Trả thầu (VNĐ) <span style="font-size:10px;color:var(--warning)">· ${o.ma_thau_phu||''}</span></label>
             <input type="text" id="ch-trathau" placeholder="0"
               oninput="this.value=fmtInput(this.value)"
               style="border-color:var(--warning)">
             <span style="font-size:10px;color:var(--warning)">Trừ vào cước trả thầu</span>
           </div>`:`<input type="hidden" id="ch-trathau" value="0">`}
-          ${isNoiBo?`
+          ${coLaiXe?`
           <div class="form-group">
             <label>Trả lái xe (VNĐ) <span style="font-size:10px;color:#8b5cf6">· ${o.ten_lai_xe||''}</span></label>
             <input type="text" id="ch-tralaixe" placeholder="0"
               oninput="this.value=fmtInput(this.value)"
               style="border-color:#8b5cf6">
-            <span style="font-size:10px;color:#8b5cf6">Trừ vào lương lái xe</span>
+            <span style="font-size:10px;color:#8b5cf6">${isThauThueLai?'Lương BN Chain trả hộ — trừ vào cước thầu khi quyết toán':'Trừ vào lương lái xe'}</span>
           </div>`:`<input type="hidden" id="ch-tralaixe" value="0">`}
           <div class="form-group">
             <label>Người chi</label>
@@ -1324,140 +1356,346 @@ async function pgKH(c){
   c.innerHTML=`
   <div class="toolbar"><button class="btn btn-primary" onclick="openAddKH()"><i class="ti ti-plus"></i> Thêm khách hàng</button></div>
   <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Mã KH</th><th>Tên công ty</th><th>Người LH</th><th>Điện thoại</th><th>Email</th><th>MST</th></tr></thead>
-    <tbody>${list.map(k=>`<tr><td class="text-blue fw6">${k.ma_kh}</td><td style="font-weight:500">${k.ten_cong_ty}</td><td>${k.nguoi_lien_he||'—'}</td><td>${k.so_dien_thoai||'—'}</td><td>${k.email||'—'}</td><td>${k.ma_so_thue||'—'}</td></tr>`).join('')}</tbody>
+    <colgroup><col style="width:80px"><col style="width:180px"><col style="width:130px"><col style="width:110px"><col style="width:150px"><col style="width:100px"><col style="width:80px"></colgroup>
+    <thead><tr><th>Mã KH</th><th>Tên công ty</th><th>Người LH</th><th>Điện thoại</th><th>Email</th><th>MST</th><th>Thao tác</th></tr></thead>
+    <tbody>${list.map(k=>`<tr>
+      <td class="text-blue fw6">${k.ma_kh}</td><td style="font-weight:500">${k.ten_cong_ty}</td>
+      <td>${k.nguoi_lien_he||'—'}</td><td>${k.so_dien_thoai||'—'}</td>
+      <td>${k.email||'—'}</td><td>${k.ma_so_thue||'—'}</td>
+      <td><div style="display:flex;gap:4px">
+        <button class="btn btn-xs btn-teal" onclick="editKH('${k.id}')"><i class="ti ti-edit"></i></button>
+        <button class="btn btn-xs btn-danger" onclick="deleteKH('${k.id}','${k.ten_cong_ty}')"><i class="ti ti-trash"></i></button>
+      </div></td>
+    </tr>`).join('')}</tbody>
   </table></div>`;
 }
-function openAddKH(){
+
+function openAddKH(existing={}){
+  const isEdit=!!existing.id;
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  bg.innerHTML=`<div class="modal" style="width:460px"><div class="modal-head"><h3>Thêm khách hàng</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  bg.innerHTML=`<div class="modal" style="width:480px">
+  <div class="modal-head"><h3>${isEdit?'Sửa':'Thêm'} khách hàng</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body"><div class="form-grid">
-    <div class="form-group"><label>Mã KH *</label><input id="kh-ma" placeholder="KH007"></div>
-    <div class="form-group"><label>Tên công ty *</label><input id="kh-ten"></div>
-    <div class="form-group"><label>Người LH</label><input id="kh-nlh"></div>
-    <div class="form-group"><label>Điện thoại</label><input id="kh-dt"></div>
-    <div class="form-group"><label>Email</label><input id="kh-email" type="email"></div>
-    <div class="form-group"><label>Mã số thuế</label><input id="kh-mst"></div>
-    <div class="form-group full"><label>Địa chỉ</label><input id="kh-dc"></div>
+    <div class="form-group"><label>Mã KH *</label><input id="kh-ma" value="${existing.ma_kh||''}" placeholder="KH007" ${isEdit?'disabled':''}></div>
+    <div class="form-group"><label>Tên công ty *</label><input id="kh-ten" value="${existing.ten_cong_ty||''}"></div>
+    <div class="form-group"><label>Người LH</label><input id="kh-nlh" value="${existing.nguoi_lien_he||''}"></div>
+    <div class="form-group"><label>Điện thoại</label><input id="kh-dt" value="${existing.so_dien_thoai||''}"></div>
+    <div class="form-group"><label>Email</label><input id="kh-email" type="email" value="${existing.email||''}"></div>
+    <div class="form-group"><label>Mã số thuế</label><input id="kh-mst" value="${existing.ma_so_thue||''}"></div>
+    <div class="form-group full"><label>Địa chỉ</label><input id="kh-dc" value="${existing.dia_chi||''}"></div>
+    <div class="form-group full"><label>Ghi chú</label><textarea id="kh-gc">${existing.ghi_chu||''}</textarea></div>
   </div></div>
-  <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="saveKH()"><i class="ti ti-device-floppy"></i> Lưu</button></div></div>`;
+  <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button>
+    <button class="btn btn-primary" onclick="saveKH('${existing.id||''}')"><i class="ti ti-device-floppy"></i> Lưu</button>
+  </div></div>`;
   document.body.appendChild(bg);
 }
-async function saveKH(){
-  const d={ma_kh:document.getElementById('kh-ma').value,ten_cong_ty:document.getElementById('kh-ten').value,nguoi_lien_he:document.getElementById('kh-nlh').value,so_dien_thoai:document.getElementById('kh-dt').value,email:document.getElementById('kh-email').value,ma_so_thue:document.getElementById('kh-mst').value,dia_chi:document.getElementById('kh-dc').value};
-  if(!d.ma_kh||!d.ten_cong_ty){toast('Nhập đủ thông tin','error');return;}
-  const{error}=await db.from('khach_hang').insert(d);
+function editKH(id){
+  db.from('khach_hang').select('*').eq('id',id).single().then(({data})=>{if(data)openAddKH(data);});
+}
+async function saveKH(id=''){
+  const d={ten_cong_ty:document.getElementById('kh-ten').value,nguoi_lien_he:document.getElementById('kh-nlh').value,so_dien_thoai:document.getElementById('kh-dt').value,email:document.getElementById('kh-email').value,ma_so_thue:document.getElementById('kh-mst').value,dia_chi:document.getElementById('kh-dc').value,ghi_chu:document.getElementById('kh-gc').value};
+  if(!d.ten_cong_ty){toast('Nhập tên công ty','error');return;}
+  let error;
+  if(id){({error}=await db.from('khach_hang').update(d).eq('id',id));}
+  else{d.ma_kh=document.getElementById('kh-ma').value;if(!d.ma_kh){toast('Nhập mã KH','error');return;}({error}=await db.from('khach_hang').insert(d));}
   if(error){toast('Lỗi: '+error.message,'error');return;}
-  toast('Đã thêm khách hàng');closeModal();await loadMaster();pgKH(document.getElementById('content'));
+  toast(id?'Đã cập nhật':'Đã thêm khách hàng');closeModal();await loadMaster();pgKH(document.getElementById('content'));
+}
+async function deleteKH(id,ten){
+  if(!confirm(`Xóa khách hàng "${ten}"?`))return;
+  const{error}=await db.from('khach_hang').update({active:false}).eq('id',id);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast('Đã xóa');await loadMaster();pgKH(document.getElementById('content'));
 }
 
-async function pgLaiXe(c){
-  const{data}=await db.from('lai_xe').select('*').eq('active',true).order('ho_ten');
-  c.innerHTML=`<div class="toolbar"><button class="btn btn-primary" onclick="openAddLX()"><i class="ti ti-plus"></i> Thêm lái xe</button></div>
-  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Họ tên</th><th>Điện thoại</th><th>CMND/CCCD</th><th>Bằng lái</th><th>HH bằng</th></tr></thead>
-  <tbody>${(data||[]).map(l=>`<tr><td class="fw6">${l.ho_ten}</td><td>${l.so_dien_thoai||'—'}</td><td>${l.so_cmnd||'—'}</td><td>${l.bang_lai||'—'}</td><td>${l.ngay_het_han_bang||'—'}</td></tr>`).join('')}</tbody></table></div>`;
+// ============ PHƯƠNG TIỆN (gộp Xe + Lái xe + Thầu phụ) ============
+async function pgLaiXe(c){ pgPhuongTien(c); } // redirect
+async function pgThauPhu(c){ pgPhuongTien(c); }
+async function pgXe(c){ pgPhuongTien(c); }
+
+async function pgPhuongTien(c){
+  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
+  const[{data:xeList},{data:tpList},{data:lxList}]=await Promise.all([
+    db.from('xe').select('*').eq('active',true).order('bien_so'),
+    db.from('thau_phu').select('*').eq('active',true).order('ten_cong_ty'),
+    db.from('lai_xe').select('*').eq('active',true).order('ho_ten'),
+  ]);
+  const loaiLabel={'noi_bo':'🚗 Nội bộ','thau_tu_lai':'🚛 Thầu tự lái','thau_thue_lai':'🔄 Thầu thuê lái'};
+
+  c.innerHTML=`
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn btn-primary" onclick="openAddXe()"><i class="ti ti-plus"></i> Thêm xe</button>
+    <button class="btn btn-teal" onclick="openAddTP()"><i class="ti ti-plus"></i> Thêm thầu phụ</button>
+    <button class="btn" onclick="openAddLX()"><i class="ti ti-plus"></i> Thêm lái xe</button>
+  </div>
+
+  <h4 style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">
+    <i class="ti ti-truck"></i> DANH SÁCH XE (${(xeList||[]).length})
+  </h4>
+  <div class="tbl-wrap" style="margin-bottom:16px"><table class="tbl">
+    <colgroup><col style="width:110px"><col style="width:130px"><col style="width:130px"><col style="width:140px"><col style="width:140px"><col style="width:100px"><col style="width:80px"></colgroup>
+    <thead><tr><th>Biển số</th><th>Loại xe</th><th>Phân loại</th><th>Thầu phụ</th><th>Lái xe mặc định</th><th>Tải trọng</th><th>Thao tác</th></tr></thead>
+    <tbody>${(xeList||[]).map(x=>`<tr>
+      <td class="text-blue fw6">${x.bien_so}</td>
+      <td>${x.loai_xe||'—'}</td>
+      <td>${loaiLabel[x.loai_phan_loai]||'—'}</td>
+      <td>${x.ten_thau_phu||x.ma_thau_phu||'—'}</td>
+      <td>${x.ten_lai_xe_mac_dinh||'—'}</td>
+      <td>${x.tai_trong||'—'}</td>
+      <td><div style="display:flex;gap:4px">
+        <button class="btn btn-xs btn-teal" onclick="editXe('${x.id}')"><i class="ti ti-edit"></i></button>
+        <button class="btn btn-xs btn-danger" onclick="deleteXe('${x.id}','${x.bien_so}')"><i class="ti ti-trash"></i></button>
+      </div></td>
+    </tr>`).join('')}</tbody>
+  </table></div>
+
+  <h4 style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">
+    <i class="ti ti-users"></i> THẦU PHỤ (${(tpList||[]).length})
+  </h4>
+  <div class="tbl-wrap" style="margin-bottom:16px"><table class="tbl">
+    <colgroup><col style="width:110px"><col style="width:160px"><col style="width:120px"><col style="width:110px"><col style="width:130px"><col style="width:110px"><col style="width:70px"></colgroup>
+    <thead><tr><th>Mã thầu</th><th>Tên công ty</th><th>Người LH</th><th>Điện thoại</th><th>Số TK</th><th>Ngân hàng</th><th>Thao tác</th></tr></thead>
+    <tbody>${(tpList||[]).map(t=>`<tr>
+      <td class="text-blue fw6">${t.ma_thau}</td><td class="fw6">${t.ten_cong_ty}</td>
+      <td>${t.nguoi_lien_he||'—'}</td><td>${t.so_dien_thoai||'—'}</td>
+      <td>${t.so_tai_khoan||'—'}</td><td>${t.ngan_hang||'—'}</td>
+      <td><div style="display:flex;gap:4px">
+        <button class="btn btn-xs btn-teal" onclick="editTP('${t.id}')"><i class="ti ti-edit"></i></button>
+        <button class="btn btn-xs btn-danger" onclick="deleteTP('${t.id}','${t.ma_thau}')"><i class="ti ti-trash"></i></button>
+      </div></td>
+    </tr>`).join('')}</tbody>
+  </table></div>
+
+  <h4 style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">
+    <i class="ti ti-id-badge"></i> LÁI XE (${(lxList||[]).length})
+  </h4>
+  <div class="tbl-wrap"><table class="tbl">
+    <colgroup><col style="width:160px"><col style="width:110px"><col style="width:120px"><col style="width:90px"><col style="width:90px"><col style="width:70px"></colgroup>
+    <thead><tr><th>Họ tên</th><th>Điện thoại</th><th>CMND/CCCD</th><th>Bằng lái</th><th>HH bằng</th><th>Thao tác</th></tr></thead>
+    <tbody>${(lxList||[]).map(l=>`<tr>
+      <td class="fw6">${l.ho_ten}</td><td>${l.so_dien_thoai||'—'}</td>
+      <td>${l.so_cmnd||'—'}</td><td>${l.bang_lai||'—'}</td><td>${l.ngay_het_han_bang||'—'}</td>
+      <td><div style="display:flex;gap:4px">
+        <button class="btn btn-xs btn-teal" onclick="editLX('${l.id}')"><i class="ti ti-edit"></i></button>
+        <button class="btn btn-xs btn-danger" onclick="deleteLX('${l.id}','${l.ho_ten}')"><i class="ti ti-trash"></i></button>
+      </div></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
 }
-function openAddLX(){
+
+// ---- XE CRUD ----
+function openAddXe(existing={}){
+  const isEdit=!!existing.id;
+  const tpOpts=TP.map(t=>`<option value="${t.ma_thau}" ${existing.ma_thau_phu===t.ma_thau?'selected':''}>${t.ma_thau} — ${t.ten_cong_ty}</option>`).join('');
+  const lxOpts=LX.map(l=>`<option value="${l.ho_ten}" ${existing.ten_lai_xe_mac_dinh===l.ho_ten?'selected':''}>${l.ho_ten}</option>`).join('');
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  bg.innerHTML=`<div class="modal" style="width:420px"><div class="modal-head"><h3>Thêm lái xe</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  bg.innerHTML=`<div class="modal" style="width:500px">
+  <div class="modal-head"><h3>${isEdit?'Sửa':'Thêm'} xe</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body"><div class="form-grid">
-    <div class="form-group"><label>Họ tên *</label><input id="lx-ten"></div>
-    <div class="form-group"><label>Điện thoại</label><input id="lx-dt"></div>
-    <div class="form-group"><label>CMND/CCCD</label><input id="lx-cmnd"></div>
-    <div class="form-group"><label>Hạng bằng</label><input id="lx-bang" placeholder="B2, C, D..."></div>
-    <div class="form-group"><label>HH bằng lái</label><input id="lx-hh" type="date"></div>
+    <div class="form-group"><label>Biển số *</label><input id="xe-bs" value="${existing.bien_so||''}" placeholder="99H-06375" ${isEdit?'disabled':''}></div>
+    <div class="form-group"><label>Loại xe</label>
+      <select id="xe-lx"><option value="">-- Chọn --</option>
+        ${['Xe đầu kéo','Xe tải nhỏ','Xe tải lớn','Mooc','Rơ mooc'].map(v=>`<option ${existing.loai_xe===v?'selected':''}>${v}</option>`).join('')}
+      </select></div>
+    <div class="form-group"><label>Phân loại *</label>
+      <select id="xe-pl" onchange="toggleXeFields()">
+        <option value="thau_tu_lai" ${(!existing.loai_phan_loai||existing.loai_phan_loai==='thau_tu_lai')?'selected':''}>🚛 Thầu tự lái</option>
+        <option value="thau_thue_lai" ${existing.loai_phan_loai==='thau_thue_lai'?'selected':''}>🔄 Thầu thuê lái</option>
+        <option value="noi_bo" ${existing.loai_phan_loai==='noi_bo'?'selected':''}>🚗 Xe nội bộ</option>
+      </select></div>
+    <div class="form-group"><label>Tải trọng</label><input id="xe-tt" value="${existing.tai_trong||''}" placeholder="20 tấn"></div>
+    <div class="form-group" id="xe-thau-group" style="${existing.loai_phan_loai==='noi_bo'?'display:none':''}">
+      <label>Thầu phụ</label>
+      <select id="xe-tp"><option value="">-- Chọn --</option>${tpOpts}</select>
+    </div>
+    <div class="form-group" id="xe-laixe-group" style="${existing.loai_phan_loai==='thau_tu_lai'?'display:none':''}">
+      <label>Lái xe mặc định</label>
+      <input type="text" id="xe-laixe" value="${existing.ten_lai_xe_mac_dinh||''}" placeholder="Nhập tên lái xe..." list="xe-lx-dl">
+      <datalist id="xe-lx-dl">${lxOpts}</datalist>
+    </div>
+    <div class="form-group"><label>Năm SX</label><input id="xe-nam" type="number" value="${existing.nam_sx||2020}"></div>
+    <div class="form-group full"><label>Ghi chú</label><textarea id="xe-gc">${existing.ghi_chu||''}</textarea></div>
   </div></div>
-  <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="saveLX()"><i class="ti ti-device-floppy"></i> Lưu</button></div></div>`;
+  <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button>
+    <button class="btn btn-primary" onclick="saveXeModal('${existing.id||''}')"><i class="ti ti-device-floppy"></i> Lưu</button>
+  </div></div>`;
   document.body.appendChild(bg);
 }
-async function saveLX(){
+function toggleXeFields(){
+  const pl=document.getElementById('xe-pl')?.value;
+  document.getElementById('xe-thau-group').style.display=pl==='noi_bo'?'none':'';
+  document.getElementById('xe-laixe-group').style.display=pl==='thau_tu_lai'?'none':'';
+}
+function editXe(id){
+  db.from('xe').select('*').eq('id',id).single().then(({data})=>{if(data)openAddXe(data);});
+}
+async function saveXeModal(id=''){
+  const pl=document.getElementById('xe-pl').value;
+  const tpSel=document.getElementById('xe-tp');
+  const tpMa=tpSel?.value||'';
+  const tpTen=tpSel?.options[tpSel.selectedIndex]?.text?.split('—')[1]?.trim()||'';
+  const d={
+    loai_xe:document.getElementById('xe-lx').value,
+    loai_phan_loai:pl,
+    tai_trong:document.getElementById('xe-tt').value,
+    ten_lai_xe_mac_dinh:document.getElementById('xe-laixe')?.value||'',
+    ma_thau_phu:tpMa,
+    ten_thau_phu:tpTen,
+    nam_sx:+document.getElementById('xe-nam').value||null,
+    la_xe_noi_bo:pl==='noi_bo',
+    ghi_chu:document.getElementById('xe-gc').value,
+  };
+  let error;
+  if(id){({error}=await db.from('xe').update(d).eq('id',id));}
+  else{d.bien_so=document.getElementById('xe-bs').value;if(!d.bien_so){toast('Nhập biển số','error');return;}({error}=await db.from('xe').insert(d));}
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast(id?'Đã cập nhật xe':'Đã thêm xe');closeModal();pgPhuongTien(document.getElementById('content'));
+}
+async function deleteXe(id,bien){
+  if(!confirm(`Xóa xe "${bien}"?`))return;
+  const{error}=await db.from('xe').update({active:false}).eq('id',id);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast('Đã xóa xe');pgPhuongTien(document.getElementById('content'));
+}
+
+// ---- THẦU PHỤ CRUD ----
+function openAddTP(existing={}){
+  const isEdit=!!existing.id;
+  const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
+  bg.innerHTML=`<div class="modal" style="width:480px">
+  <div class="modal-head"><h3>${isEdit?'Sửa':'Thêm'} thầu phụ</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="form-group"><label>Mã thầu *</label><input id="tp-ma" value="${existing.ma_thau||''}" placeholder="TC.XXX001" ${isEdit?'disabled':''}></div>
+    <div class="form-group"><label>Tên công ty *</label><input id="tp-ten" value="${existing.ten_cong_ty||''}"></div>
+    <div class="form-group"><label>Người LH</label><input id="tp-nlh" value="${existing.nguoi_lien_he||''}"></div>
+    <div class="form-group"><label>Điện thoại</label><input id="tp-dt" value="${existing.so_dien_thoai||''}"></div>
+    <div class="form-group"><label>Số tài khoản</label><input id="tp-stk" value="${existing.so_tai_khoan||''}"></div>
+    <div class="form-group"><label>Ngân hàng</label><input id="tp-nh" value="${existing.ngan_hang||''}"></div>
+    <div class="form-group full"><label>Ghi chú</label><textarea id="tp-gc">${existing.ghi_chu||''}</textarea></div>
+  </div></div>
+  <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button>
+    <button class="btn btn-primary" onclick="saveTP('${existing.id||''}')"><i class="ti ti-device-floppy"></i> Lưu</button>
+  </div></div>`;
+  document.body.appendChild(bg);
+}
+function editTP(id){
+  db.from('thau_phu').select('*').eq('id',id).single().then(({data})=>{if(data)openAddTP(data);});
+}
+async function saveTP(id=''){
+  const d={ten_cong_ty:document.getElementById('tp-ten').value,nguoi_lien_he:document.getElementById('tp-nlh').value,so_dien_thoai:document.getElementById('tp-dt').value,so_tai_khoan:document.getElementById('tp-stk').value,ngan_hang:document.getElementById('tp-nh').value,ghi_chu:document.getElementById('tp-gc').value};
+  if(!d.ten_cong_ty){toast('Nhập tên công ty','error');return;}
+  let error;
+  if(id){({error}=await db.from('thau_phu').update(d).eq('id',id));}
+  else{d.ma_thau=document.getElementById('tp-ma').value;if(!d.ma_thau){toast('Nhập mã thầu','error');return;}({error}=await db.from('thau_phu').insert(d));}
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast(id?'Đã cập nhật':'Đã thêm thầu phụ');closeModal();await loadMaster();pgPhuongTien(document.getElementById('content'));
+}
+async function deleteTP(id,ma){
+  if(!confirm(`Xóa thầu phụ "${ma}"?`))return;
+  const{error}=await db.from('thau_phu').update({active:false}).eq('id',id);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast('Đã xóa');await loadMaster();pgPhuongTien(document.getElementById('content'));
+}
+
+// ---- LÁI XE CRUD ----
+function openAddLX(existing={}){
+  const isEdit=!!existing.id;
+  const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
+  bg.innerHTML=`<div class="modal" style="width:440px">
+  <div class="modal-head"><h3>${isEdit?'Sửa':'Thêm'} lái xe</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="form-group"><label>Họ tên *</label><input id="lx-ten" value="${existing.ho_ten||''}"></div>
+    <div class="form-group"><label>Điện thoại</label><input id="lx-dt" value="${existing.so_dien_thoai||''}"></div>
+    <div class="form-group"><label>CMND/CCCD</label><input id="lx-cmnd" value="${existing.so_cmnd||''}"></div>
+    <div class="form-group"><label>Hạng bằng</label><input id="lx-bang" value="${existing.bang_lai||''}" placeholder="B2, C, D..."></div>
+    <div class="form-group"><label>HH bằng lái</label><input id="lx-hh" type="date" value="${existing.ngay_het_han_bang||''}"></div>
+  </div></div>
+  <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button>
+    <button class="btn btn-primary" onclick="saveLX('${existing.id||''}')"><i class="ti ti-device-floppy"></i> Lưu</button>
+  </div></div>`;
+  document.body.appendChild(bg);
+}
+function editLX(id){
+  db.from('lai_xe').select('*').eq('id',id).single().then(({data})=>{if(data)openAddLX(data);});
+}
+async function saveLX(id=''){
   const d={ho_ten:document.getElementById('lx-ten').value,so_dien_thoai:document.getElementById('lx-dt').value,so_cmnd:document.getElementById('lx-cmnd').value,bang_lai:document.getElementById('lx-bang').value,ngay_het_han_bang:document.getElementById('lx-hh').value||null};
   if(!d.ho_ten){toast('Nhập họ tên','error');return;}
-  const{error}=await db.from('lai_xe').insert(d);
+  let error;
+  if(id){({error}=await db.from('lai_xe').update(d).eq('id',id));}
+  else{({error}=await db.from('lai_xe').insert(d));}
   if(error){toast('Lỗi: '+error.message,'error');return;}
-  toast('Đã thêm lái xe');closeModal();await loadMaster();pgLaiXe(document.getElementById('content'));
+  toast(id?'Đã cập nhật':'Đã thêm lái xe');closeModal();await loadMaster();pgPhuongTien(document.getElementById('content'));
+}
+async function deleteLX(id,ten){
+  if(!confirm(`Xóa lái xe "${ten}"?`))return;
+  const{error}=await db.from('lai_xe').update({active:false}).eq('id',id);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast('Đã xóa');await loadMaster();pgPhuongTien(document.getElementById('content'));
 }
 
-async function pgThauPhu(c){
-  const{data}=await db.from('thau_phu').select('*').eq('active',true).order('ten_cong_ty');
-  c.innerHTML=`<div class="toolbar"><button class="btn btn-primary" onclick="openAddTP()"><i class="ti ti-plus"></i> Thêm thầu phụ</button></div>
-  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Mã thầu</th><th>Tên công ty</th><th>Người LH</th><th>Điện thoại</th><th>Số TK</th><th>Ngân hàng</th></tr></thead>
-  <tbody>${(data||[]).map(t=>`<tr><td class="text-blue fw6">${t.ma_thau}</td><td class="fw6">${t.ten_cong_ty}</td><td>${t.nguoi_lien_he||'—'}</td><td>${t.so_dien_thoai||'—'}</td><td>${t.so_tai_khoan||'—'}</td><td>${t.ngan_hang||'—'}</td></tr>`).join('')}</tbody></table></div>`;
-}
-function openAddTP(){
-  const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  bg.innerHTML=`<div class="modal" style="width:460px"><div class="modal-head"><h3>Thêm thầu phụ</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-  <div class="modal-body"><div class="form-grid">
-    <div class="form-group"><label>Mã thầu *</label><input id="tp-ma" placeholder="TC.XXX001"></div>
-    <div class="form-group"><label>Tên công ty *</label><input id="tp-ten"></div>
-    <div class="form-group"><label>Người LH</label><input id="tp-nlh"></div>
-    <div class="form-group"><label>Điện thoại</label><input id="tp-dt"></div>
-    <div class="form-group"><label>Số tài khoản</label><input id="tp-stk"></div>
-    <div class="form-group"><label>Ngân hàng</label><input id="tp-nh"></div>
-  </div></div>
-  <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="saveTP()"><i class="ti ti-device-floppy"></i> Lưu</button></div></div>`;
-  document.body.appendChild(bg);
-}
-async function saveTP(){
-  const d={ma_thau:document.getElementById('tp-ma').value,ten_cong_ty:document.getElementById('tp-ten').value,nguoi_lien_he:document.getElementById('tp-nlh').value,so_dien_thoai:document.getElementById('tp-dt').value,so_tai_khoan:document.getElementById('tp-stk').value,ngan_hang:document.getElementById('tp-nh').value};
-  if(!d.ma_thau||!d.ten_cong_ty){toast('Nhập đủ thông tin','error');return;}
-  const{error}=await db.from('thau_phu').insert(d);
-  if(error){toast('Lỗi: '+error.message,'error');return;}
-  toast('Đã thêm thầu phụ');closeModal();await loadMaster();pgThauPhu(document.getElementById('content'));
-}
-
-async function pgXe(c){
-  const{data}=await db.from('xe').select('*').eq('active',true).order('bien_so');
-  c.innerHTML=`<div class="toolbar"><button class="btn btn-primary" onclick="openAddXeModal()"><i class="ti ti-plus"></i> Thêm xe</button></div>
-  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Biển số</th><th>Loại xe</th><th>Tải trọng</th><th>Năm SX</th></tr></thead>
-  <tbody>${(data||[]).map(x=>`<tr><td class="text-blue fw6">${x.bien_so}</td><td>${x.loai_xe||'—'}</td><td>${x.tai_trong||'—'}</td><td>${x.nam_sx||'—'}</td></tr>`).join('')}</tbody></table></div>`;
-}
-function openAddXeModal(){
-  const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  bg.innerHTML=`<div class="modal" style="width:380px"><div class="modal-head"><h3>Thêm xe</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-  <div class="modal-body"><div class="form-grid">
-    <div class="form-group"><label>Biển số *</label><input id="xe-bs" placeholder="99H-06375"></div>
-    <div class="form-group"><label>Loại xe</label><select id="xe-lx"><option>Xe đầu kéo</option><option>Xe tải</option><option>Mooc</option></select></div>
-    <div class="form-group"><label>Tải trọng</label><input id="xe-tt" placeholder="20 tấn"></div>
-    <div class="form-group"><label>Năm SX</label><input id="xe-nam" type="number" value="2020"></div>
-  </div></div>
-  <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="saveXeModal()"><i class="ti ti-device-floppy"></i> Lưu</button></div></div>`;
-  document.body.appendChild(bg);
-}
-async function saveXeModal(){
-  const d={bien_so:document.getElementById('xe-bs').value,loai_xe:document.getElementById('xe-lx').value,tai_trong:document.getElementById('xe-tt').value,nam_sx:+document.getElementById('xe-nam').value||null};
-  if(!d.bien_so){toast('Nhập biển số','error');return;}
-  const{error}=await db.from('xe').insert(d);
-  if(error){toast('Lỗi: '+error.message,'error');return;}
-  toast('Đã thêm xe');closeModal();pgXe(document.getElementById('content'));
-}
 
 async function pgNV(c){
   if(!canSee(['ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Chỉ CEO có quyền</div>';return;}
   const{data}=await db.from('users').select('*').order('vai_tro');
   const rMap={nhan_vien:'Nhân viên',quan_ly:'Quản lý',ke_toan:'Kế toán',ceo:'CEO'};
-  c.innerHTML=`<div class="toolbar"><button class="btn btn-primary" onclick="openAddNV()"><i class="ti ti-plus"></i> Thêm nhân viên</button></div>
-  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Email</th><th>Họ tên</th><th>Vai trò</th><th>Trạng thái</th></tr></thead>
-  <tbody>${(data||[]).map(u=>`<tr><td>${u.email}</td><td class="fw6">${u.ho_ten}</td><td><span class="tag tag-new">${rMap[u.vai_tro]||u.vai_tro}</span></td><td><span class="tag ${u.active?'tag-dathu':'tag-huy'}">${u.active?'Đang làm':'Đã nghỉ'}</span></td></tr>`).join('')}</tbody></table></div>`;
+  c.innerHTML=`
+  <div class="toolbar"><button class="btn btn-primary" onclick="openAddNV()"><i class="ti ti-plus"></i> Thêm nhân viên</button></div>
+  <div class="tbl-wrap"><table class="tbl">
+    <colgroup><col style="width:180px"><col style="width:150px"><col style="width:100px"><col style="width:100px"><col style="width:80px"></colgroup>
+    <thead><tr><th>Email</th><th>Họ tên</th><th>Vai trò</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+    <tbody>${(data||[]).map(u=>`<tr>
+      <td>${u.email}</td><td class="fw6">${u.ho_ten}</td>
+      <td><span class="tag tag-new">${rMap[u.vai_tro]||u.vai_tro}</span></td>
+      <td><span class="tag ${u.active?'tag-dathu':'tag-huy'}">${u.active?'Đang làm':'Đã nghỉ'}</span></td>
+      <td><div style="display:flex;gap:4px">
+        <button class="btn btn-xs btn-teal" onclick="editNV('${u.id}')"><i class="ti ti-edit"></i></button>
+        <button class="btn btn-xs btn-danger" onclick="toggleNV('${u.id}',${u.active},'${u.ho_ten}')"><i class="ti ti-${u.active?'user-off':'user-check'}"></i></button>
+      </div></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
 }
-function openAddNV(){
+function openAddNV(existing={}){
+  const isEdit=!!existing.id;
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  bg.innerHTML=`<div class="modal" style="width:380px"><div class="modal-head"><h3>Thêm nhân viên</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  bg.innerHTML=`<div class="modal" style="width:380px">
+  <div class="modal-head"><h3>${isEdit?'Sửa':'Thêm'} nhân viên</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body"><div class="form-grid">
-    <div class="form-group"><label>Email *</label><input id="nv-email" type="email"></div>
-    <div class="form-group"><label>Họ tên *</label><input id="nv-ten"></div>
-    <div class="form-group full"><label>Vai trò</label><select id="nv-role"><option value="nhan_vien">Nhân viên</option><option value="quan_ly">Quản lý</option><option value="ke_toan">Kế toán</option><option value="ceo">CEO</option></select></div>
+    <div class="form-group"><label>Email *</label><input id="nv-email" type="email" value="${existing.email||''}" ${isEdit?'disabled':''}></div>
+    <div class="form-group"><label>Họ tên *</label><input id="nv-ten" value="${existing.ho_ten||''}"></div>
+    <div class="form-group full"><label>Vai trò</label>
+      <select id="nv-role">
+        <option value="nhan_vien" ${existing.vai_tro==='nhan_vien'?'selected':''}>Nhân viên</option>
+        <option value="quan_ly" ${existing.vai_tro==='quan_ly'?'selected':''}>Quản lý</option>
+        <option value="ke_toan" ${existing.vai_tro==='ke_toan'?'selected':''}>Kế toán</option>
+        <option value="ceo" ${existing.vai_tro==='ceo'?'selected':''}>CEO</option>
+      </select></div>
   </div></div>
-  <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="saveNV()"><i class="ti ti-device-floppy"></i> Lưu</button></div></div>`;
+  <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button>
+    <button class="btn btn-primary" onclick="saveNV('${existing.id||''}')"><i class="ti ti-device-floppy"></i> Lưu</button>
+  </div></div>`;
   document.body.appendChild(bg);
 }
-async function saveNV(){
-  const d={email:document.getElementById('nv-email').value,ho_ten:document.getElementById('nv-ten').value,vai_tro:document.getElementById('nv-role').value};
-  if(!d.email||!d.ho_ten){toast('Nhập đủ thông tin','error');return;}
-  const{error}=await db.from('users').insert(d);
-  if(error){toast('Lỗi: '+error.message,'error');return;}
-  toast('Đã thêm nhân viên');closeModal();await loadMaster();pgNV(document.getElementById('content'));
+function editNV(id){
+  db.from('users').select('*').eq('id',id).single().then(({data})=>{if(data)openAddNV(data);});
 }
+async function saveNV(id=''){
+  const d={ho_ten:document.getElementById('nv-ten').value,vai_tro:document.getElementById('nv-role').value};
+  if(!d.ho_ten){toast('Nhập họ tên','error');return;}
+  let error;
+  if(id){({error}=await db.from('users').update(d).eq('id',id));}
+  else{d.email=document.getElementById('nv-email').value;if(!d.email){toast('Nhập email','error');return;}({error}=await db.from('users').insert(d));}
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast(id?'Đã cập nhật':'Đã thêm nhân viên');closeModal();await loadMaster();pgNV(document.getElementById('content'));
+}
+async function toggleNV(id,active,ten){
+  if(!confirm(`${active?'Vô hiệu hóa':'Kích hoạt lại'} tài khoản "${ten}"?`))return;
+  const{error}=await db.from('users').update({active:!active}).eq('id',id);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast(active?'Đã vô hiệu hóa':'Đã kích hoạt lại');pgNV(document.getElementById('content'));
+}
+
 </script>
 </body>
 </html>
