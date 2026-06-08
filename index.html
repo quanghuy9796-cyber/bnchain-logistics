@@ -474,7 +474,9 @@ function renderTabInfo(o,editable){
         <input type="date" id="fi-ngay" value="${o.ngay||today()}" ${dis}></div>
       <div class="form-group"><label>Khách hàng *</label>
         <select id="fi-khach" ${dis}>
-          ${KH.map(k=>`<option ${o.ten_khach===k.ten_cong_ty?'selected':''}>${k.ten_cong_ty}</option>`).join('')}
+          <option value="">-- Chọn --</option>
+          ${KH.map(k=>`<option value="${k.ten_cong_ty}" ${o.ten_khach===k.ten_cong_ty?'selected':''}>${k.ten_cong_ty}</option>`).join('')}
+          ${!KH.find(k=>k.ten_cong_ty===o.ten_khach)&&o.ten_khach?`<option value="${o.ten_khach}" selected>${o.ten_khach}</option>`:''}
         </select></div>
       <div class="form-group"><label>Loại hàng *</label>
         <select id="fi-loai" onchange="toggleBillBooking()" ${dis}>
