@@ -1391,8 +1391,9 @@ function openAddKH(existing={}){
   </div></div>`;
   document.body.appendChild(bg);
 }
-function editKH(id){
-  db.from('khach_hang').select('*').eq('id',id).single().then(({data})=>{if(data)openAddKH(data);});
+async function editKH(id){
+  const{data}=await db.from('khach_hang').select('*').eq('id',id).single();
+  if(data)openAddKH(data);
 }
 async function saveKH(id=''){
   if(!canSee(['quan_ly','ke_toan','ceo'])){toast('Không có quyền thực hiện','error');return;}
@@ -1531,11 +1532,15 @@ function toggleXeFields(){
   const pl=document.getElementById('xe-pl')?.value;
   const thauGrp=document.getElementById('xe-thau-group');
   const lxGrp=document.getElementById('xe-laixe-group');
-  if(thauGrp)thauGrp.style.display=pl==='noi_bo'?'none':'';
-  if(lxGrp)lxGrp.style.display=pl==='thau_tu_lai'?'none':'';
+  if(thauGrp)thauGrp.style.display=pl==='noi_bo'?'none':'flex';
+  if(lxGrp){
+    lxGrp.style.display=pl==='thau_tu_lai'?'none':'flex';
+    lxGrp.style.flexDirection='column';
+  }
 }
-function editXe(id){
-  db.from('xe').select('*').eq('id',id).single().then(({data})=>{if(data)openAddXe(data);});
+async function editXe(id){
+  const{data}=await db.from('xe').select('*').eq('id',id).single();
+  if(data)openAddXe(data);
 }
 async function saveXeModal(id=''){
   if(!canSee(['quan_ly','ceo'])){toast('Không có quyền thực hiện','error');return;}
@@ -1589,8 +1594,9 @@ function openAddTP(existing={}){
   </div></div>`;
   document.body.appendChild(bg);
 }
-function editTP(id){
-  db.from('thau_phu').select('*').eq('id',id).single().then(({data})=>{if(data)openAddTP(data);});
+async function editTP(id){
+  const{data}=await db.from('thau_phu').select('*').eq('id',id).single();
+  if(data)openAddTP(data);
 }
 async function saveTP(id=''){
   if(!canSee(['quan_ly','ceo'])){toast('Không có quyền thực hiện','error');return;}
@@ -1628,8 +1634,9 @@ function openAddLX(existing={}){
   </div></div>`;
   document.body.appendChild(bg);
 }
-function editLX(id){
-  db.from('lai_xe').select('*').eq('id',id).single().then(({data})=>{if(data)openAddLX(data);});
+async function editLX(id){
+  const{data}=await db.from('lai_xe').select('*').eq('id',id).single();
+  if(data)openAddLX(data);
 }
 async function saveLX(id=''){
   if(!canSee(['quan_ly','ceo'])){toast('Không có quyền thực hiện','error');return;}
@@ -1691,8 +1698,9 @@ function openAddNV(existing={}){
   </div></div>`;
   document.body.appendChild(bg);
 }
-function editNV(id){
-  db.from('users').select('*').eq('id',id).single().then(({data})=>{if(data)openAddNV(data);});
+async function editNV(id){
+  const{data}=await db.from('users').select('*').eq('id',id).single();
+  if(data)openAddNV(data);
 }
 async function saveNV(id=''){
   if(!canSee(['ceo'])){toast('Không có quyền thực hiện','error');return;}
