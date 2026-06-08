@@ -599,15 +599,17 @@ function renderTabChiHo(o,list,editable){
   <div class="chi-ho-item">
     <div class="chi-ho-left">
       <div class="chi-ho-type">${c.loai_chi}</div>
-      <div class="chi-ho-meta">${c.ngay_chi} · ${c.nguoi_chi||'—'} ${c.chung_tu?'· CT: '+c.chung_tu:''}</div>
+      <div class="chi-ho-meta">${c.nguoi_chi||'—'} ${c.chung_tu?'· CT: '+c.chung_tu:''}</div>
       ${c.ghi_chu?`<div class="chi-ho-meta" style="font-style:italic">${c.ghi_chu}</div>`:''}
+      <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
+        <span style="font-size:10px;background:var(--teal-light);color:var(--teal);padding:1px 6px;border-radius:8px">Thu KH: ${fmt(c.tien_thu_khach||c.so_tien)}</span>
+        ${(c.tien_tra_thau||0)>0?`<span style="font-size:10px;background:#fef3c7;color:var(--warning);padding:1px 6px;border-radius:8px">Trả thầu: ${fmt(c.tien_tra_thau)}</span>`:''}
+        ${(c.tien_tra_laixe||0)>0?`<span style="font-size:10px;background:#ede9fe;color:#7c3aed;padding:1px 6px;border-radius:8px">Trả LX: ${fmt(c.tien_tra_laixe)}</span>`:''}
+        ${c.hoa_don_khach?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:8px">HĐ KH</span>':''}
+      </div>
     </div>
     <div class="chi-ho-right">
-      <div class="chi-ho-amount">${fmtM(c.so_tien)}</div>
-      <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:2px">
-        ${c.hoa_don_khach?'<span class="tag" style="background:#e0f2fe;color:#0369a1;font-size:10px">HĐ KH</span>':''}
-        <span class="tag ${c.da_thu_lai?'tag-dathu':'tag-chuathu'}" style="font-size:10px">${c.da_thu_lai?'Đã thu':'Chưa thu'}</span>
-      </div>
+      <div class="chi-ho-amount">${fmtM(c.tien_thu_khach||c.so_tien)}</div>
     </div>
   </div>`).join('')}
   ${list.length===0?'<div class="empty" style="padding:20px 0"><i class="ti ti-inbox"></i>Chưa có chi phí phát sinh</div>':''}
@@ -615,10 +617,13 @@ function renderTabChiHo(o,list,editable){
 }
 
 function renderTabCuoc(o,chiHoList,editable,loi){
-  const totalCH=chiHoList.reduce((s,c)=>s+(+c.so_tien||0),0);
-  const phiDL=o.co_doi_lenh?(+o.phi_doi_lenh||0):0; // đã tính sẵn theo cont
+  const totalCH=chiHoList.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
+  const totalTraThau=chiHoList.reduce((s,c)=>s+(+c.tien_tra_thau||0),0);
+  const totalTraLX=chiHoList.reduce((s,c)=>s+(+c.tien_tra_laixe||0),0);
+  const phiDL=o.co_doi_lenh?(+o.phi_doi_lenh||0):0;
   const phiTK=o.co_to_khai?(+o.phi_to_khai||0):0;
   const tongThuKH=(+o.gia_cuoc_khach||0)+phiDL+phiTK+totalCH;
+  const thucTraThau=(+o.gia_cuoc_thau||0)+totalTraThau;
   const coThau=!!o.ma_thau_phu;
   return`
   <div class="form-section">
@@ -638,7 +643,7 @@ function renderTabCuoc(o,chiHoList,editable,loi){
     <div style="background:var(--bg);border-radius:var(--r);padding:10px 12px;font-size:12px">
       ${phiDL>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span>Phí đổi lệnh</span><span class="text-orange fw6">${fmtM(phiDL)}</span></div>`:''}
       ${phiTK>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span>Phí mở tờ khai</span><span class="text-orange fw6">${fmtM(phiTK)}</span></div>`:''}
-      ${totalCH>0?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Chi hộ phát sinh</span><span class="text-orange fw6">${fmtM(totalCH)}</span></div>`:''}
+      ${totalCH>0?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Chi hộ phát sinh (${chiHoList.length} khoản)</span><span class="text-orange fw6">${fmtM(totalCH)}</span></div>`:''}
       ${!phiDL&&!phiTK&&!totalCH?'<div style="color:var(--text-muted)">Chưa có dịch vụ cộng thêm</div>':''}
     </div>
   </div>
@@ -646,7 +651,7 @@ function renderTabCuoc(o,chiHoList,editable,loi){
     <div class="form-section-title"><i class="ti ti-arrow-left"></i>Trả thầu phụ</div>
     ${coThau?`
     <div class="form-grid">
-      <div class="form-group"><label>Giá cước thầu (VNĐ)</label>
+      <div class="form-group"><label>Cước thầu (VNĐ)</label>
         <input type="text" id="fc-cuocthau" value="${o.gia_cuoc_thau>0?fmtInput(o.gia_cuoc_thau):''}"
           placeholder="0" ${!editable?'disabled':''} oninput="this.value=fmtInput(this.value);calcTong()"></div>
       <div class="form-group"><label>Trạng thái trả thầu</label>
@@ -666,11 +671,16 @@ function renderTabCuoc(o,chiHoList,editable,loi){
     <div style="font-size:10px;opacity:.6;margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">Tổng kết đơn này</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
       <div><div style="opacity:.6">Tổng thu khách</div><div id="tong-thu" style="font-size:15px;font-weight:700;color:#ffd700">${fmtM(tongThuKH)}</div></div>
-      ${coThau?`<div><div style="opacity:.6">Trả thầu</div><div id="tong-thau" style="font-size:15px;font-weight:700;color:#fca5a5">${fmtM(o.gia_cuoc_thau||0)}</div></div>`:''}
+      ${coThau?`<div>
+        <div style="opacity:.6">Thực trả thầu</div>
+        <div style="font-size:13px;font-weight:700;color:#fca5a5">${fmtM(thucTraThau)}</div>
+        ${totalTraThau>0?`<div style="font-size:10px;opacity:.6">Cước ${fmtM(o.gia_cuoc_thau||0)} + Chi hộ ${fmtM(totalTraThau)}</div>`:''}
+        ${totalTraLX>0?`<div style="font-size:10px;color:#c4b5fd;margin-top:2px">Trả lái xe: ${fmtM(totalTraLX)}</div>`:''}
+      </div>`:''}
     </div>
     <div style="border-top:1px solid rgba(255,255,255,.1);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between">
       <span style="opacity:.6">Lợi nhuận gộp</span>
-      <span id="tong-loi" style="font-weight:700;color:${loi>=0?'#86efac':'#fca5a5'}">${fmtM(loi)}</span>
+      <span style="font-weight:700;color:${(tongThuKH-thucTraThau)>=0?'#86efac':'#fca5a5'}">${fmtM(tongThuKH-thucTraThau)}</span>
     </div>
   </div>
   ${editable?`
@@ -880,46 +890,108 @@ function closeModal(){document.getElementById('modal-bg')?.remove();}
 
 // CHI HO MODAL
 function openAddChiHo(vdId,maDon){
+  const o=ORDERS.find(x=>x.id===vdId)||{};
+  const isNoiBo=o.la_xe_noi_bo||false;
+  const coThau=!!o.ma_thau_phu;
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  bg.innerHTML=`<div class="modal" style="width:440px">
+  bg.innerHTML=`<div class="modal" style="width:460px">
   <div class="modal-head"><h3><i class="ti ti-receipt" style="color:var(--warning)"></i>Thêm chi phí phát sinh</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body">
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;background:var(--bg);padding:7px 10px;border-radius:var(--r)">Vận đơn: <strong>${maDon}</strong></div>
     <div class="form-grid">
-      <div class="form-group"><label>Loại chi *</label><select id="ch-loai">
-        <option>Cao tốc / Vé đường</option><option>Công nhân bốc xếp</option><option>Lưu ca</option>
-        <option>Lưu bãi / Lưu cont</option><option>Phí cảng</option><option>Nâng hạ cont</option>
-        <option>Giám sát hải quan</option><option>Chi phí khác</option>
+      <div class="form-group full"><label>Loại chi *</label><select id="ch-loai">
+        <option>Cao tốc / Vé đường</option>
+        <option>Công nhân bốc xếp</option>
+        <option>Lưu ca</option>
+        <option>Lưu bãi / Lưu cont</option>
+        <option>Phí cảng</option>
+        <option>Nâng hạ cont</option>
+        <option>Giám sát hải quan</option>
+        <option>Chi phí khác</option>
       </select></div>
-      <div class="form-group"><label>Ngày chi</label><input type="date" id="ch-ngay" value="${today()}"></div>
-      <div class="form-group"><label>Số tiền (VNĐ) *</label><input type="text" id="ch-tien" value="" placeholder="0" oninput="this.value=fmtInput(this.value)"></div>
-      <div class="form-group"><label>Người chi</label><input type="text" id="ch-nguoi" value="${CU?.ho_ten||''}"></div>
+
+      <div style="grid-column:1/-1;border-radius:var(--r);padding:10px 12px;border:1px solid var(--border);background:var(--bg)">
+        <div style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+          <i class="ti ti-coins"></i> Số tiền
+          ${isNoiBo?'<span style="background:#ede9fe;color:#7c3aed;border-radius:8px;padding:1px 8px;margin-left:6px;font-size:10px;text-transform:none">🚗 Xe nội bộ — '+o.bien_kiem_soat+'</span>':coThau?'<span style="background:#fef3c7;color:var(--warning);border-radius:8px;padding:1px 8px;margin-left:6px;font-size:10px;text-transform:none">🚛 Xe thầu — '+o.ma_thau_phu+'</span>':'<span style="background:#f1f5f9;color:var(--text-muted);border-radius:8px;padding:1px 8px;margin-left:6px;font-size:10px;text-transform:none">Chưa xếp xe</span>'}
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Thu khách (VNĐ) *</label>
+            <input type="text" id="ch-thukh" placeholder="0"
+              oninput="this.value=fmtInput(this.value);autoFillTraThau()"
+              style="border-color:var(--teal)">
+            <span style="font-size:10px;color:var(--teal)">Vào bảng kê thu khách</span>
+          </div>
+          ${!isNoiBo&&coThau?`
+          <div class="form-group">
+            <label>Trả thầu (VNĐ) <span style="font-size:10px;color:var(--warning)">· ${o.ma_thau_phu}</span></label>
+            <input type="text" id="ch-trathau" placeholder="0"
+              oninput="this.value=fmtInput(this.value)"
+              style="border-color:var(--warning)">
+            <span style="font-size:10px;color:var(--warning)">Trừ vào cước trả thầu</span>
+          </div>`:`<input type="hidden" id="ch-trathau" value="0">`}
+          ${isNoiBo?`
+          <div class="form-group">
+            <label>Trả lái xe (VNĐ) <span style="font-size:10px;color:#8b5cf6">· ${o.ten_lai_xe||''}</span></label>
+            <input type="text" id="ch-tralaixe" placeholder="0"
+              oninput="this.value=fmtInput(this.value)"
+              style="border-color:#8b5cf6">
+            <span style="font-size:10px;color:#8b5cf6">Trừ vào lương lái xe</span>
+          </div>`:`<input type="hidden" id="ch-tralaixe" value="0">`}
+          <div class="form-group">
+            <label>Người chi</label>
+            <input type="text" id="ch-nguoi" value="${CU?.ho_ten||''}">
+          </div>
+        </div>
+      </div>
+
       <div class="form-group"><label>Số chứng từ / HĐ</label><input type="text" id="ch-ct"></div>
-      <div class="form-group"><label>HĐ theo MST khách</label><select id="ch-hdkh">
-        <option value="false">Không</option><option value="true">Có — HĐ xuất theo MST khách</option>
-      </select></div>
-      <div class="form-group"><label>Đã thu lại từ khách</label><select id="ch-dathu">
-        <option value="false">Chưa thu</option><option value="true">Đã thu</option>
-      </select></div>
+      <div class="form-group"><label>HĐ theo MST khách</label>
+        <select id="ch-hdkh">
+          <option value="false">Không</option>
+          <option value="true">Có — HĐ theo MST khách</option>
+        </select>
+      </div>
       <div class="form-group full"><label>Ghi chú</label><textarea id="ch-ghichu" rows="2"></textarea></div>
     </div>
   </div>
-  <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="saveChiHo('${vdId}','${maDon}')"><i class="ti ti-device-floppy"></i> Lưu</button></div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">Hủy</button>
+    <button class="btn btn-primary" onclick="saveChiHo('${vdId}','${maDon}')"><i class="ti ti-device-floppy"></i> Lưu</button>
+  </div>
   </div>`;
   document.body.appendChild(bg);
 }
 
+function autoFillTraThau(){
+  // Khi nhập thu khách, tự gợi ý trả thầu = cùng số tiền
+  const thuEl=document.getElementById('ch-thukh');
+  const thauEl=document.getElementById('ch-trathau');
+  if(thuEl&&thauEl&&!thauEl.value){
+    thauEl.value=thuEl.value;
+  }
+}
+
+
 async function saveChiHo(vdId,maDon){
+  const thuKH=parseNum(document.getElementById('ch-thukh').value);
+  const traThau=parseNum(document.getElementById('ch-trathau').value);
+  const traLX=parseNum(document.getElementById('ch-tralaixe').value);
+  if(!thuKH){toast('Vui lòng nhập số tiền thu khách','error');return;}
   const data={
     van_don_id:vdId,
     ma_don:maDon,
     loai_chi:document.getElementById('ch-loai').value,
-    ngay_chi:document.getElementById('ch-ngay').value,
-    so_tien:parseNum(document.getElementById('ch-tien').value),
+    ngay_chi:new Date().toISOString().split('T')[0],
+    so_tien:thuKH,
+    tien_thu_khach:thuKH,
+    tien_tra_thau:traThau,
+    tien_tra_laixe:traLX,
     nguoi_chi:document.getElementById('ch-nguoi').value,
     chung_tu:document.getElementById('ch-ct').value,
     hoa_don_khach:document.getElementById('ch-hdkh').value==='true',
-    da_thu_lai:document.getElementById('ch-dathu').value==='true',
+    da_thu_lai:false,
     ghi_chu:document.getElementById('ch-ghichu').value,
   };
   const{error}=await db.from('chi_ho').insert(data);
