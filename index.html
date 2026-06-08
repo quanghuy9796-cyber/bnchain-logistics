@@ -1646,7 +1646,7 @@ async function processImageFile(file){
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
-          model:'claude-haiku-4-5-20251001',
+          model:'claude-haiku-4-5',
           max_tokens:1000,
           messages:[{
             role:'user',
@@ -2179,7 +2179,7 @@ async function processOneHD(file){
   const isImage=file.type.startsWith('image/');
   const mediaType=isImage?file.type:'application/pdf';
   // Haiku chỉ hỗ trợ ảnh, Sonnet hỗ trợ cả PDF (document type)
-  const aiModel=isImage?'claude-haiku-4-5-20251001':'claude-sonnet-4-20250514';
+  const aiModel=isImage?'claude-haiku-4-5':'claude-sonnet-4-5';
   const contentBlock=isImage
     ?{type:'image',source:{type:'base64',media_type:mediaType,data:base64}}
     :{type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}};
