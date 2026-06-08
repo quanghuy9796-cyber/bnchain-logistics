@@ -1695,6 +1695,7 @@ Hãy đọc và trích xuất thông tin, trả về JSON với format sau (ch�
 
       toast('AI đọc xong! Kiểm tra lại trước khi lưu','success');
     }catch(err){
+      console.error('AI Error:', err);
       document.getElementById('scan-loading').style.display='none';
       document.getElementById('scan-result').style.display='block';
       document.getElementById('scan-save-btn').style.display='flex';
@@ -2180,6 +2181,8 @@ async function processOneHD(file){
   const mediaType=isImage?file.type:'application/pdf';
   
   // Call Claude API via proxy
+  console.log('Calling proxy:', PROXY_URL);
+  console.log('File type:', mediaType, 'Size:', base64.length);
   const response=await fetch(PROXY_URL,{
     method:'POST',
     headers:{'Content-Type':'application/json'},
