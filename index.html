@@ -540,7 +540,7 @@ function renderTabXe(o,editable){
         <span id="fx-bien-err" style="font-size:10px;color:var(--danger);display:none">Định dạng: 99H-06375</span>
         <span style="font-size:10px;color:var(--text-muted)">Thầu phụ tự động theo biển số</span>
       </div>
-      <div class="form-group" id="fx-laixe-group" style="${o.loai_phan_loai_xe==='thau_tu_lai'?'display:none':''}">
+      <div class="form-group" id="fx-laixe-group">
         <label>Lái xe <span style="font-size:10px;color:var(--teal)">(điền tự do)</span></label>
         <input type="text" id="fx-laixe" value="${o.ten_lai_xe||''}" placeholder="Nhập tên lái xe..." list="laixe-dl" ${dis}>
         <datalist id="laixe-dl">${lxOpts}</datalist>
@@ -763,7 +763,10 @@ async function onBienChange(bien){
   if(tpEl&&!tpEl.value&&xe.ma_thau_phu)tpEl.value=xe.ma_thau_phu;
   // Auto fill lai xe
   const lxEl=document.getElementById('fx-laixe');
-  if(lxEl&&!lxEl.value&&xe.ten_lai_xe_mac_dinh)lxEl.value=xe.ten_lai_xe_mac_dinh;
+  if(lxEl&&!lxEl.value){
+    if(xe.loai_phan_loai==='thau_tu_lai')lxEl.value=xe.ten_thau_phu||xe.ten_lai_xe_mac_dinh||'';
+    else if(xe.ten_lai_xe_mac_dinh)lxEl.value=xe.ten_lai_xe_mac_dinh;
+  }
   // Store loai phan loai on hidden field
   const plEl=document.getElementById('fx-phanloai');
   if(plEl)plEl.value=xe.loai_phan_loai||'thau_tu_lai';
@@ -1531,12 +1534,9 @@ function openAddXe(existing={}){
 function toggleXeFields(){
   const pl=document.getElementById('xe-pl')?.value;
   const thauGrp=document.getElementById('xe-thau-group');
-  const lxGrp=document.getElementById('xe-laixe-group');
-  if(thauGrp)thauGrp.style.display=pl==='noi_bo'?'none':'flex';
-  if(lxGrp){
-    lxGrp.style.display=pl==='thau_tu_lai'?'none':'flex';
-    lxGrp.style.flexDirection='column';
-  }
+  // Ẩn thầu phụ nếu xe nội bộ
+  if(thauGrp)thauGrp.style.display=pl==='noi_bo'?'none':'';
+  // Lái xe luôn hiện cho mọi loại
 }
 async function editXe(id){
   const{data}=await db.from('xe').select('*').eq('id',id).single();
@@ -1553,7 +1553,7 @@ async function saveXeModal(id=''){
     loai_xe:document.getElementById('xe-lx')?.value||'',
     loai_phan_loai:pl,
     tai_trong:document.getElementById('xe-tt')?.value||'',
-    ten_lai_xe_mac_dinh:pl!=='thau_tu_lai'?lxVal:'',
+    ten_lai_xe_mac_dinh:lxVal,
     ma_thau_phu:tpMa,
     ten_thau_phu:tpTen,
     nam_sx:+document.getElementById('xe-nam')?.value||null,
