@@ -512,62 +512,145 @@ async function loadBangKe(){
 
 async function xuatExcelBangKe(){
   if(!window.BK_DATA){toast('Vui lòng xem bảng kê trước','error');return;}
-  toast('Đang tạo file Excel...','info');
-  // Gọi qua API Claude để tạo Excel (tính năng sẽ build sau)
-  // Tạm thời export CSV để dùng ngay
-  const{list,chiHoAll,chiHoTypes,chiHoP1,chiHoP2,chiHoMap,groups,khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongPhaiThu}=window.BK_DATA;
+  const btn=document.getElementById('btn-xuat-excel');
+  btn.innerHTML='<i class="ti ti-loader-2"></i> Đang tạo...';
+  btn.disabled=true;
+
+  // Load SheetJS nếu chưa có
+  if(!window.XLSX){
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload=res; s.onerror=rej;
+      document.head.appendChild(s);
+    });
+  }
+
+  const{list,chiHoAll,chiHoTypes,chiHoP1,chiHoP2,groups,chuyenChuyenKy,
+        khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongTruocVAT,vatP1,tongPhaiThu}=window.BK_DATA;
+
   const chiHoMapLocal={};
   (chiHoAll||[]).forEach(c=>{
     if(!chiHoMapLocal[c.van_don_id])chiHoMapLocal[c.van_don_id]=[];
     chiHoMapLocal[c.van_don_id].push(c);
   });
 
-  // Build CSV P1
-  const headers=['STT','Ngày','Mã đơn','Loại','Số cont','Loại cont','Tuyến đường','BKS','Cước',...chiHoTypes,'Phát sinh DV','Tổng','Ghi chú','CSHT/SHĐ','Nâng/SHĐ','Hạ/SHĐ','Tổng chi hộ','Kỳ TT'];
-  const rows=[headers.join('\t')];
-  let stt=0;
-  list.forEach(o=>{
-    stt++;
-    const ch=(chiHoMapLocal[o.id]||[]).filter(c=>!c.hoa_don_khach);
-    const phiDV=(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0);
-    const tongDong=(+o.gia_cuoc_khach||0)+ch.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)+phiDV;
-    // Lấy SHĐ từ chi hộ P2
-    const chP2=(chiHoMapLocal[o.id]||[]).filter(c=>c.hoa_don_khach);
-    const csht=chP2.find(c=>c.loai_chi==='CSHT');
-    const nang=chP2.find(c=>['Nâng hàng','Nâng vỏ'].includes(c.loai_chi));
-    const ha=chP2.find(c=>['Hạ hàng','Hạ vỏ'].includes(c.loai_chi));
-    const tongCH=chP2.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
-    const row=[
-      stt, o.ngay, o.ma_don, o.loai_hang||'',
-      o.so_cont||'', o.loai_cont||'',
-      (o.diem_lay||'')+(o.diem_tra?' → '+o.diem_tra:''),
-      o.bien_kiem_soat||'',
-      o.gia_cuoc_khach||0,
-      ...chiHoTypes.map(type=>ch.filter(c=>c.loai_chi===type).reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)||''),
-      phiDV||'', tongDong, o.ghi_chu||'',
-      csht?csht.chung_tu||csht.so_tien:'',
-      nang?nang.chung_tu||nang.so_tien:'',
-      ha?ha.chung_tu||ha.so_tien:'',
-      tongCH||'',
-      o.ky_thanh_toan||thang,
-    ];
-    rows.push(row.join('\t'));
-  });
-  rows.push('');
-  rows.push(['TỔNG PHẦN 1','','','','','','','',tongCuoc,...chiHoTypes.map(type=>chiHoP1.filter(c=>c.loai_chi===type).reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)),'','','','','','',tongP2,''].join('\t'));
-  rows.push(['TỔNG PHẦN 2 (chi hộ HĐ)','','','','','','','','','','','','','','','',tongP2,''].join('\t'));
-  rows.push([''].join('\t'));
-  rows.push(['TỔNG CƯỚC + PHÁT SINH (chưa VAT)','','','','','','','','',tongTruocVAT,'','','','','','','',''].join('\t'));
-  rows.push(['VAT 8% (Phần 1)','','','','','','','','',vatP1,'','','','','','','',''].join('\t'));
-  rows.push(['TỔNG CHI HỘ CÓ HĐ (Phần 2)','','','','','','','','','','','','','','','',tongP2,''].join('\t'));
-  rows.push(['TỔNG THANH TOÁN','','','','','','','','','','','','','','','','',tongPhaiThu].join('\t'));
+  const WB=XLSX.utils.book_new();
 
-  const blob=new Blob(['\uFEFF'+rows.join('\n')],{type:'text/tab-separated-values;charset=utf-8'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=`BangKe_${khName.replace(/\s+/g,'_')}_T${m}_${y}.tsv`;
-  a.click();
-  toast('Đã tải file — mở bằng Excel và Save As .xlsx','info');
+  // === SHEET 1: BẢNG KÊ CHÍNH ===
+  const wsData=[];
+  wsData.push(['CÔNG TY CỔ PHẦN BN CHAIN']);
+  wsData.push(['215 Đường Nguyễn Phong Sắc, Phương Liễu, Bắc Ninh | MST: 2301342748']);
+  wsData.push([`BẢNG KÊ KIÊM BIÊN BẢN XÁC NHẬN KHỐI LƯỢNG DỊCH VỤ THÁNG ${m}/${y}`]);
+  wsData.push([`Khách hàng: ${khName}`]);
+  wsData.push([]);
+
+  // Header P1
+  wsData.push(['PHẦN 1: CƯỚC VẬN CHUYỂN & PHÍ PHÁT SINH']);
+  wsData.push(['STT','Ngày','Mã đơn','Loại','Số cont','Loại cont','Tuyến đường','BKS',
+    'Cước','GSHQ','Phát sinh',...chiHoTypes,'Tổng','Ghi chú']);
+
+  let stt=0;
+  Object.entries(groups).forEach(([bill,items])=>{
+    stt++;
+    items.forEach((o,i)=>{
+      const ch=(chiHoMapLocal[o.id]||[]).filter(c=>!c.hoa_don_khach);
+      const phiDV=(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0);
+      const tongDong=(+o.gia_cuoc_khach||0)+ch.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)+phiDV;
+      const kyNote=o.ky_goc&&o.ky_goc!==thang?`[Từ T${o.ky_goc.split('-')[1]}] `:'';
+      wsData.push([
+        `${stt}${items.length>1?'.'+(i+1):''}`,
+        fmtDate(o.ngay), kyNote+o.ma_don, o.loai_hang||'',
+        o.so_cont||'', o.loai_cont||'',
+        (o.diem_lay||'')+(o.diem_tra?' → '+o.diem_tra:''),
+        o.bien_kiem_soat||'',
+        +o.gia_cuoc_khach||0, +o.phi_doi_lenh||0, phiDV,
+        ...chiHoTypes.map(type=>ch.filter(c=>c.loai_chi===type)
+          .reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)||0),
+        tongDong, o.ghi_chu||'',
+      ]);
+    });
+    if(items.length>1){
+      const subCuoc=items.reduce((s,o)=>s+(+o.gia_cuoc_khach||0),0);
+      const subTotal=items.reduce((tot,o)=>{
+        const ch=(chiHoMapLocal[o.id]||[]).filter(c=>!c.hoa_don_khach);
+        return tot+(+o.gia_cuoc_khach||0)+ch.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)+(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0);
+      },0);
+      wsData.push([`Cộng ${items[0].loai_hang==='Nhập'?'Bill':'Booking'}: ${bill}`,
+        '','','','','','','',subCuoc,'','',
+        ...chiHoTypes.map(()=>''),'',subTotal,'']);
+    }
+  });
+
+  wsData.push(['CỘNG PHẦN 1','','','','','','','',tongCuoc,'',tongDV,
+    ...chiHoTypes.map(type=>chiHoP1.filter(c=>c.loai_chi===type)
+      .reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)),
+    tongTruocVAT,'']);
+  wsData.push([]);
+
+  // Header P2
+  if(chiHoP2.length){
+    wsData.push(['PHẦN 2: CHI HỘ CÓ HÓA ĐƠN (Nâng / Hạ / CSHT)']);
+    wsData.push(['STT','Số cont','CSHT (tiền)','CSHT (SHĐ)',
+      'Nâng (tiền)','Nâng (SHĐ)','Hạ (tiền)','Hạ (SHĐ)','Khác','Tổng']);
+    const p2ByCont={};
+    chiHoP2.forEach(c=>{
+      const o=list.find(x=>x.id===c.van_don_id);
+      const key=o?.so_cont||c.ma_don||c.van_don_id;
+      if(!p2ByCont[key])p2ByCont[key]=[];
+      p2ByCont[key].push(c);
+    });
+    Object.entries(p2ByCont).forEach(([cont,items],i)=>{
+      const csht=items.find(c=>c.loai_chi==='CSHT'||c.loai_chi?.includes('Hạ tầng'));
+      const nang=items.find(c=>c.loai_chi?.startsWith('Nâng'));
+      const ha=items.find(c=>c.loai_chi?.startsWith('Hạ'));
+      const khac=items.filter(c=>c!==csht&&c!==nang&&c!==ha);
+      wsData.push([
+        i+1, cont,
+        csht?+(csht.tien_thu_khach||csht.so_tien)||0:0, csht?.chung_tu||'',
+        nang?+(nang.tien_thu_khach||nang.so_tien)||0:0, nang?.chung_tu||'',
+        ha?+(ha.tien_thu_khach||ha.so_tien)||0:0, ha?.chung_tu||'',
+        khac.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0),
+        items.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0),
+      ]);
+    });
+    wsData.push(['TỔNG CHI HỘ CÓ HĐ','','','','','','','','',tongP2]);
+    wsData.push([]);
+  }
+
+  // Footer
+  wsData.push(['TỔNG CƯỚC + PHÁT SINH (chưa VAT)','','','','','','','','',tongTruocVAT]);
+  wsData.push(['VAT 8% (Phần 1)','','','','','','','','',vatP1]);
+  if(chiHoP2.length) wsData.push(['TỔNG CHI HỘ CÓ HĐ (Phần 2)','','','','','','','','',tongP2]);
+  wsData.push(['TỔNG THANH TOÁN','','','','','','','','',tongPhaiThu]);
+  wsData.push([]);
+  wsData.push(['','XÁC NHẬN CỦA KHÁCH HÀNG','','','','CÔNG TY CỔ PHẦN BN CHAIN']);
+
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols']=[{wch:6},{wch:11},{wch:16},{wch:8},{wch:14},{wch:10},
+    {wch:35},{wch:10},{wch:14},{wch:10},{wch:12},
+    ...chiHoTypes.map(()=>({wch:12})),{wch:14},{wch:25}];
+  XLSX.utils.book_append_sheet(WB,ws,`T${m}.${y}`);
+
+  // Sheet chuyển kỳ
+  if(chuyenChuyenKy?.length){
+    const wsCK=XLSX.utils.aoa_to_sheet([
+      [`CHUYẾN CHUYỂN KỲ — THÁNG ${m}/${y}`],
+      ['Mã đơn','Ngày chạy','Số cont','Hành trình','Kỳ gốc','Lý do chuyển'],
+      ...chuyenChuyenKy.map(o=>[o.ma_don,fmtDate(o.ngay),o.so_cont||'',
+        o.hanh_trinh||'',
+        o.ky_goc?`T${o.ky_goc.split('-')[1]}/${o.ky_goc.split('-')[0]}`:'',
+        o.ly_do_chuyen_ky||''])
+    ]);
+    wsCK['!cols']=[{wch:16},{wch:12},{wch:14},{wch:35},{wch:10},{wch:30}];
+    XLSX.utils.book_append_sheet(WB,wsCK,'Chuyển kỳ');
+  }
+
+  const fileName=`BangKe_${khName.replace(/\s+/g,'_')}_T${m}_${y}.xlsx`;
+  XLSX.writeFile(WB,fileName);
+  btn.innerHTML='<i class="ti ti-file-spreadsheet"></i> Xuất Excel';
+  btn.disabled=false;
+  toast(`✅ Đã tải ${fileName}`);
 }
 
 // ============ AI SCAN HÓA ĐƠN ============
