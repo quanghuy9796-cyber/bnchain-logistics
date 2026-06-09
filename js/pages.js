@@ -651,4 +651,4 @@ async function loadBaoCao(){
 
 
 // ==================== UPLOAD HÓA ĐƠN ====================
-const PROXY_URL='https://claude-proxy.quanghuy9796.workers.dev';
+const PROXY_URL='/api/gemini'; // Gemini 2.0 Flash
