@@ -501,7 +501,19 @@ async function confirmDuyetHD(id){
   if(!hd||!hdvds?.length){toast('Không tìm thấy thông tin','error');return;}
 
   const main=hdvds[0];
-  // Tạo chi_ho record
+
+  // Lấy tất cả cont liên quan đến HĐ này
+  const contList=hd.so_cont_list||[];
+  // Tìm các vận đơn phụ (cont phụ) — trừ cont chính
+  const contPhu=contList.filter(c=>c!==main.so_cont);
+  const vdPhuList=[];
+  for(const cont of contPhu){
+    const{data:vds}=await db.from('van_don').select('id,ma_don,so_cont,ten_khach').ilike('so_cont','%'+cont+'%');
+    if(vds?.length) vdPhuList.push(...vds.filter(v=>v.id!==main.van_don_id));
+  }
+
+  // Tạo chi_ho CHÍNH cho cont chính — ghi nhận số tiền thật
+  const contPhuStr=contPhu.length?` | Chung với: ${contPhu.join(', ')}`:'';
   await db.from('chi_ho').insert({
     van_don_id:main.van_don_id,
     ma_don:main.ma_don,
@@ -514,14 +526,41 @@ async function confirmDuyetHD(id){
     chung_tu:hd.so_hd,
     hoa_don_khach:true,
     da_thu_lai:false,
-    ghi_chu:`HĐ ${hd.so_hd||''} | ${hd.ten_don_vi_xuat||''}`,
+    la_tham_chieu:false,
+    ghi_chu:`HĐ ${hd.so_hd||''} | ${hd.ten_don_vi_xuat||''}${contPhuStr}`,
   });
-  
+
+  // Tạo chi_ho THAM CHIẾU cho các cont phụ — không tính tiền, chỉ để note
+  for(const vdPhu of vdPhuList){
+    const contChinh=main.so_cont||main.ma_don;
+    const contPhiChinh=contPhu.filter(c=>c!==vdPhu.so_cont);
+    const cungVoiStr=[contChinh,...contPhiChinh].filter(Boolean).join(', ');
+    await db.from('chi_ho').insert({
+      van_don_id:vdPhu.id,
+      ma_don:vdPhu.ma_don,
+      loai_chi:hd.loai_dv||'Chi hộ HĐ',
+      ngay_chi:hd.ngay_hd||today(),
+      so_tien:0,              // không tính tiền ở cont phụ
+      tien_thu_khach:0,
+      tien_tra_thau:0,tien_tra_laixe:0,
+      nguoi_chi:hd.ten_nguoi_upload||'OPS',
+      chung_tu:hd.so_hd,
+      hoa_don_khach:true,
+      da_thu_lai:false,
+      la_tham_chieu:true,     // flag: chỉ là note tham chiếu
+      so_tien_hd_goc:hd.tong_tien, // lưu tổng tiền HĐ gốc để tra cứu
+      ghi_chu:`[Tham chiếu] ${hd.loai_dv||'Chi hộ'} — HĐ ${hd.so_hd||''} tổng ${fmtM(hd.tong_tien)} | Tiền ghi nhận tại: ${cungVoiStr} | ${hd.ten_don_vi_xuat||''}`,
+    });
+  }
+
   // Cập nhật trạng thái HĐ và liên kết
   await db.from('hoa_don').update({trang_thai:'da_duyet',nguoi_duyet:CU?.id,ngay_duyet:new Date().toISOString()}).eq('id',id);
   await db.from('hoa_don_van_don').update({da_tao_chi_ho:true}).eq('hoa_don_id',id);
-  
-  toast('✅ Đã duyệt — Chi hộ đã được tạo tự động');
+
+  const msg=vdPhuList.length>0
+    ?`✅ Đã duyệt — Tạo chi hộ chính + ${vdPhuList.length} note tham chiếu cho các cont liên quan`
+    :'✅ Đã duyệt — Chi hộ đã được tạo tự động';
+  toast(msg);
   pgHoaDon(document.getElementById('content'));
 }
 
