@@ -395,13 +395,16 @@ function xuLyTimVanDon(cont){
   const el=document.getElementById('xuly-vd-found');
   if(!el)return;
   if(cont.length<6){el.innerHTML='';return;}
-  const found=ORDERS.filter(o=>o.so_cont&&o.so_cont.toUpperCase().includes(cont.toUpperCase())&&!o.locked);
+  const found=ORDERS.filter(o=>o.so_cont&&o.so_cont.toUpperCase().includes(cont.toUpperCase()));
   if(found.length===0){
     el.innerHTML=`<span style="color:var(--danger)"><i class="ti ti-x"></i> Không tìm thấy vận đơn nào có cont này</span>`;
   } else {
     el.innerHTML=`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--r);padding:6px 10px">
       <div style="font-weight:600;color:var(--success);margin-bottom:4px"><i class="ti ti-check"></i> Tìm thấy ${found.length} vận đơn:</div>
-      ${found.slice(0,3).map(o=>`<div style="font-size:11px;padding:2px 0">${o.ma_don} — ${o.ten_khach||'—'} — cont: <strong>${o.so_cont}</strong></div>`).join('')}
+      ${found.slice(0,3).map(o=>`<div style="font-size:11px;padding:3px 0;display:flex;align-items:center;gap:6px">
+        <span>${o.ma_don} — ${o.ten_khach||'—'} — cont: <strong>${o.so_cont}</strong></span>
+        ${o.locked?'<span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 5px;font-size:10px">🔒 Đã khóa</span>':'<span style="background:#dcfce7;color:#166534;border-radius:4px;padding:1px 5px;font-size:10px">✓ Đang mở</span>'}
+      </div>`).join('')}
     </div>`;
   }
 }
@@ -412,7 +415,7 @@ async function saveXuLyHD(hdId){
   if(!cont||cont.length<6){toast('Vui lòng điền số cont','error');return;}
 
   // Tìm vận đơn theo số cont
-  const{data:vds}=await db.from('van_don').select('*').ilike('so_cont','%'+cont+'%').eq('locked',false);
+  const{data:vds}=await db.from('van_don').select('*').ilike('so_cont','%'+cont+'%');
   if(!vds||vds.length===0){toast('Không tìm thấy vận đơn nào có cont '+cont,'error');return;}
   const vd=vds[0]; // lấy vận đơn đầu tiên khớp
 
