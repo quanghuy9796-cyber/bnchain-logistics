@@ -12,7 +12,7 @@ async function pgOrders(c){
   ORDERS.forEach(o=>counts[o.trang_thai]=(counts[o.trang_thai]||0)+1);
 
   let list=ORDERS.filter(o=>{
-    const q=ORDER_SEARCH.toLowerCase();
+    const q=ORDER_SEARCH.trim().toLowerCase();
     const mq=!q||(o.ma_don?.toLowerCase().includes(q)||o.ten_khach?.toLowerCase().includes(q)||o.so_bill?.toLowerCase().includes(q)||o.so_booking?.toLowerCase().includes(q)||o.so_cont?.toLowerCase().includes(q)||o.bien_kiem_soat?.toLowerCase().includes(q));
     const ml=!ORDER_LOAI||o.loai_hang===ORDER_LOAI;
     const mf=ORDER_FILTER==='all'||o.trang_thai===ORDER_FILTER;
@@ -33,7 +33,7 @@ async function pgOrders(c){
   </div>
   <div class="toolbar">
     <button class="btn btn-primary" onclick="openForm()"><i class="ti ti-plus"></i> Thêm vận đơn</button>
-    <input class="search-inp" placeholder="Tìm mã đơn, bill, booking, cont, biển số..." value="${ORDER_SEARCH}" oninput="ORDER_SEARCH=this.value;pgOrders(document.getElementById('content'))">
+    <input class="search-inp" placeholder="Tìm mã đơn, bill, booking, cont, biển số..." value="${ORDER_SEARCH}" oninput="clearTimeout(window._searchT);window._searchT=setTimeout(()=>{ORDER_SEARCH=this.value;pgOrders(document.getElementById('content'))},400)">
     <select class="filter-sel" onchange="ORDER_LOAI=this.value;pgOrders(document.getElementById('content'))">
       <option value="">Tất cả loại</option>
       <option value="Xuất" ${ORDER_LOAI==='Xuất'?'selected':''}>Xuất</option>
