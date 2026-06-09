@@ -91,6 +91,7 @@ textarea{resize:vertical;min-height:54px}
 .tag-huy{background:#fee2e2;color:#991b1b}
 /* DETAIL PANEL */
 .detail-panel{width:360px;min-width:360px;max-width:360px;background:var(--white);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.dp{width:360px;min-width:360px;max-width:360px;background:var(--white);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
 .dp-header{padding:12px 15px;border-bottom:1px solid var(--border);background:#f8fbfc;display:flex;align-items:center;justify-content:space-between}
 .dp-code{font-size:13px;font-weight:600;color:var(--teal)}
 .dp-locked{font-size:10px;color:var(--success);display:flex;align-items:center;gap:3px}
