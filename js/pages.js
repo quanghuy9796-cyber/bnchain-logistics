@@ -516,7 +516,6 @@ async function xuatExcelBangKe(){
   btn.innerHTML='<i class="ti ti-loader-2"></i> Đang tạo...';
   btn.disabled=true;
 
-  // Load SheetJS nếu chưa có
   if(!window.XLSX){
     await new Promise((res,rej)=>{
       const s=document.createElement('script');
@@ -535,64 +534,210 @@ async function xuatExcelBangKe(){
     chiHoMapLocal[c.van_don_id].push(c);
   });
 
+  // ── Style helpers ──────────────────────────────────────────
   const WB=XLSX.utils.book_new();
+  const fmtNum='#,##0';
+  const fmtNum0='#,##0;-#,##0;"-"'; // zero = dấu gạch
 
-  // === SHEET 1: BẢNG KÊ CHÍNH ===
-  const wsData=[];
-  wsData.push(['CÔNG TY CỔ PHẦN BN CHAIN']);
-  wsData.push(['215 Đường Nguyễn Phong Sắc, Phương Liễu, Bắc Ninh | MST: 2301342748']);
-  wsData.push([`BẢNG KÊ KIÊM BIÊN BẢN XÁC NHẬN KHỐI LƯỢNG DỊCH VỤ THÁNG ${m}/${y}`]);
-  wsData.push([`Khách hàng: ${khName}`]);
-  wsData.push([]);
+  // Màu theo form mẫu
+  const C_HEADER_BG='1F4E79';  // xanh đậm header chính
+  const C_HEADER2_BG='2E75B6'; // xanh nhạt header phụ
+  const C_P2_BG='E2EFDA';      // xanh lá nhạt phần 2
+  const C_TOTAL_BG='FFF2CC';   // vàng nhạt dòng tổng
+  const C_FOOTER_BG='1F4E79';  // xanh đậm footer
+  const C_WHITE='FFFFFF';
+  const C_DARK='081B3A';
+  const C_STRIPE='EBF3FB';     // sọc xen kẽ hàng lẻ
 
-  // Header P1
-  wsData.push(['PHẦN 1: CƯỚC VẬN CHUYỂN & PHÍ PHÁT SINH']);
-  wsData.push(['STT','Ngày','Mã đơn','Loại','Số cont','Loại cont','Tuyến đường','BKS',
-    'Cước','GSHQ','Phát sinh',...chiHoTypes,'Tổng','Ghi chú']);
+  const border={
+    top:{style:'thin',color:{rgb:'B0C4DE'}},
+    bottom:{style:'thin',color:{rgb:'B0C4DE'}},
+    left:{style:'thin',color:{rgb:'B0C4DE'}},
+    right:{style:'thin',color:{rgb:'B0C4DE'}},
+  };
+  const borderBold={
+    top:{style:'medium',color:{rgb:'1F4E79'}},
+    bottom:{style:'medium',color:{rgb:'1F4E79'}},
+    left:{style:'medium',color:{rgb:'1F4E79'}},
+    right:{style:'medium',color:{rgb:'1F4E79'}},
+  };
 
+  function cs(opts={}){
+    // cell style factory
+    return{
+      font:{name:'Arial',sz:opts.sz||9,bold:opts.bold||false,color:{rgb:opts.color||C_DARK},italic:opts.italic||false},
+      fill:{patternType:'solid',fgColor:{rgb:opts.bg||C_WHITE}},
+      alignment:{horizontal:opts.align||'left',vertical:'center',wrapText:opts.wrap||false},
+      border:opts.borderBold?borderBold:border,
+      numFmt:opts.fmt||'',
+    };
+  }
+
+  // ── Build data array ────────────────────────────────────────
+  const R=[];        // rows
+  const S=[];        // styles tương ứng (cùng index)
+  const MERGES=[];   // merge ranges
+
+  const push=(row,styles)=>{R.push(row);S.push(styles||[]);};
+  const pushEmpty=()=>push([],[]);
+
+  // Số cột cố định trước chi hộ types: STT,Ngày,Mã đơn,Loại,Cont,LoạiCont,Tuyến,BKS,Cước,GSHQ,PS = 11
+  const COL_FIXED=11;
+  const COL_CHITYPES=chiHoTypes.length;
+  const COL_TONG=COL_FIXED+COL_CHITYPES;     // cột Tổng P1
+  const COL_NOTE=COL_TONG+1;                 // cột Ghi chú
+  const TOTAL_COLS=COL_NOTE+1;
+
+  // ── HEADER CÔNG TY ──────────────────────────────────────────
+  // Dòng 1: tên công ty
+  push(['CÔNG TY CỔ PHẦN BN CHAIN',...Array(TOTAL_COLS-1).fill('')],
+    [cs({bold:true,sz:13,color:C_DARK,bg:C_WHITE,align:'center'})]);
+  MERGES.push({s:{r:0,c:0},e:{r:0,c:TOTAL_COLS-1}});
+
+  // Dòng 2: địa chỉ
+  push(['215 Đường Nguyễn Phong Sắc, Phương Liễu, Bắc Ninh | MST: 2301342748',...Array(TOTAL_COLS-1).fill('')],
+    [cs({sz:8,color:'595959',align:'center'})]);
+  MERGES.push({s:{r:1,c:0},e:{r:1,c:TOTAL_COLS-1}});
+
+  // Dòng 3: tiêu đề bảng kê
+  push([`BẢNG KÊ KIÊM BIÊN BẢN XÁC NHẬN KHỐI LƯỢNG DỊCH VỤ HOÀN THÀNH THÁNG ${m}/${y}`,...Array(TOTAL_COLS-1).fill('')],
+    [cs({bold:true,sz:12,color:C_DARK,align:'center',bg:C_WHITE})]);
+  MERGES.push({s:{r:2,c:0},e:{r:2,c:TOTAL_COLS-1}});
+
+  // Dòng 4: đính kèm HĐ
+  push([`Đính kèm hóa đơn GTGT xuất theo hợp đồng`,...Array(TOTAL_COLS-1).fill('')],
+    [cs({sz:9,color:'595959',align:'center',italic:true})]);
+  MERGES.push({s:{r:3,c:0},e:{r:3,c:TOTAL_COLS-1}});
+
+  pushEmpty();
+
+  // Dòng 6: bên bán/mua
+  const halfCol=Math.floor(TOTAL_COLS/2);
+  push(['Bên bán hàng: CÔNG TY CỔ PHẦN BN CHAIN',...Array(halfCol-1).fill(''),
+        `Bên mua hàng: ${khName}`,...Array(TOTAL_COLS-halfCol-1).fill('')],
+    [cs({bold:true,sz:9}),,...Array(halfCol-1).fill(null),cs({bold:true,sz:9})]);
+  MERGES.push({s:{r:5,c:0},e:{r:5,c:halfCol-1}});
+  MERGES.push({s:{r:5,c:halfCol},e:{r:5,c:TOTAL_COLS-1}});
+
+  pushEmpty();
+
+  // ── HEADER BẢNG P1 ──────────────────────────────────────────
+  // Dòng header xanh đậm — hàng 1
+  const hStyle=cs({bold:true,sz:9,color:C_WHITE,bg:C_HEADER_BG,align:'center',borderBold:true});
+  const hRow1=['STT','NGÀY','MÃ ĐƠN','LOẠI','SỐ CONT','LOẠI CONT','TUYẾN ĐƯỜNG','BKS',
+    'CƯỚC','GSHQ','PHÁT SINH',
+    ...(chiHoTypes.length?['CHI HỘ KHÔNG HĐ']:chiHoTypes),
+    'TỔNG','GHI CHÚ'];
+  // Merge "CHI HỘ KHÔNG HĐ" nếu nhiều loại
+  push(hRow1, Array(TOTAL_COLS).fill(hStyle));
+  const headerRowIdx=R.length-1;
+  if(chiHoTypes.length>1){
+    MERGES.push({s:{r:headerRowIdx,c:COL_FIXED},e:{r:headerRowIdx,c:COL_FIXED+chiHoTypes.length-1}});
+  }
+
+  // Dòng header xanh nhạt — hàng 2 (sub-header chi hộ types)
+  if(chiHoTypes.length>0){
+    const hStyle2=cs({bold:true,sz:8,color:C_WHITE,bg:C_HEADER2_BG,align:'center'});
+    const hRow2=[...Array(COL_FIXED).fill(''),...chiHoTypes,...Array(2).fill('')];
+    push(hRow2,Array(TOTAL_COLS).fill(hStyle2));
+    // Merge các cột fixed ở hàng 2 với hàng 1
+    ['STT','NGÀY','MÃ ĐƠN','LOẠI','SỐ CONT','LOẠI CONT','TUYẾN ĐƯỜNG','BKS','CƯỚC','GSHQ','PHÁT SINH','TỔNG','GHI CHÚ'].forEach((_,ci)=>{
+      const col=ci<COL_FIXED?ci:(ci===COL_FIXED?COL_TONG:COL_NOTE);
+      if(ci!==COL_FIXED) MERGES.push({s:{r:headerRowIdx,c:col},e:{r:headerRowIdx+1,c:col}});
+    });
+  }
+
+  // ── DATA ROWS P1 ────────────────────────────────────────────
   let stt=0;
+  let dataRowStart=R.length;
   Object.entries(groups).forEach(([bill,items])=>{
     stt++;
     items.forEach((o,i)=>{
+      const rowIdx=R.length-dataRowStart;
+      const isStripe=rowIdx%2===1;
+      const bgRow=isStripe?C_STRIPE:C_WHITE;
       const ch=(chiHoMapLocal[o.id]||[]).filter(c=>!c.hoa_don_khach);
       const phiDV=(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0);
       const tongDong=(+o.gia_cuoc_khach||0)+ch.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)+phiDV;
-      const kyNote=o.ky_goc&&o.ky_goc!==thang?`[Từ T${o.ky_goc.split('-')[1]}] `:'';
-      wsData.push([
+      const kyNote=o.ky_goc&&o.ky_goc!==thang?`[T${o.ky_goc.split('-')[1]}] `:'';
+      const dStyle=cs({sz:9,bg:bgRow});
+      const numStyle=cs({sz:9,bg:bgRow,align:'right',fmt:fmtNum0});
+      const ctrStyle=cs({sz:9,bg:bgRow,align:'center'});
+      const monoStyle=cs({sz:9,bg:bgRow,align:'center',color:'1F4E79'});
+
+      push([
         `${stt}${items.length>1?'.'+(i+1):''}`,
-        fmtDate(o.ngay), kyNote+o.ma_don, o.loai_hang||'',
-        o.so_cont||'', o.loai_cont||'',
+        fmtDate(o.ngay),
+        kyNote+(o.ma_don||''),
+        o.loai_hang||'',
+        o.so_cont||'',
+        o.loai_cont||'',
         (o.diem_lay||'')+(o.diem_tra?' → '+o.diem_tra:''),
         o.bien_kiem_soat||'',
-        +o.gia_cuoc_khach||0, +o.phi_doi_lenh||0, phiDV,
+        +o.gia_cuoc_khach||0,
+        +o.phi_doi_lenh||0,
+        phiDV,
         ...chiHoTypes.map(type=>ch.filter(c=>c.loai_chi===type)
           .reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)||0),
-        tongDong, o.ghi_chu||'',
+        tongDong,
+        o.ghi_chu||'',
+      ],[ctrStyle,ctrStyle,dStyle,ctrStyle,monoStyle,ctrStyle,dStyle,ctrStyle,
+        numStyle,numStyle,numStyle,
+        ...chiHoTypes.map(()=>numStyle),
+        cs({sz:9,bg:bgRow,align:'right',fmt:fmtNum,bold:true,color:'1F4E79'}),
+        cs({sz:9,bg:bgRow,italic:true,color:'595959'}),
       ]);
     });
+
+    // Subtotal bill nếu nhiều cont
     if(items.length>1){
       const subCuoc=items.reduce((s,o)=>s+(+o.gia_cuoc_khach||0),0);
       const subTotal=items.reduce((tot,o)=>{
         const ch=(chiHoMapLocal[o.id]||[]).filter(c=>!c.hoa_don_khach);
         return tot+(+o.gia_cuoc_khach||0)+ch.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)+(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0);
       },0);
-      wsData.push([`Cộng ${items[0].loai_hang==='Nhập'?'Bill':'Booking'}: ${bill}`,
-        '','','','','','','',subCuoc,'','',
-        ...chiHoTypes.map(()=>''),'',subTotal,'']);
+      const subStyle=cs({sz:8,bg:'F0F7FF',italic:true,color:'595959'});
+      const subNum=cs({sz:8,bg:'F0F7FF',align:'right',fmt:fmtNum,bold:true});
+      push([
+        `Cộng ${items[0].loai_hang==='Nhập'?'Bill':'Booking'}: ${bill}`,
+        '',' ','','','','','',subCuoc,'','',
+        ...chiHoTypes.map(()=>0),subTotal,''
+      ],[subStyle,...Array(7).fill(subStyle),subNum,...Array(2).fill(subStyle),
+        ...chiHoTypes.map(()=>subNum),subNum,subStyle]);
+      MERGES.push({s:{r:R.length-1,c:0},e:{r:R.length-1,c:7}});
     }
   });
 
-  wsData.push(['CỘNG PHẦN 1','','','','','','','',tongCuoc,'',tongDV,
+  // Dòng tổng P1
+  const totStyle=cs({bold:true,sz:9,bg:C_TOTAL_BG,align:'right',fmt:fmtNum,borderBold:true});
+  const totLblStyle=cs({bold:true,sz:9,bg:C_TOTAL_BG,borderBold:true});
+  push([
+    'CỘNG PHẦN 1','','','','','','','',
+    tongCuoc,tongDV,0,
     ...chiHoTypes.map(type=>chiHoP1.filter(c=>c.loai_chi===type)
       .reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)),
-    tongTruocVAT,'']);
-  wsData.push([]);
+    tongTruocVAT,'',
+  ],[totLblStyle,...Array(7).fill(totLblStyle),
+    totStyle,totStyle,totStyle,
+    ...chiHoTypes.map(()=>totStyle),
+    cs({bold:true,sz:10,bg:C_TOTAL_BG,align:'right',fmt:fmtNum,color:C_HEADER_BG,borderBold:true}),
+    totLblStyle]);
+  MERGES.push({s:{r:R.length-1,c:0},e:{r:R.length-1,c:7}});
+  pushEmpty();
 
-  // Header P2
+  // ── PHẦN 2: CHI HỘ CÓ HĐ ───────────────────────────────────
   if(chiHoP2.length){
-    wsData.push(['PHẦN 2: CHI HỘ CÓ HÓA ĐƠN (Nâng / Hạ / CSHT)']);
-    wsData.push(['STT','Số cont','CSHT (tiền)','CSHT (SHĐ)',
-      'Nâng (tiền)','Nâng (SHĐ)','Hạ (tiền)','Hạ (SHĐ)','Khác','Tổng']);
+    // Header P2
+    const h2Style=cs({bold:true,sz:9,color:C_WHITE,bg:'375623',align:'center',borderBold:true});
+    push(['PHẦN 2: CHI HỘ CÓ HÓA ĐƠN (Nâng / Hạ / CSHT)',...Array(9).fill('')],
+      [h2Style,...Array(9).fill(h2Style)]);
+    MERGES.push({s:{r:R.length-1,c:0},e:{r:R.length-1,c:9}});
+
+    const h2hStyle=cs({bold:true,sz:9,color:C_WHITE,bg:'548235',align:'center'});
+    push(['STT','SỐ CONT',
+      'CSHT','SHĐ','NÂNG HÀNG/VỎ','SHĐ','HẠ HÀNG/VỎ','SHĐ','KHÁC','TỔNG'],
+      Array(10).fill(h2hStyle));
+
     const p2ByCont={};
     chiHoP2.forEach(c=>{
       const o=list.find(x=>x.id===c.van_don_id);
@@ -600,39 +745,121 @@ async function xuatExcelBangKe(){
       if(!p2ByCont[key])p2ByCont[key]=[];
       p2ByCont[key].push(c);
     });
+
     Object.entries(p2ByCont).forEach(([cont,items],i)=>{
-      const csht=items.find(c=>c.loai_chi==='CSHT'||c.loai_chi?.includes('Hạ tầng'));
+      const bg=i%2===0?C_WHITE:'F2F7EE';
+      const csht=items.find(c=>c.loai_chi==='CSHT'||c.loai_chi?.includes('Hạ tầng')||c.loai_chi?.includes('CSHT'));
       const nang=items.find(c=>c.loai_chi?.startsWith('Nâng'));
       const ha=items.find(c=>c.loai_chi?.startsWith('Hạ'));
       const khac=items.filter(c=>c!==csht&&c!==nang&&c!==ha);
-      wsData.push([
+      const tongCont=items.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
+      push([
         i+1, cont,
-        csht?+(csht.tien_thu_khach||csht.so_tien)||0:0, csht?.chung_tu||'',
-        nang?+(nang.tien_thu_khach||nang.so_tien)||0:0, nang?.chung_tu||'',
-        ha?+(ha.tien_thu_khach||ha.so_tien)||0:0, ha?.chung_tu||'',
-        khac.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0),
-        items.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0),
+        csht?+(csht.tien_thu_khach||csht.so_tien)||0:'',
+        csht?.chung_tu||'',
+        nang?+(nang.tien_thu_khach||nang.so_tien)||0:'',
+        nang?.chung_tu||'',
+        ha?+(ha.tien_thu_khach||ha.so_tien)||0:'',
+        ha?.chung_tu||'',
+        khac.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)||'',
+        tongCont,
+      ],[
+        cs({sz:9,bg,align:'center'}),
+        cs({sz:9,bg,align:'center',color:'1F4E79',bold:true}),
+        cs({sz:9,bg,align:'right',fmt:fmtNum0}),
+        cs({sz:9,bg,align:'center',color:'2E75B6',sz:8}),
+        cs({sz:9,bg,align:'right',fmt:fmtNum0}),
+        cs({sz:9,bg,align:'center',color:'2E75B6',sz:8}),
+        cs({sz:9,bg,align:'right',fmt:fmtNum0}),
+        cs({sz:9,bg,align:'center',color:'2E75B6',sz:8}),
+        cs({sz:9,bg,align:'right',fmt:fmtNum0}),
+        cs({sz:9,bg,align:'right',fmt:fmtNum,bold:true,color:'375623'}),
       ]);
     });
-    wsData.push(['TỔNG CHI HỘ CÓ HĐ','','','','','','','','',tongP2]);
-    wsData.push([]);
+
+    // Tổng P2
+    push(['TỔNG CHI HỘ CÓ HĐ','','','','','','','','',tongP2],
+      [cs({bold:true,sz:9,bg:C_TOTAL_BG,borderBold:true}),
+       ...Array(8).fill(cs({bold:true,sz:9,bg:C_TOTAL_BG,borderBold:true})),
+       cs({bold:true,sz:10,bg:C_TOTAL_BG,align:'right',fmt:fmtNum,color:'375623',borderBold:true})]);
+    MERGES.push({s:{r:R.length-1,c:0},e:{r:R.length-1,c:8}});
+    pushEmpty();
   }
 
-  // Footer
-  wsData.push(['TỔNG CƯỚC + PHÁT SINH (chưa VAT)','','','','','','','','',tongTruocVAT]);
-  wsData.push(['VAT 8% (Phần 1)','','','','','','','','',vatP1]);
-  if(chiHoP2.length) wsData.push(['TỔNG CHI HỘ CÓ HĐ (Phần 2)','','','','','','','','',tongP2]);
-  wsData.push(['TỔNG THANH TOÁN','','','','','','','','',tongPhaiThu]);
-  wsData.push([]);
-  wsData.push(['','XÁC NHẬN CỦA KHÁCH HÀNG','','','','CÔNG TY CỔ PHẦN BN CHAIN']);
+  // ── FOOTER TỔNG ─────────────────────────────────────────────
+  const fLbl=cs({bold:true,sz:9,bg:'EBF3FB',color:C_DARK});
+  const fNum=cs({bold:true,sz:10,bg:'EBF3FB',align:'right',fmt:fmtNum,color:C_HEADER_BG});
 
-  const ws=XLSX.utils.aoa_to_sheet(wsData);
-  ws['!cols']=[{wch:6},{wch:11},{wch:16},{wch:8},{wch:14},{wch:10},
-    {wch:35},{wch:10},{wch:14},{wch:10},{wch:12},
-    ...chiHoTypes.map(()=>({wch:12})),{wch:14},{wch:25}];
+  push(['TỔNG CƯỚC & PHÁT SINH (chưa VAT)','','','','','','','','',tongTruocVAT],
+    [...Array(9).fill(fLbl),fNum]);
+  MERGES.push({s:{r:R.length-1,c:0},e:{r:R.length-1,c:8}});
+
+  push([`VAT 8% (trên Phần 1)`,'','','','','','','','',vatP1],
+    [...Array(9).fill(cs({sz:9,bg:'FFFAEB',italic:true})),
+     cs({sz:10,bg:'FFFAEB',align:'right',fmt:fmtNum,color:'C55A11'})]);
+  MERGES.push({s:{r:R.length-1,c:0},e:{r:R.length-1,c:8}});
+
+  if(chiHoP2.length){
+    push(['TỔNG CHI HỘ CÓ HĐ (Phần 2)','','','','','','','','',tongP2],
+      [...Array(9).fill(fLbl),fNum]);
+    MERGES.push({s:{r:R.length-1,c:0},e:{r:R.length-1,c:8}});
+  }
+
+  // Dòng tổng thanh toán — nổi bật
+  const bigStyle=cs({bold:true,sz:12,bg:C_HEADER_BG,color:C_WHITE,borderBold:true});
+  const bigNum=cs({bold:true,sz:13,bg:C_HEADER_BG,color:'FFD700',align:'right',fmt:fmtNum,borderBold:true});
+  push(['TỔNG THANH TOÁN','','','','','','','','',tongPhaiThu],
+    [...Array(9).fill(bigStyle),bigNum]);
+  MERGES.push({s:{r:R.length-1,c:0},e:{r:R.length-1,c:8}});
+
+  pushEmpty();pushEmpty();
+
+  // Dòng ký tên
+  const kyStyle=cs({bold:true,sz:9,align:'center'});
+  push(['XÁC NHẬN CỦA KHÁCH HÀNG','','','','CÔNG TY CỔ PHẦN BN CHAIN','','','','',''],
+    [kyStyle,...Array(3).fill(null),kyStyle]);
+  MERGES.push({s:{r:R.length-1,c:0},e:{r:R.length-1,c:3}});
+  MERGES.push({s:{r:R.length-1,c:4},e:{r:R.length-1,c:9}});
+
+  push(['(Ký, đóng dấu)','','','','(Ký, đóng dấu)','','','','',''],
+    [cs({sz:8,align:'center',italic:true,color:'888888'}),...Array(3).fill(null),
+     cs({sz:8,align:'center',italic:true,color:'888888'})]);
+  MERGES.push({s:{r:R.length-1,c:0},e:{r:R.length-1,c:3}});
+  MERGES.push({s:{r:R.length-1,c:4},e:{r:R.length-1,c:9}});
+
+  // ── Build worksheet ─────────────────────────────────────────
+  const ws=XLSX.utils.aoa_to_sheet(R);
+
+  // Apply styles
+  R.forEach((row,ri)=>{
+    row.forEach((val,ci)=>{
+      const cellAddr=XLSX.utils.encode_cell({r:ri,c:ci});
+      if(!ws[cellAddr]) ws[cellAddr]={v:val,t:typeof val==='number'?'n':'s'};
+      const style=S[ri]&&S[ri][ci];
+      if(style) ws[cellAddr].s=style;
+    });
+  });
+
+  // Row heights
+  ws['!rows']=R.map((_,i)=>{
+    if(i===0) return{hpt:20};
+    if(i===2) return{hpt:18};
+    return{hpt:16};
+  });
+
+  // Column widths — theo form mẫu
+  ws['!cols']=[
+    {wch:6},{wch:10},{wch:14},{wch:7},{wch:14},{wch:10},
+    {wch:32},{wch:10},{wch:13},{wch:8},{wch:10},
+    ...chiHoTypes.map(()=>({wch:12})),
+    {wch:14},{wch:22}
+  ];
+
+  ws['!merges']=MERGES;
+
   XLSX.utils.book_append_sheet(WB,ws,`T${m}.${y}`);
 
-  // Sheet chuyển kỳ
+  // ── SHEET CHUYỂN KỲ ─────────────────────────────────────────
   if(chuyenChuyenKy?.length){
     const wsCK=XLSX.utils.aoa_to_sheet([
       [`CHUYẾN CHUYỂN KỲ — THÁNG ${m}/${y}`],
@@ -646,8 +873,10 @@ async function xuatExcelBangKe(){
     XLSX.utils.book_append_sheet(WB,wsCK,'Chuyển kỳ');
   }
 
+  // ── Xuất file ───────────────────────────────────────────────
   const fileName=`BangKe_${khName.replace(/\s+/g,'_')}_T${m}_${y}.xlsx`;
-  XLSX.writeFile(WB,fileName);
+  XLSX.writeFile(WB,fileName,{bookSST:false,cellStyles:true});
+
   btn.innerHTML='<i class="ti ti-file-spreadsheet"></i> Xuất Excel';
   btn.disabled=false;
   toast(`✅ Đã tải ${fileName}`);
