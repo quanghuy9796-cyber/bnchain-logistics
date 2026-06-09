@@ -310,7 +310,7 @@ function renderTabChiHo(o,list,editable){
       <div style="color:var(--text-muted);margin-top:4px;font-size:11px">
         HĐ: <strong>${c.chung_tu||'—'}</strong> · Ngày: ${c.ngay_chi||'—'}
       </div>
-      <div style="color:#92400e;margin-top:2px;font-size:11px">${c.ghi_chu||''}</div>
+      <div style="color:#92400e;margin-top:2px;font-size:11px;word-break:break-word;white-space:normal;line-height:1.4">${c.ghi_chu||''}</div>
     </div>`).join('')}
   </div>`:''}`;
 }
