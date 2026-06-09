@@ -126,12 +126,20 @@ async function handleHDFiles(files){
       </div>`).join('');
     
     try{
-      const hdData=await processOneHD(file);
-      const saved=await saveHoaDon(hdData, file.name);
-      if(hdData.trang_thai==='da_khop') results.matched.push({...hdData,id:saved.id,file:file.name});
-      else results.pending.push({...hdData,id:saved.id,file:file.name,ly_do:hdData.ly_do_cho});
+      const hdList=await processOneHD(file); // luôn trả về array
+      for(let k=0;k<hdList.length;k++){
+        const hdData=hdList[k];
+        const pageLabel=hdList.length>1?` (trang ${k+1}/${hdList.length})`:'';
+        try{
+          const saved=await saveHoaDon(hdData, file.name+pageLabel);
+          if(hdData.trang_thai==='da_khop') results.matched.push({...hdData,id:saved.id,file:file.name+pageLabel});
+          else results.pending.push({...hdData,id:saved.id,file:file.name+pageLabel,ly_do:hdData.ly_do_cho});
+        }catch(saveErr){
+          results.pending.push({file:file.name+pageLabel,ly_do:'Lỗi lưu: '+saveErr.message,tong_tien:0});
+        }
+      }
     }catch(err){
-      results.pending.push({file:file.name,ly_do:'Lỗi: '+err.message,tong_tien:0});
+      results.pending.push({file:file.name,ly_do:'Lỗi đọc AI: '+err.message,tong_tien:0});
     }
   }
   
@@ -208,27 +216,24 @@ Lưu ý: số cont thường sau "Công-te-nơ số:" hoặc trong tên DV như 
     aiList=[JSON.parse(objMatch[0])];
   }
 
-  // Xử lý từng HĐ trong array, trả về HĐ đầu tiên (caller xử lý batch nếu cần)
-  // Với PDF nhiều trang → trả về phần tử đầu có confidence cao nhất
-  const best=aiList.sort((a,b)=>{
-    const s={cao:3,trung_binh:2,thap:1};
-    return (s[b.confidence]||1)-(s[a.confidence]||1);
-  })[0];
-
-  const matched=await matchContToVanDon(best);
-  return{
-    so_hd:best.so_hd||null,
-    ngay_hd:best.ngay_hd||null,
-    loai_dv:best.loai_dv||null,
-    tong_tien:best.tong_tien||0,
-    so_cont_list:best.so_cont_list||[],
-    mst_khach:best.mst_khach||null,
-    ten_don_vi_xuat:best.ten_don_vi_xuat||null,
-    ai_confidence:best.confidence||'trung_binh',
-    ai_ghi_chu:best.ghi_chu||null,
-    _all_pages:aiList, // giữ lại toàn bộ để debug
-    ...matched,
-  };
+  // Xử lý từng HĐ trong array → trả về array kết quả
+  const resultList=[];
+  for(const ai of aiList){
+    const matched=await matchContToVanDon(ai);
+    resultList.push({
+      so_hd:ai.so_hd||null,
+      ngay_hd:ai.ngay_hd||null,
+      loai_dv:ai.loai_dv||null,
+      tong_tien:ai.tong_tien||0,
+      so_cont_list:ai.so_cont_list||[],
+      mst_khach:ai.mst_khach||null,
+      ten_don_vi_xuat:ai.ten_don_vi_xuat||null,
+      ai_confidence:ai.confidence||'trung_binh',
+      ai_ghi_chu:ai.ghi_chu||null,
+      ...matched,
+    });
+  }
+  return resultList; // luôn trả về array
 }
 
 async function matchContToVanDon(ai){
