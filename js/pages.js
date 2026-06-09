@@ -133,76 +133,107 @@ async function pgCongNo(c){
 // ==================== BẢNG KÊ ====================
 async function pgBangKe(c){
   if(!canSee(['ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
-  // Load KH fresh để đảm bảo có dữ liệu
   if(!KH||!KH.length){
     const{data}=await db.from('khach_hang').select('*').eq('active',true).order('ten_cong_ty');
     KH=data||[];
   }
   const now=new Date();
-  const curM=String(now.getMonth()+1).padStart(2,'0');
   const curY=now.getFullYear();
   const thOpts=Array.from({length:6},(_,i)=>{
     const d=new Date(curY,now.getMonth()-i,1);
     const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    return`<option value="${v}">Tháng ${d.getMonth()+1}/${d.getFullYear()}</option>`;
+    return`<option value="${v}" ${i===0?'selected':''}>Tháng ${d.getMonth()+1}/${d.getFullYear()}</option>`;
   }).join('');
-  const khopts=KH.map(k=>`<option value="${k.ten_cong_ty}">${k.ten_cong_ty}</option>`).join('');
+  const khopts=KH.map(k=>`<option value="${k.id}|${k.ten_cong_ty}">${k.ten_cong_ty}</option>`).join('');
 
   c.innerHTML=`
   <div class="toolbar" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
-    <select id="bk-kh" class="filter-sel" style="min-width:180px">
+    <select id="bk-kh" class="filter-sel" style="min-width:200px">
       <option value="">-- Chọn khách hàng --</option>${khopts}
     </select>
     <select id="bk-thang" class="filter-sel">${thOpts}</select>
     <button class="btn btn-teal" onclick="loadBangKe()"><i class="ti ti-search"></i> Xem bảng kê</button>
-    <button class="btn" onclick="window.print()"><i class="ti ti-printer"></i> In</button>
+    <button class="btn btn-primary" onclick="xuatExcelBangKe()" id="btn-xuat-excel" style="display:none"><i class="ti ti-file-spreadsheet"></i> Xuất Excel</button>
+    <button class="btn" onclick="window.print()" id="btn-in" style="display:none"><i class="ti ti-printer"></i> In</button>
   </div>
-
-
+  <div id="bk-canhbao"></div>
   <div id="bk-result" style="color:var(--text-muted);font-size:13px;padding:10px 0">
     Chọn khách hàng và tháng để xem bảng kê.
   </div>`;
 }
 
 async function loadBangKe(){
-  const kh=document.getElementById('bk-kh').value;
+  const khVal=document.getElementById('bk-kh').value;
   const thang=document.getElementById('bk-thang').value;
-  if(!kh){toast('Vui lòng chọn khách hàng','error');return;}
+  if(!khVal){toast('Vui lòng chọn khách hàng','error');return;}
+  const[khId,khName]=khVal.includes('|')?khVal.split('|',2):[null,khVal];
   const[y,m]=thang.split('-');
   const res=document.getElementById('bk-result');
+  const canhbao=document.getElementById('bk-canhbao');
   res.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
+  canhbao.innerHTML='';
 
-  // Load orders + chi ho
-  const{data:orders}=await db.from('van_don').select('*')
-    .eq('ten_khach',kh)
-    .gte('ngay',`${y}-${m}-01`).lte('ngay',`${y}-${m}-31`)
+  // Load đơn: ưu tiên theo ky_thanh_toan, fallback theo ngày
+  let {data:orders}=await db.from('van_don').select('*')
+    .eq('ten_khach',khName).eq('locked',true)
+    .eq('ky_thanh_toan',thang)
     .order('ngay').order('so_bill');
+
+  // Fallback: đơn chưa có ky_thanh_toan thì lấy theo ngày
+  if(!orders?.length){
+    const{data:ord2}=await db.from('van_don').select('*')
+      .eq('ten_khach',khName).eq('locked',true)
+      .is('ky_thanh_toan',null)
+      .gte('ngay',`${y}-${m}-01`).lte('ngay',`${y}-${m}-31`)
+      .order('ngay').order('so_bill');
+    orders=ord2||[];
+  } else {
+    // Gộp thêm đơn chưa có ky_thanh_toan trong tháng đó
+    const{data:ord2}=await db.from('van_don').select('*')
+      .eq('ten_khach',khName).eq('locked',true)
+      .is('ky_thanh_toan',null)
+      .gte('ngay',`${y}-${m}-01`).lte('ngay',`${y}-${m}-31`)
+      .order('ngay');
+    if(ord2?.length) orders=[...orders,...ord2];
+  }
+
   const list=orders||[];
-  if(!list.length){res.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có đơn nào trong tháng này</div>';return;}
+  if(!list.length){
+    res.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có đơn nào trong kỳ này</div>';
+    return;
+  }
 
+  // Cảnh báo chuyến chưa chốt trong tháng
+  const{data:chuaChot}=await db.from('van_don').select('id,ma_don,so_cont,ngay')
+    .eq('ten_khach',khName).eq('locked',true)
+    .or(`ky_thanh_toan.is.null,ky_thanh_toan.eq.${thang}`)
+    .eq('trang_thai_bang_ke','chua_chot')
+    .gte('ngay',`${y}-${m}-01`).lte('ngay',`${y}-${m}-31`);
+  if(chuaChot?.length){
+    canhbao.innerHTML=`<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:var(--r);padding:8px 14px;margin-bottom:10px;font-size:12px;display:flex;align-items:center;gap:8px">
+      <i class="ti ti-alert-triangle" style="color:#d97706;font-size:16px"></i>
+      <span><strong style="color:#92400e">${chuaChot.length} chuyến chưa vào bảng kê</strong> trong tháng ${m}/${y} — 
+      ${chuaChot.slice(0,3).map(o=>`<span style="background:#fef9c3;border-radius:3px;padding:1px 4px">${o.ma_don}</span>`).join(' ')}
+      ${chuaChot.length>3?`và ${chuaChot.length-3} chuyến khác`:''}</span>
+    </div>`;
+  }
+
+  // Load chi_ho
   const ids=list.map(o=>o.id);
-  const{data:chiHoAll}=await db.from('chi_ho').select('*').in('van_don_id',ids).order('ngay_chi');
+  const{data:chiHoAll}=await db.from('chi_ho').select('*').in('van_don_id',ids).eq('la_tham_chieu',false).order('ngay_chi');
   const chiHoMap={};
-  (chiHoAll||[]).forEach(c=>{
-    if(!chiHoMap[c.van_don_id])chiHoMap[c.van_don_id]=[];
-    chiHoMap[c.van_don_id].push(c);
+  (chiHoAll||[]).forEach(ch=>{
+    if(!chiHoMap[ch.van_don_id])chiHoMap[ch.van_don_id]=[];
+    chiHoMap[ch.van_don_id].push(ch);
   });
 
-  // Tách 2 phần
-  const chiHoP1=[]; // Không HĐ — lưu ca, bốc xếp, cao tốc
-  const chiHoP2=[]; // Có HĐ — nâng hạ, phí cảng, cơ sở hạ tầng
-  (chiHoAll||[]).forEach(c=>{
-    if(c.hoa_don_khach) chiHoP2.push(c);
-    else chiHoP1.push(c);
-  });
+  // Tách P1 / P2
+  const chiHoP2=(chiHoAll||[]).filter(c=>c.hoa_don_khach);
+  const chiHoP1=(chiHoAll||[]).filter(c=>!c.hoa_don_khach);
 
-  // Group theo bill/booking
-  const groups={};
-  list.forEach(o=>{
-    const key=o.so_bill||o.so_booking||o.ma_don;
-    if(!groups[key])groups[key]=[];
-    groups[key].push(o);
-  });
+  // Tách chuyến chuyển kỳ
+  const chuyenChuyenKy=list.filter(o=>o.ky_goc&&o.ky_goc!==thang);
+  const listChinh=list.filter(o=>!o.ky_goc||o.ky_goc===thang);
 
   // Tính tổng
   const tongCuoc=list.reduce((s,o)=>s+(+o.gia_cuoc_khach||0),0);
@@ -211,18 +242,126 @@ async function loadBangKe(){
   const tongP2=chiHoP2.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
   const tongPhaiThu=tongCuoc+tongDV+tongP1+tongP2;
 
-  // Build HTML bảng kê
-  let html=`
+  // Gom theo bill/booking
+  const groups={};
+  list.forEach(o=>{
+    const key=o.so_bill||o.so_booking||o.ma_don;
+    if(!groups[key])groups[key]=[];
+    groups[key].push(o);
+  });
+
+  const loaiTag2=o=>{
+    if(o.loai_hang==='Xuất') return'<span style="background:#dcfce7;color:#166534;border-radius:4px;padding:1px 6px;font-size:10px">Xuất</span>';
+    if(o.loai_hang==='Nhập') return'<span style="background:#dbeafe;color:#1e40af;border-radius:4px;padding:1px 6px;font-size:10px">Nhập</span>';
+    return'<span style="background:#f3f4f6;color:#374151;border-radius:4px;padding:1px 6px;font-size:10px">Chuyển kho</span>';
+  };
+
+  // PHẦN 1 — build rows
+  const chiHoTypes=[...new Set(chiHoP1.map(c=>c.loai_chi))];
+  let p1Rows='';
+  let stt=0;
+  Object.entries(groups).forEach(([bill,items])=>{
+    stt++;
+    items.forEach((o,i)=>{
+      const ch=chiHoMap[o.id]||[];
+      const chP1=ch.filter(c=>!c.hoa_don_khach);
+      const phiDV=(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0);
+      const tongDong=(+o.gia_cuoc_khach||0)+chP1.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)+phiDV;
+      const kyGocNote=o.ky_goc&&o.ky_goc!==thang?`<span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:0 4px;font-size:10px;margin-left:3px">Từ ${o.ky_goc.split('-')[1]}/${o.ky_goc.split('-')[0]}</span>`:'';
+      p1Rows+=`<tr>
+        <td>${stt}${items.length>1?'.'+( i+1):''}</td>
+        <td style="font-size:11px">${o.ngay}</td>
+        <td style="color:var(--teal);font-size:11px;font-weight:600">${o.ma_don}${kyGocNote}</td>
+        <td>${loaiTag2(o)}</td>
+        <td style="font-weight:500;font-family:monospace;font-size:11px">${o.so_cont||'—'}</td>
+        <td style="font-size:11px">${o.loai_cont||'—'}</td>
+        <td style="font-size:10px" title="${o.hanh_trinh||''}">${o.diem_lay||''}${o.diem_tra?' → '+o.diem_tra:''}</td>
+        <td style="font-size:11px">${o.bien_kiem_soat||'—'}</td>
+        <td class="text-blue fw6">${fmt(o.gia_cuoc_khach)}</td>
+        <td>${o.phi_doi_lenh>0||o.phi_to_khai>0?`<span style="font-size:11px">${fmt(phiDV)}</span>`:'—'}</td>
+        <td style="font-size:11px;color:var(--text-muted)">${[o.phi_doi_lenh>0?'ĐL':'',o.phi_to_khai>0?'TK':''].filter(Boolean).join('+')}</td>
+        ${chiHoTypes.map(type=>{
+          const v=chP1.filter(c=>c.loai_chi===type).reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
+          return`<td style="font-size:11px">${v>0?fmt(v):'—'}</td>`;
+        }).join('')}
+        <td style="font-weight:600;background:#f0f9f0">${fmt(tongDong)}</td>
+        <td style="font-size:10px;color:var(--text-muted)">${o.ghi_chu||''}</td>
+      </tr>`;
+    });
+    if(items.length>1){
+      const subTotal=items.reduce((tot,o)=>{
+        const ch=(chiHoMap[o.id]||[]).filter(c=>!c.hoa_don_khach);
+        return tot+(+o.gia_cuoc_khach||0)+ch.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)+(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0);
+      },0);
+      const subCuoc=items.reduce((s,o)=>s+(+o.gia_cuoc_khach||0),0);
+      p1Rows+=`<tr style="background:#f5f9fb;font-style:italic;font-size:11px">
+        <td colspan="8" style="color:var(--text-muted)">Cộng ${items[0].loai_hang==='Nhập'?'Bill':'Booking'}: ${bill}</td>
+        <td class="fw6">${fmt(subCuoc)}</td>
+        <td colspan="${chiHoTypes.length+2}"></td>
+        <td style="font-weight:700;color:var(--teal)">${fmt(subTotal)}</td>
+        <td></td>
+      </tr>`;
+    }
+  });
+
+  // PHẦN 2 — chi hộ có HĐ (chỉ chi_ho chính, bỏ tham chiếu)
+  let p2Rows='';
+  chiHoP2.forEach((c,i)=>{
+    const o=list.find(x=>x.id===c.van_don_id);
+    p2Rows+=`<tr>
+      <td>${i+1}</td>
+      <td style="font-size:11px">${c.ngay_chi||'—'}</td>
+      <td style="font-weight:500;font-family:monospace;font-size:11px">${o?.so_cont||'—'}</td>
+      <td style="font-size:11px">${c.loai_chi}</td>
+      <td style="font-size:11px;color:var(--primary)">${c.chung_tu||'—'}</td>
+      <td style="font-size:11px;color:var(--text-muted)">${c.nguoi_chi||'—'}</td>
+      <td class="text-orange fw6">${fmtM(c.tien_thu_khach||c.so_tien)}</td>
+    </tr>`;
+  });
+
+  // CHUYỂN KỲ — sheet phụ
+  let chuyenKySection='';
+  if(chuyenChuyenKy.length){
+    chuyenKySection=`
+    <div style="margin-top:20px">
+      <div style="background:#f59e0b;color:#fff;padding:8px 12px;border-radius:var(--r) var(--r) 0 0;font-size:12px;font-weight:600">
+        <i class="ti ti-arrow-right-circle"></i> CHUYẾN CHUYỂN KỲ (${chuyenChuyenKy.length})
+        <span style="font-weight:400;opacity:.8;margin-left:8px">— Các chuyến từ kỳ trước chuyển sang tháng ${m}/${y}</span>
+      </div>
+      <div class="tbl-wrap" style="border-radius:0 0 var(--r) var(--r)">
+      <table class="tbl">
+        <thead><tr><th>Mã đơn</th><th>Ngày chạy</th><th>Số cont</th><th>Hành trình</th><th>Kỳ gốc</th><th>Lý do chuyển</th></tr></thead>
+        <tbody>${chuyenChuyenKy.map(o=>`<tr>
+          <td style="color:var(--teal);font-weight:600">${o.ma_don}</td>
+          <td>${o.ngay}</td>
+          <td style="font-family:monospace">${o.so_cont||'—'}</td>
+          <td style="font-size:11px">${o.hanh_trinh||'—'}</td>
+          <td><span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 6px;font-size:11px">T${o.ky_goc?.split('-')[1]}/${o.ky_goc?.split('-')[0]}</span></td>
+          <td style="font-size:11px;color:var(--text-muted)">${o.ly_do_chuyen_ky||'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+      </div>
+    </div>`;
+  }
+
+  // Lưu data vào window để xuất Excel
+  window.BK_DATA={list,chiHoAll:chiHoAll||[],groups,chiHoTypes,chiHoP1,chiHoP2,chuyenChuyenKy,khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongPhaiThu};
+
+  // Build HTML
+  const colP1=`<col style="width:28px"><col style="width:76px"><col style="width:100px"><col style="width:48px"><col style="width:90px"><col style="width:52px"><col style="width:140px"><col style="width:68px"><col style="width:78px"><col style="width:68px"><col style="width:40px">${chiHoTypes.map(()=>'<col style="width:72px">').join('')}<col style="width:80px"><col style="width:100px">`;
+
+  const html=`
   <div id="print-area">
   <!-- HEADER -->
   <div style="text-align:center;margin-bottom:16px">
-    <div style="font-size:16px;font-weight:700;color:var(--teal)">BN CHAIN LOGISTICS</div>
-    <div style="font-size:11px;color:var(--text-muted)">Your Logistics & Solutions Chain</div>
-    <div style="font-size:15px;font-weight:700;margin-top:8px;text-transform:uppercase">BẢNG KÊ CƯỚC VẬN CHUYỂN</div>
-    <div style="font-size:12px;color:var(--text-muted)">Khách hàng: <strong>${kh}</strong> | Tháng ${m}/${y} | ${list.length} chuyến</div>
+    <div style="font-size:15px;font-weight:700;color:var(--teal)">CÔNG TY CỔ PHẦN BN CHAIN</div>
+    <div style="font-size:11px;color:var(--text-muted)">215 Đường Nguyễn Phong Sắc, Phương Liễu, Bắc Ninh | MST: 2301342748</div>
+    <div style="font-size:14px;font-weight:700;margin-top:8px;text-transform:uppercase">BẢNG KÊ KIÊM BIÊN BẢN XÁC NHẬN KHỐI LƯỢNG DỊCH VỤ</div>
+    <div style="font-size:13px;font-weight:600">THÁNG ${m}/${y}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Khách hàng: <strong>${khName}</strong> | ${list.length} chuyến</div>
   </div>
 
-  <!-- PHẦN 1: CƯỚC + PHÍ PHÁT SINH -->
+  <!-- PHẦN 1 -->
   <div style="margin-bottom:16px">
     <div style="background:var(--teal);color:#fff;padding:8px 12px;border-radius:var(--r) var(--r) 0 0;font-size:12px;font-weight:600;display:flex;justify-content:space-between">
       <span><i class="ti ti-truck"></i> PHẦN 1: CƯỚC VẬN CHUYỂN & PHÍ PHÁT SINH</span>
@@ -230,131 +369,153 @@ async function loadBangKe(){
     </div>
     <div class="tbl-wrap" style="border-radius:0 0 var(--r) var(--r)">
     <table class="tbl">
-      <colgroup>
-        <col style="width:30px"><col style="width:130px"><col style="width:75px">
-        <col style="width:85px"><col style="width:165px">
-        <col style="width:90px">
-        ${chiHoP1.length?'<col style="width:80px">'.repeat(Math.min(3,[...new Set(chiHoP1.map(c=>c.loai_chi))].length)):''}
-      </colgroup>
+      <colgroup>${colP1}</colgroup>
       <thead>
         <tr>
-          <th>STT</th><th>Mã đơn</th><th>Ngày</th><th>Số cont</th><th>Hành trình</th>
-          <th>Cước vận chuyển</th>
-          ${[...new Set(chiHoP1.map(c=>c.loai_chi))].map(l=>`<th>${l}</th>`).join('')}
-          ${tongDV>0?'<th>Phí DV</th>':''}
-          <th style="background:#f0f9f0">Tổng</th>
+          <th>STT</th><th>Ngày</th><th>Mã đơn</th><th>Loại</th>
+          <th>Số cont</th><th>Loại cont</th><th>Tuyến đường</th><th>BKS</th>
+          <th>Cước</th><th>Phát sinh</th><th>Note DV</th>
+          ${chiHoTypes.map(t=>`<th style="font-size:10px">${t}</th>`).join('')}
+          <th style="background:#f0f9f0">Tổng</th><th>Ghi chú</th>
         </tr>
       </thead>
-      <tbody>
-      ${Object.entries(groups).map(([bill,items],gi)=>{
-        const chiHoTypes=[...new Set(chiHoP1.map(c=>c.loai_chi))];
-        let rowsHtml='';
-        items.forEach((o,i)=>{
-          const ch=chiHoMap[o.id]||[];
-          const chP1=ch.filter(c=>!c.hoa_don_khach);
-          const phiDV=(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0);
-          const tongDong=(+o.gia_cuoc_khach||0)+chP1.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)+phiDV;
-          rowsHtml+=`<tr>
-            <td>${gi+1}.${i+1}</td>
-            <td style="color:var(--teal);font-size:11px">${o.ma_don}</td>
-            <td>${o.ngay}</td>
-            <td style="font-weight:500">${o.so_cont||'—'}</td>
-            <td style="font-size:11px" title="${o.hanh_trinh||''}">${o.diem_lay||''}${o.diem_tra?' → '+o.diem_tra:''}</td>
-            <td class="text-blue fw6">${fmt(o.gia_cuoc_khach)}</td>
-            ${chiHoTypes.map(type=>{
-              const kh=chP1.filter(c=>c.loai_chi===type).reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
-              return`<td>${kh>0?fmt(kh):'—'}</td>`;
-            }).join('')}
-            ${tongDV>0?`<td class="text-orange">${phiDV>0?fmt(phiDV):'—'}</td>`:''}
-            <td style="font-weight:600;background:#f0f9f0">${fmt(tongDong)}</td>
-          </tr>`;
-        });
-        // Bill subtotal if multiple items
-        if(items.length>1){
-          const subCuoc=items.reduce((s,o)=>s+(+o.gia_cuoc_khach||0),0);
-          const chTypes=[...new Set(chiHoP1.map(c=>c.loai_chi))];
-          const subDV=items.reduce((s,o)=>s+(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0),0);
-          const subTotal=items.reduce((o_,o)=>{
-            const ch=(chiHoMap[o.id]||[]).filter(c=>!c.hoa_don_khach);
-            return o_+(+o.gia_cuoc_khach||0)+ch.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)+(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0);
-          },0);
-          rowsHtml+=`<tr style="background:#f5f9fb;font-style:italic">
-            <td colspan="5" style="font-size:11px;color:var(--text-muted)">Cộng ${list[0].loai_hang==='Nhập'?'Bill':'Booking'}: ${bill}</td>
-            <td class="fw6">${fmt(subCuoc)}</td>
-            ${chTypes.map(()=>'<td></td>').join('')}
-            ${tongDV>0?`<td class="fw6">${subDV>0?fmt(subDV):'—'}</td>`:''}
-            <td style="font-weight:700;color:var(--teal)">${fmt(subTotal)}</td>
-          </tr>`;
-        }
-        return rowsHtml;
-      }).join('')}
-      <!-- TỔNG P1 -->
-      <tr style="background:#e8f4f7;font-weight:700;font-size:13px">
-        <td colspan="5">CỘNG PHẦN 1</td>
-        <td class="text-blue">${fmt(tongCuoc)}</td>
-        ${[...new Set(chiHoP1.map(c=>c.loai_chi))].map(type=>{
-          const s=chiHoP1.filter(c=>c.loai_chi===type).reduce((a,c)=>a+(+(c.tien_thu_khach||c.so_tien)||0),0);
-          return`<td>${fmt(s)}</td>`;
-        }).join('')}
-        ${tongDV>0?`<td>${fmt(tongDV)}</td>`:''}
-        <td style="color:var(--teal)">${fmt(tongCuoc+tongDV+tongP1)}</td>
-      </tr>
+      <tbody>${p1Rows}
+        <tr style="background:#e8f4f7;font-weight:700;font-size:12px">
+          <td colspan="8">CỘNG PHẦN 1</td>
+          <td class="text-blue">${fmt(tongCuoc)}</td>
+          <td>${fmt(tongDV)}</td><td></td>
+          ${chiHoTypes.map(type=>{
+            const s=chiHoP1.filter(c=>c.loai_chi===type).reduce((a,c)=>a+(+(c.tien_thu_khach||c.so_tien)||0),0);
+            return`<td>${fmt(s)}</td>`;
+          }).join('')}
+          <td style="color:var(--teal)">${fmtM(tongCuoc+tongDV+tongP1)}</td>
+          <td></td>
+        </tr>
       </tbody>
     </table>
     </div>
   </div>
 
-  <!-- PHẦN 2: CHI HỘ CÓ HĐ -->
+  <!-- PHẦN 2 -->
   ${chiHoP2.length?`
   <div style="margin-bottom:16px">
     <div style="background:var(--primary);color:#fff;padding:8px 12px;border-radius:var(--r) var(--r) 0 0;font-size:12px;font-weight:600;display:flex;justify-content:space-between">
-      <span><i class="ti ti-receipt"></i> PHẦN 2: CHI HỘ CƠ SỞ HẠ TẦNG (Hóa đơn theo MST khách)</span>
+      <span><i class="ti ti-receipt"></i> PHẦN 2: CHI HỘ CÓ HÓA ĐƠN (Nâng hàng / Hạ vỏ / CSHT)</span>
       <span>${fmtM(tongP2)}</span>
     </div>
     <div class="tbl-wrap" style="border-radius:0 0 var(--r) var(--r)">
     <table class="tbl">
-      <colgroup><col style="width:30px"><col style="width:80px"><col style="width:110px"><col style="width:200px"><col style="width:100px"><col style="width:100px"><col style="width:100px"></colgroup>
-      <thead><tr><th>STT</th><th>Ngày</th><th>Số cont</th><th>Nội dung</th><th>Số HĐ/CT</th><th>Người nộp</th><th>Số tiền</th></tr></thead>
-      <tbody>
-      ${chiHoP2.map((c,i)=>{
-        // Find cont from van_don
-        const o=list.find(x=>x.id===c.van_don_id);
-        return`<tr>
-          <td>${i+1}</td>
-          <td>${c.ngay_chi}</td>
-          <td style="font-weight:500">${o?.so_cont||c.ma_don||'—'}</td>
-          <td>${c.loai_chi}${c.ghi_chu?' — '+c.ghi_chu:''}</td>
-          <td style="font-size:11px">${c.chung_tu||'—'}</td>
-          <td style="font-size:11px">${c.nguoi_chi||'—'}</td>
-          <td class="text-orange fw6">${fmtM(c.tien_thu_khach||c.so_tien)}</td>
-        </tr>`;
-      }).join('')}
-      <tr style="background:#fff3e6;font-weight:700;font-size:13px">
-        <td colspan="6">CỘNG PHẦN 2</td>
-        <td style="color:var(--primary)">${fmtM(tongP2)}</td>
-      </tr>
+      <colgroup><col style="width:30px"><col style="width:80px"><col style="width:110px"><col style="width:120px"><col style="width:100px"><col style="width:100px"><col style="width:110px"></colgroup>
+      <thead><tr><th>STT</th><th>Ngày HĐ</th><th>Số cont</th><th>Loại DV</th><th>Số HĐ</th><th>Đơn vị xuất HĐ</th><th>Số tiền</th></tr></thead>
+      <tbody>${p2Rows}
+        <tr style="background:#fff3e6;font-weight:700;font-size:12px">
+          <td colspan="6">CỘNG PHẦN 2</td>
+          <td style="color:var(--primary)">${fmtM(tongP2)}</td>
+        </tr>
       </tbody>
     </table>
     </div>
   </div>`:''}
 
   <!-- TỔNG CỘNG -->
-  <div style="background:var(--sidebar-bg);border-radius:var(--rl);padding:16px 20px;color:#fff;display:flex;justify-content:space-between;align-items:center">
+  <div style="background:var(--sidebar-bg);border-radius:var(--rl);padding:16px 20px;color:#fff;display:grid;grid-template-columns:1fr auto;align-items:center;gap:16px;margin-bottom:16px">
     <div>
-      <div style="font-size:11px;opacity:.6;margin-bottom:4px">TỔNG CỘNG PHẢI THU</div>
-      <div style="font-size:11px;opacity:.5">${kh} | Tháng ${m}/${y} | ${list.length} chuyến</div>
-      <div style="font-size:11px;opacity:.5;margin-top:4px">
-        P1 (Cước + Phát sinh): ${fmtM(tongCuoc+tongDV+tongP1)}
-        ${chiHoP2.length?` | P2 (Chi hộ HĐ): ${fmtM(tongP2)}`:''}
+      <div style="font-size:11px;opacity:.6;margin-bottom:6px">TỔNG CỘNG PHẢI THU — ${khName} — Tháng ${m}/${y}</div>
+      <div style="display:flex;gap:20px;font-size:12px;opacity:.8;flex-wrap:wrap">
+        <span>Phần 1 (Cước + Phát sinh): <strong>${fmtM(tongCuoc+tongDV+tongP1)}</strong></span>
+        ${chiHoP2.length?`<span>Phần 2 (Chi hộ HĐ): <strong>${fmtM(tongP2)}</strong></span>`:''}
       </div>
+      <div style="font-size:11px;opacity:.5;margin-top:4px">VAT theo hóa đơn GTGT xuất riêng</div>
     </div>
     <div style="text-align:right">
-      <div style="font-size:24px;font-weight:700;color:#ffd700">${fmtM(tongPhaiThu)}</div>
+      <div style="font-size:11px;opacity:.6">TỔNG PHẢI THU</div>
+      <div style="font-size:26px;font-weight:700;color:#ffd700">${fmtM(tongPhaiThu)}</div>
     </div>
   </div>
+
+  <!-- KÝ TÊN -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:24px;text-align:center;font-size:12px">
+    <div>
+      <div style="font-weight:600;margin-bottom:50px">XÁC NHẬN CỦA KHÁCH HÀNG</div>
+      <div style="border-top:1px solid #ccc;padding-top:6px;color:var(--text-muted)">${khName}</div>
+    </div>
+    <div>
+      <div style="font-weight:600;margin-bottom:50px">CÔNG TY CỔ PHẦN BN CHAIN</div>
+      <div style="border-top:1px solid #ccc;padding-top:6px;color:var(--text-muted)">Người lập bảng kê</div>
+    </div>
+  </div>
+
+  ${chuyenKySection}
   </div>`;
 
   res.innerHTML=html;
+
+  // Hiện nút Xuất Excel và In
+  document.getElementById('btn-xuat-excel').style.display='';
+  document.getElementById('btn-in').style.display='';
+
+  // Đánh dấu trang_thai_bang_ke = cho_khach cho các đơn chưa chốt
+  const chuaChot2=list.filter(o=>!o.trang_thai_bang_ke||o.trang_thai_bang_ke==='chua_chot');
+  if(chuaChot2.length){
+    await db.from('van_don').update({trang_thai_bang_ke:'cho_khach',ky_thanh_toan:thang})
+      .in('id',chuaChot2.map(o=>o.id));
+  }
+}
+
+async function xuatExcelBangKe(){
+  if(!window.BK_DATA){toast('Vui lòng xem bảng kê trước','error');return;}
+  toast('Đang tạo file Excel...','info');
+  // Gọi qua API Claude để tạo Excel (tính năng sẽ build sau)
+  // Tạm thời export CSV để dùng ngay
+  const{list,chiHoAll,chiHoTypes,chiHoP1,chiHoP2,chiHoMap,groups,khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongPhaiThu}=window.BK_DATA;
+  const chiHoMapLocal={};
+  (chiHoAll||[]).forEach(c=>{
+    if(!chiHoMapLocal[c.van_don_id])chiHoMapLocal[c.van_don_id]=[];
+    chiHoMapLocal[c.van_don_id].push(c);
+  });
+
+  // Build CSV P1
+  const headers=['STT','Ngày','Mã đơn','Loại','Số cont','Loại cont','Tuyến đường','BKS','Cước',...chiHoTypes,'Phát sinh DV','Tổng','Ghi chú','CSHT/SHĐ','Nâng/SHĐ','Hạ/SHĐ','Tổng chi hộ','Kỳ TT'];
+  const rows=[headers.join('\t')];
+  let stt=0;
+  list.forEach(o=>{
+    stt++;
+    const ch=(chiHoMapLocal[o.id]||[]).filter(c=>!c.hoa_don_khach);
+    const phiDV=(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0);
+    const tongDong=(+o.gia_cuoc_khach||0)+ch.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)+phiDV;
+    // Lấy SHĐ từ chi hộ P2
+    const chP2=(chiHoMapLocal[o.id]||[]).filter(c=>c.hoa_don_khach);
+    const csht=chP2.find(c=>c.loai_chi==='CSHT');
+    const nang=chP2.find(c=>['Nâng hàng','Nâng vỏ'].includes(c.loai_chi));
+    const ha=chP2.find(c=>['Hạ hàng','Hạ vỏ'].includes(c.loai_chi));
+    const tongCH=chP2.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
+    const row=[
+      stt, o.ngay, o.ma_don, o.loai_hang||'',
+      o.so_cont||'', o.loai_cont||'',
+      (o.diem_lay||'')+(o.diem_tra?' → '+o.diem_tra:''),
+      o.bien_kiem_soat||'',
+      o.gia_cuoc_khach||0,
+      ...chiHoTypes.map(type=>ch.filter(c=>c.loai_chi===type).reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)||''),
+      phiDV||'', tongDong, o.ghi_chu||'',
+      csht?csht.chung_tu||csht.so_tien:'',
+      nang?nang.chung_tu||nang.so_tien:'',
+      ha?ha.chung_tu||ha.so_tien:'',
+      tongCH||'',
+      o.ky_thanh_toan||thang,
+    ];
+    rows.push(row.join('\t'));
+  });
+  rows.push('');
+  rows.push(['TỔNG PHẦN 1','','','','','','','',tongCuoc,...chiHoTypes.map(type=>chiHoP1.filter(c=>c.loai_chi===type).reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)),'','','','','','',tongP2,''].join('\t'));
+  rows.push(['TỔNG PHẦN 2 (chi hộ HĐ)','','','','','','','','','','','','','','','',tongP2,''].join('\t'));
+  rows.push(['TỔNG PHẢI THU','','','','','','','','','','','','','','','','',tongPhaiThu].join('\t'));
+
+  const blob=new Blob(['\uFEFF'+rows.join('\n')],{type:'text/tab-separated-values;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`BangKe_${khName.replace(/\s+/g,'_')}_T${m}_${y}.tsv`;
+  a.click();
+  toast('Đã tải file — mở bằng Excel và Save As .xlsx','info');
 }
 
 // ============ AI SCAN HÓA ĐƠN ============
