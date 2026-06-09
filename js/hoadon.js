@@ -549,7 +549,7 @@ async function confirmDuyetHD(id){
       da_thu_lai:false,
       la_tham_chieu:true,     // flag: chỉ là note tham chiếu
       so_tien_hd_goc:hd.tong_tien, // lưu tổng tiền HĐ gốc để tra cứu
-      ghi_chu:`[Tham chiếu] ${hd.loai_dv||'Chi hộ'} — HĐ ${hd.so_hd||''} tổng ${fmtM(hd.tong_tien)} | Tiền ghi nhận tại: ${cungVoiStr} | ${hd.ten_don_vi_xuat||''}`,
+      ghi_chu:`Tiền ghi nhận tại: ${cungVoiStr}`,
     });
   }
 
