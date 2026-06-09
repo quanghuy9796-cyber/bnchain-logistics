@@ -12,9 +12,20 @@ function fmtDate(d){
 
 async function pgOrders(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
-  let q=db.from('van_don').select('*').order('ngay',{ascending:false}).order('created_at',{ascending:false});
-  if(ORDER_THANG){const[y,m]=ORDER_THANG.split('-');q=q.gte('ngay',`${y}-${m}-01`).lte('ngay',`${y}-${m}-31`);}
-  const{data}=await q.limit(500);
+  // Chỉ select cột cần thiết cho danh sách — giảm data transfer đáng kể
+  const COLS='id,ma_don,ngay,trang_thai,ten_khach,so_bill,so_booking,loai_hang,so_cont,loai_cont,bien_kiem_soat,ten_lai_xe,hanh_trinh,diem_lay,diem_tra,locked,ky_thanh_toan,trang_thai_bang_ke,gia_cuoc_khach,gia_cuoc_thau,phi_doi_lenh,phi_to_khai,ngay_yeu_cau,created_at,ma_thau_phu,ghi_chu';
+  let q=db.from('van_don').select(COLS).order('ngay',{ascending:false}).order('created_at',{ascending:false});
+  if(ORDER_THANG){
+    const[y,m]=ORDER_THANG.split('-');
+    q=q.gte('ngay',`${y}-${m}-01`).lte('ngay',`${y}-${m}-31`);
+    // Khi lọc theo tháng: không cần limit vì đã filter hẹp
+  } else {
+    // Không lọc tháng: chỉ lấy 3 tháng gần nhất để tránh load quá nhiều
+    const d3m=new Date();d3m.setMonth(d3m.getMonth()-3);
+    const cutoff=`${d3m.getFullYear()}-${String(d3m.getMonth()+1).padStart(2,'0')}-01`;
+    q=q.gte('ngay',cutoff);
+  }
+  const{data}=await q.limit(300);
   ORDERS=data||[];
 
   const counts={all:ORDERS.length,'Chờ xếp xe':0,'Đang vận chuyển':0,'Chờ xác nhận':0,'Hoàn thành':0};
