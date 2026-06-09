@@ -27,42 +27,44 @@
 <div id="app-page" style="display:none" class="app">
   <!-- SIDEBAR -->
   <div class="sidebar">
-    <div class="sidebar-brand" onclick="nav('orders',this)">
-      <div class="brand-logo"><span>BN</span> CHAIN</div>
-      <div class="brand-sub">LOGISTICS & SOLUTIONS</div>
+    <div class="logo" onclick="nav('orders',document.querySelector('.nav-item'))">
+      <div class="logo-brand"><span>BN</span> CHAIN</div>
+      <div class="logo-sub">LOGISTICS & SOLUTIONS</div>
     </div>
-    <nav class="sidebar-nav">
-      <div class="nav-section">VẬN HÀNH</div>
+    <div class="nav-sec">
+      <div class="nav-lbl">VẬN HÀNH</div>
       <div class="nav-item active" onclick="nav('orders',this)"><i class="ti ti-list-details"></i>Quản lý vận đơn</div>
       <div class="nav-item" onclick="nav('dieuvan',this)"><i class="ti ti-map-route"></i>Bảng điều vận</div>
       <div class="nav-item" onclick="nav('chiho',this)"><i class="ti ti-receipt"></i>Chi hộ / Phát sinh</div>
       <div class="nav-item" onclick="nav('hoadon',this)"><i class="ti ti-scan"></i>Upload Hóa Đơn</div>
       <div class="nav-item" onclick="nav('congno',this)"><i class="ti ti-credit-card"></i>Công nợ</div>
-      <div class="nav-section">KẾ TOÁN</div>
+    </div>
+    <div class="nav-sec">
+      <div class="nav-lbl">KẾ TOÁN</div>
       <div class="nav-item" onclick="nav('bangke',this)"><i class="ti ti-file-invoice"></i>Bảng kê thu khách</div>
       <div class="nav-item" onclick="nav('traphau',this)"><i class="ti ti-truck-delivery"></i>Trả thầu phụ</div>
       <div class="nav-item" onclick="nav('baocao',this)"><i class="ti ti-chart-bar"></i>Báo cáo tháng</div>
-      <div class="nav-section">DANH MỤC</div>
+    </div>
+    <div class="nav-sec">
+      <div class="nav-lbl">DANH MỤC</div>
       <div class="nav-item" onclick="nav('kh',this)"><i class="ti ti-building"></i>Khách hàng</div>
       <div class="nav-item" onclick="nav('xe',this)"><i class="ti ti-truck"></i>Phương tiện & Lái xe</div>
       <div class="nav-item" onclick="nav('nv',this)"><i class="ti ti-user-circle"></i>Nhân viên</div>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="user-info">
-        <div class="user-name" id="user-name">—</div>
-        <div class="user-role" id="user-role">—</div>
-      </div>
-      <button class="btn btn-sm" onclick="doLogout()"><i class="ti ti-logout"></i> Đăng xuất</button>
+    </div>
+    <div class="nav-bottom">
+      <div class="nav-user-name" id="u-name">—</div>
+      <div class="nav-user-role" id="u-role">—</div>
+      <button class="btn btn-sm" style="margin-top:8px;width:100%;justify-content:center" onclick="doLogout()"><i class="ti ti-logout"></i> Đăng xuất</button>
     </div>
   </div>
 
   <!-- MAIN -->
   <div class="main">
     <div class="topbar">
-      <h2 class="page-title" id="page-title">Quản lý vận đơn</h2>
-      <div style="display:flex;align-items:center;gap:10px">
-        <span class="role-badge" id="role-badge">CEO</span>
-        <span style="font-size:12px;color:var(--text-muted)" id="topbar-date"></span>
+      <h2 class="topbar-title" id="page-title">Quản lý vận đơn</h2>
+      <div class="topbar-right">
+        <span class="role-pill" id="role-pill">—</span>
+        <span style="font-size:12px;color:var(--text-muted)" id="today-lbl"></span>
       </div>
     </div>
     <div class="content" id="content"></div>
