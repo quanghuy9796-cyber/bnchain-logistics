@@ -31,11 +31,7 @@ export default async function handler(req, res) {
         contents,
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 4096,  // Tăng lên cho PDF nhiều trang
-        },
-        // Tắt thinking để response ổn định, dễ parse JSON hơn
-        thinkingConfig: {
-          thinkingBudget: 0,
+          maxOutputTokens: 4096,
         },
       }),
     });
@@ -46,7 +42,8 @@ export default async function handler(req, res) {
       return res.status(response.status).json({ error: data.error?.message || 'Gemini API error' });
     }
 
-    // Gộp tất cả text parts, bỏ qua thought parts
+    // Gemini 2.5 trả về nhiều parts (thinking + text)
+    // Gộp tất cả parts có text, bỏ qua thought parts
     const parts = data.candidates?.[0]?.content?.parts || [];
     const text = parts
       .filter(p => p.text && !p.thought)
