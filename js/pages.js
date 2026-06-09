@@ -133,6 +133,11 @@ async function pgCongNo(c){
 // ==================== BẢNG KÊ ====================
 async function pgBangKe(c){
   if(!canSee(['ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
+  // Load KH fresh để đảm bảo có dữ liệu
+  if(!KH||!KH.length){
+    const{data}=await db.from('khach_hang').select('*').eq('active',true).order('ten_cong_ty');
+    KH=data||[];
+  }
   const now=new Date();
   const curM=String(now.getMonth()+1).padStart(2,'0');
   const curY=now.getFullYear();
@@ -153,16 +158,6 @@ async function pgBangKe(c){
     <button class="btn" onclick="window.print()"><i class="ti ti-printer"></i> In</button>
   </div>
 
-  <!-- AI SCAN HÓA ĐƠN -->
-  <div style="background:linear-gradient(135deg,var(--teal),var(--teal-dark));border-radius:var(--rl);padding:14px 16px;margin-bottom:14px;color:#fff;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-    <div>
-      <div style="font-size:13px;font-weight:600;margin-bottom:3px"><i class="ti ti-scan"></i> AI Đọc Hóa Đơn</div>
-      <div style="font-size:11px;opacity:.8">Chụp ảnh HĐ → AI tự nhận dạng số cont, loại phí, số tiền → Điền vào chi hộ</div>
-    </div>
-    <button class="btn" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff" onclick="openScanHD()">
-      <i class="ti ti-camera"></i> Scan hóa đơn
-    </button>
-  </div>
 
   <div id="bk-result" style="color:var(--text-muted);font-size:13px;padding:10px 0">
     Chọn khách hàng và tháng để xem bảng kê.
@@ -363,196 +358,6 @@ async function loadBangKe(){
 }
 
 // ============ AI SCAN HÓA ĐƠN ============
-function openScanHD(){
-  const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  const vdopts=ORDERS.filter(o=>!o.locked).slice(0,100).map(o=>`<option value="${o.id}" data-cont="${o.so_cont||''}" data-ma="${o.ma_don}">${o.ma_don} — ${o.ten_khach} — ${o.so_cont||'chưa có cont'}</option>`).join('');
-  bg.innerHTML=`<div class="modal" style="width:540px">
-  <div class="modal-head">
-    <h3><i class="ti ti-scan" style="color:var(--teal)"></i> AI Đọc Hóa Đơn</h3>
-    <button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
-  </div>
-  <div class="modal-body" style="display:block">
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
-      Upload ảnh hóa đơn — AI sẽ tự động nhận dạng và điền vào form chi hộ
-    </div>
-
-    <!-- Upload area -->
-    <div id="scan-upload-area" style="border:2px dashed var(--border);border-radius:var(--rl);padding:24px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:12px"
-      onclick="document.getElementById('scan-file').click()"
-      ondragover="event.preventDefault();this.style.borderColor='var(--teal)'"
-      ondrop="handleScanDrop(event)">
-      <i class="ti ti-photo-up" style="font-size:32px;color:var(--text-muted);display:block;margin-bottom:8px"></i>
-      <div style="font-size:13px;font-weight:500">Nhấn để chọn ảnh hoặc kéo thả vào đây</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">JPG, PNG — Ảnh chụp hóa đơn rõ nét</div>
-      <input type="file" id="scan-file" accept="image/*" style="display:none" onchange="handleScanFile(this)">
-    </div>
-
-    <div id="scan-preview" style="display:none;margin-bottom:12px">
-      <img id="scan-img" style="max-width:100%;max-height:200px;border-radius:var(--r);object-fit:contain;border:1px solid var(--border)">
-    </div>
-
-    <div id="scan-loading" style="display:none;text-align:center;padding:20px;color:var(--teal)">
-      <i class="ti ti-loader-2" style="font-size:24px;animation:spin 1s linear infinite;display:block;margin-bottom:8px"></i>
-      <div style="font-size:12px">AI đang đọc hóa đơn...</div>
-    </div>
-
-    <div id="scan-result" style="display:none">
-      <div style="font-size:11px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
-        <i class="ti ti-check-circle"></i> Kết quả nhận dạng — kiểm tra lại trước khi lưu
-      </div>
-      <div class="form-grid">
-        <div class="form-group full">
-          <label>Vận đơn *</label>
-          <select id="scan-vd">
-            <option value="">-- Chọn vận đơn --</option>${vdopts}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Loại chi</label>
-          <input type="text" id="scan-loai" placeholder="AI điền tự động">
-        </div>
-        <div class="form-group">
-          <label>Số tiền (VNĐ)</label>
-          <input type="text" id="scan-tien" placeholder="0" oninput="this.value=fmtInput(this.value)">
-        </div>
-        <div class="form-group">
-          <label>Số HĐ / Chứng từ</label>
-          <input type="text" id="scan-ct" placeholder="AI điền tự động">
-        </div>
-        <div class="form-group">
-          <label>Ngày</label>
-          <input type="date" id="scan-ngay" value="${today()}">
-        </div>
-        <div class="form-group full">
-          <label>Ghi chú thêm từ AI</label>
-          <textarea id="scan-ghichu" rows="2" placeholder="AI điền tự động"></textarea>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="modal-foot">
-    <button class="btn" onclick="closeModal()">Hủy</button>
-    <button class="btn btn-primary" id="scan-save-btn" style="display:none" onclick="saveScanResult()">
-      <i class="ti ti-device-floppy"></i> Lưu chi hộ
-    </button>
-  </div>
-  </div>`;
-  document.body.appendChild(bg);
-}
-
-function handleScanDrop(e){
-  e.preventDefault();
-  const file=e.dataTransfer.files[0];
-  if(file&&file.type.startsWith('image/'))processImageFile(file);
-}
-function handleScanFile(input){
-  const file=input.files[0];
-  if(file)processImageFile(file);
-}
-
-async function processImageFile(file){
-  // Show preview
-  const reader=new FileReader();
-  reader.onload=async(e)=>{
-    document.getElementById('scan-preview').style.display='block';
-    document.getElementById('scan-img').src=e.target.result;
-    document.getElementById('scan-upload-area').style.display='none';
-    document.getElementById('scan-loading').style.display='block';
-    document.getElementById('scan-result').style.display='none';
-
-    // Call Claude API
-    try{
-      const base64=e.target.result.split(',')[1];
-      const mediaType=file.type;
-      const response=await fetch('https://vcrnlyvdquodiqfwaogj.supabase.co/functions/v1/quick-task',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          model:'claude-haiku-4-5-20251001',
-          max_tokens:1000,
-          messages:[{
-            role:'user',
-            content:[
-              {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
-              {type:'text',text:`Đây là hóa đơn/phiếu thu của dịch vụ logistics tại Hải Phòng, Việt Nam.
-Hãy đọc và trích xuất thông tin, trả về JSON với format sau (chỉ JSON, không giải thích):
-{
-  "loai_chi": "tên loại dịch vụ (vd: Nâng hạ cont, Phí lưu cont, Giám sát hải quan, Phí cảng...)",
-  "so_tien": số tiền (chỉ số, không dấu chấm phẩy),
-  "so_cont": "số cont nếu có (11 ký tự, vd: FFAU7443981) hoặc null",
-  "so_hd": "số hóa đơn hoặc số chứng từ nếu có",
-  "ngay": "ngày trên HĐ format YYYY-MM-DD nếu có",
-  "ghi_chu": "thông tin thêm quan trọng"
-}`}
-            ]
-          }]
-        })
-      });
-      const data=await response.json();
-      const text=data.content?.[0]?.text||'{}';
-      const clean=text.replace(/```json|```/g,'').trim();
-      const result=JSON.parse(clean);
-
-      // Fill form
-      document.getElementById('scan-loading').style.display='none';
-      document.getElementById('scan-result').style.display='block';
-      document.getElementById('scan-save-btn').style.display='flex';
-
-      if(result.loai_chi)document.getElementById('scan-loai').value=result.loai_chi;
-      if(result.so_tien)document.getElementById('scan-tien').value=fmtInput(result.so_tien);
-      if(result.so_hd)document.getElementById('scan-ct').value=result.so_hd;
-      if(result.ngay)document.getElementById('scan-ngay').value=result.ngay;
-      if(result.ghi_chu)document.getElementById('scan-ghichu').value=result.ghi_chu;
-
-      // Auto-match cont to van don
-      if(result.so_cont){
-        const vdSel=document.getElementById('scan-vd');
-        for(let opt of vdSel.options){
-          if(opt.getAttribute('data-cont')===result.so_cont){
-            vdSel.value=opt.value;
-            break;
-          }
-        }
-      }
-
-      toast('AI đọc xong! Kiểm tra lại trước khi lưu','success');
-    }catch(err){
-      console.error('AI Error:', err);
-      document.getElementById('scan-loading').style.display='none';
-      document.getElementById('scan-result').style.display='block';
-      document.getElementById('scan-save-btn').style.display='flex';
-      toast('Lỗi AI: '+err.message+' — Điền thủ công','error');
-    }
-  };
-  reader.readAsDataURL(file);
-}
-
-async function saveScanResult(){
-  const vdSel=document.getElementById('scan-vd');
-  const vdId=vdSel.value;
-  const maDon=vdSel.options[vdSel.selectedIndex]?.getAttribute('data-ma')||'';
-  if(!vdId){toast('Vui lòng chọn vận đơn','error');return;}
-  const tien=parseNum(document.getElementById('scan-tien').value);
-  if(!tien){toast('Vui lòng nhập số tiền','error');return;}
-  const data={
-    van_don_id:vdId, ma_don:maDon,
-    loai_chi:document.getElementById('scan-loai').value||'Chi hộ HĐ',
-    ngay_chi:document.getElementById('scan-ngay').value||today(),
-    so_tien:tien, tien_thu_khach:tien,
-    tien_tra_thau:0, tien_tra_laixe:0,
-    nguoi_chi:CU?.ho_ten||'',
-    chung_tu:document.getElementById('scan-ct').value,
-    hoa_don_khach:true,
-    da_thu_lai:false,
-    ghi_chu:document.getElementById('scan-ghichu').value,
-  };
-  const{error}=await db.from('chi_ho').insert(data);
-  if(error){toast('Lỗi lưu: '+error.message,'error');return;}
-  toast('Đã lưu chi hộ từ hóa đơn!');
-  closeModal();
-}
-
-
 async function pgTraThau(c){
   if(!canSee(['ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
