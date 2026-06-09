@@ -1,6 +1,16 @@
 // PAGES.JS — Điều vận, Bảng kê, Báo cáo, Trả thầu, Công nợ
 // Requires: config.js, orders.js
 
+function fmtDate(d){
+  if(!d) return '—';
+  // Hỗ trợ cả yyyy-mm-dd và dd/mm/yyyy
+  if(typeof d==='string'&&d.includes('-')){
+    const[y,m,day]=d.split('-');
+    return`${day}/${m}/${y}`;
+  }
+  return d;
+}
+
 async function pgDieuVan(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   const{data}=await db.from('van_don').select('*').in('trang_thai',['Chờ xếp xe','Đang vận chuyển','Chờ xác nhận']).order('ngay_yeu_cau',{ascending:true,nullsFirst:false}).order('ngay',{ascending:true});
@@ -270,7 +280,7 @@ async function loadBangKe(){
       const kyGocNote=o.ky_goc&&o.ky_goc!==thang?`<span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:0 4px;font-size:10px;margin-left:3px">Từ ${o.ky_goc.split('-')[1]}/${o.ky_goc.split('-')[0]}</span>`:'';
       p1Rows+=`<tr>
         <td>${stt}${items.length>1?'.'+( i+1):''}</td>
-        <td style="font-size:11px">${o.ngay}</td>
+        <td style="font-size:11px">${fmtDate(o.ngay)}</td>
         <td style="color:var(--teal);font-size:11px;font-weight:600">${o.ma_don}${kyGocNote}</td>
         <td>${loaiTag2(o)}</td>
         <td style="font-weight:500;font-family:monospace;font-size:11px">${o.so_cont||'—'}</td>
@@ -304,18 +314,35 @@ async function loadBangKe(){
     }
   });
 
-  // PHẦN 2 — chi hộ có HĐ (chỉ chi_ho chính, bỏ tham chiếu)
-  let p2Rows='';
-  chiHoP2.forEach((c,i)=>{
+  // PHẦN 2 — gom theo số cont, mỗi cont 1 dòng
+  // Group chi hộ P2 theo van_don_id
+  const p2ByCont={};
+  chiHoP2.forEach(c=>{
     const o=list.find(x=>x.id===c.van_don_id);
+    const key=o?.so_cont||c.ma_don||c.van_don_id;
+    if(!p2ByCont[key])p2ByCont[key]={cont:key,items:[]};
+    p2ByCont[key].items.push(c);
+  });
+  let p2Rows='';
+  Object.entries(p2ByCont).forEach(([cont,{items}],i)=>{
+    const csht=items.find(c=>c.loai_chi==='CSHT'||c.loai_chi?.includes('Hạ tầng')||c.loai_chi?.includes('CSHT'));
+    const nang=items.find(c=>c.loai_chi==='Nâng hàng'||c.loai_chi==='Nâng vỏ'||c.loai_chi?.startsWith('Nâng'));
+    const ha=items.find(c=>c.loai_chi==='Hạ hàng'||c.loai_chi==='Hạ vỏ'||c.loai_chi?.startsWith('Hạ'));
+    const khac=items.filter(c=>c!==csht&&c!==nang&&c!==ha);
+    const tongCont=items.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
+    const khacTien=khac.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
     p2Rows+=`<tr>
       <td>${i+1}</td>
-      <td style="font-size:11px">${c.ngay_chi||'—'}</td>
-      <td style="font-weight:500;font-family:monospace;font-size:11px">${o?.so_cont||'—'}</td>
-      <td style="font-size:11px">${c.loai_chi}</td>
-      <td style="font-size:11px;color:var(--primary)">${c.chung_tu||'—'}</td>
-      <td style="font-size:11px;color:var(--text-muted)">${c.nguoi_chi||'—'}</td>
-      <td class="text-orange fw6">${fmtM(c.tien_thu_khach||c.so_tien)}</td>
+      <td style="font-weight:600;font-family:monospace;font-size:11px">${cont}</td>
+      <td style="font-size:11px">${csht?fmt(csht.tien_thu_khach||csht.so_tien):'—'}</td>
+      <td style="font-size:10px;color:var(--primary)">${csht?.chung_tu||''}</td>
+      <td style="font-size:11px">${nang?fmt(nang.tien_thu_khach||nang.so_tien):'—'}</td>
+      <td style="font-size:10px;color:var(--primary)">${nang?.chung_tu||''}</td>
+      <td style="font-size:11px">${ha?fmt(ha.tien_thu_khach||ha.so_tien):'—'}</td>
+      <td style="font-size:10px;color:var(--primary)">${ha?.chung_tu||''}</td>
+      <td style="font-size:11px">${khacTien>0?fmt(khacTien):'—'}</td>
+      <td style="font-size:10px;color:var(--text-muted)">${khac.map(c=>c.chung_tu||c.loai_chi).filter(Boolean).join(', ')}</td>
+      <td class="text-orange fw6">${fmtM(tongCont)}</td>
     </tr>`;
   });
 
@@ -396,20 +423,42 @@ async function loadBangKe(){
     </div>
   </div>
 
-  <!-- PHẦN 2 -->
+  <!-- PHẦN 2 — gộp vào bảng chính theo từng cont, giống file mẫu -->
   ${chiHoP2.length?`
   <div style="margin-bottom:16px">
     <div style="background:var(--primary);color:#fff;padding:8px 12px;border-radius:var(--r) var(--r) 0 0;font-size:12px;font-weight:600;display:flex;justify-content:space-between">
-      <span><i class="ti ti-receipt"></i> PHẦN 2: CHI HỘ CÓ HÓA ĐƠN (Nâng hàng / Hạ vỏ / CSHT)</span>
+      <span><i class="ti ti-receipt"></i> PHẦN 2: CHI HỘ CÓ HÓA ĐƠN (Nâng / Hạ / CSHT)</span>
       <span>${fmtM(tongP2)}</span>
     </div>
     <div class="tbl-wrap" style="border-radius:0 0 var(--r) var(--r)">
     <table class="tbl">
-      <colgroup><col style="width:30px"><col style="width:80px"><col style="width:110px"><col style="width:120px"><col style="width:100px"><col style="width:100px"><col style="width:110px"></colgroup>
-      <thead><tr><th>STT</th><th>Ngày HĐ</th><th>Số cont</th><th>Loại DV</th><th>Số HĐ</th><th>Đơn vị xuất HĐ</th><th>Số tiền</th></tr></thead>
+      <colgroup>
+        <col style="width:30px"><col style="width:110px"><col style="width:80px">
+        <col style="width:90px"><col style="width:80px">
+        <col style="width:90px"><col style="width:80px">
+        <col style="width:90px"><col style="width:80px">
+        <col style="width:100px">
+      </colgroup>
+      <thead>
+        <tr>
+          <th rowspan="2">STT</th>
+          <th rowspan="2">Số cont</th>
+          <th colspan="2" style="text-align:center;background:#fef3c7;color:#92400e">CSHT</th>
+          <th colspan="2" style="text-align:center;background:#dcfce7;color:#166534">Nâng hàng/vỏ</th>
+          <th colspan="2" style="text-align:center;background:#dbeafe;color:#1e40af">Hạ hàng/vỏ</th>
+          <th colspan="2" style="text-align:center;background:#f3f4f6">Khác</th>
+          <th rowspan="2" style="background:#fff3e6">Tổng</th>
+        </tr>
+        <tr>
+          <th style="font-size:10px;background:#fef9c3">Số tiền</th><th style="font-size:10px;background:#fef9c3">Số HĐ</th>
+          <th style="font-size:10px;background:#f0fdf4">Số tiền</th><th style="font-size:10px;background:#f0fdf4">Số HĐ</th>
+          <th style="font-size:10px;background:#eff6ff">Số tiền</th><th style="font-size:10px;background:#eff6ff">Số HĐ</th>
+          <th style="font-size:10px">Số tiền</th><th style="font-size:10px">Số HĐ</th>
+        </tr>
+      </thead>
       <tbody>${p2Rows}
         <tr style="background:#fff3e6;font-weight:700;font-size:12px">
-          <td colspan="6">CỘNG PHẦN 2</td>
+          <td colspan="10">TỔNG CHI HỘ CÓ HÓA ĐƠN</td>
           <td style="color:var(--primary)">${fmtM(tongP2)}</td>
         </tr>
       </tbody>
