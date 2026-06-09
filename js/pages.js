@@ -241,7 +241,10 @@ async function loadBangKe(){
   const tongDV=list.reduce((s,o)=>s+(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0),0);
   const tongP1=chiHoP1.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
   const tongP2=chiHoP2.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
-  const tongPhaiThu=tongCuoc+tongDV+tongP1+tongP2;
+  const VAT_RATE=0.08; // VAT 8% — chỉ tính trên Phần 1 (cước + phát sinh không HĐ)
+  const tongTruocVAT=tongCuoc+tongDV+tongP1;
+  const vatP1=Math.round(tongTruocVAT*VAT_RATE);
+  const tongPhaiThu=tongTruocVAT+vatP1+tongP2;
 
   // Gom theo bill/booking
   const groups={};
@@ -363,7 +366,7 @@ async function loadBangKe(){
   }
 
   // Lưu data vào window để xuất Excel
-  window.BK_DATA={list,chiHoAll:chiHoAll||[],groups,chiHoTypes,chiHoP1,chiHoP2,chuyenChuyenKy,khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongPhaiThu};
+  window.BK_DATA={list,chiHoAll:chiHoAll||[],groups,chiHoTypes,chiHoP1,chiHoP2,chuyenChuyenKy,khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongTruocVAT,vatP1,tongPhaiThu};
 
   // Build HTML
   const colP1=`<col style="width:28px"><col style="width:76px"><col style="width:100px"><col style="width:48px"><col style="width:90px"><col style="width:52px"><col style="width:140px"><col style="width:68px"><col style="width:78px"><col style="width:68px"><col style="width:40px">${chiHoTypes.map(()=>'<col style="width:72px">').join('')}<col style="width:80px"><col style="width:100px">`;
@@ -457,19 +460,24 @@ async function loadBangKe(){
     </div>
   </div>`:''}
 
-  <!-- TỔNG CỘNG -->
-  <div style="background:var(--sidebar-bg);border-radius:var(--rl);padding:16px 20px;color:#fff;display:grid;grid-template-columns:1fr auto;align-items:center;gap:16px;margin-bottom:16px">
-    <div>
-      <div style="font-size:11px;opacity:.6;margin-bottom:6px">TỔNG CỘNG PHẢI THU — ${khName} — Tháng ${m}/${y}</div>
-      <div style="display:flex;gap:20px;font-size:12px;opacity:.8;flex-wrap:wrap">
-        <span>Phần 1 (Cước + Phát sinh): <strong>${fmtM(tongCuoc+tongDV+tongP1)}</strong></span>
-        ${chiHoP2.length?`<span>Phần 2 (Chi hộ HĐ): <strong>${fmtM(tongP2)}</strong></span>`:''}
-      </div>
-      <div style="font-size:11px;opacity:.5;margin-top:4px">VAT theo hóa đơn GTGT xuất riêng</div>
+  <!-- TỔNG CỘNG — theo đúng form file mẫu -->
+  <div style="background:var(--sidebar-bg);border-radius:var(--rl);padding:16px 20px;color:#fff;margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px">
+      <div style="font-size:11px;opacity:.6">TỔNG CỘNG — ${khName} — Tháng ${m}/${y} — ${list.length} chuyến</div>
     </div>
-    <div style="text-align:right">
-      <div style="font-size:11px;opacity:.6">TỔNG PHẢI THU</div>
-      <div style="font-size:26px;font-weight:700;color:#ffd700">${fmtM(tongPhaiThu)}</div>
+    <div style="display:grid;grid-template-columns:1fr 200px;gap:4px;font-size:13px">
+      <div style="opacity:.8">Tổng cước + phát sinh (chưa VAT)</div>
+      <div style="text-align:right;font-weight:600">${fmtM(tongTruocVAT)}</div>
+
+      <div style="opacity:.8">VAT 8% (Phần 1)</div>
+      <div style="text-align:right;font-weight:600;color:#fbbf24">${fmtM(vatP1)}</div>
+
+      ${chiHoP2.length?`
+      <div style="opacity:.8">Tổng chi hộ có HĐ (Phần 2)</div>
+      <div style="text-align:right;font-weight:600">${fmtM(tongP2)}</div>`:''}
+
+      <div style="border-top:1px solid rgba(255,255,255,.2);margin-top:6px;padding-top:8px;font-size:15px;font-weight:700">TỔNG THANH TOÁN</div>
+      <div style="border-top:1px solid rgba(255,255,255,.2);margin-top:6px;padding-top:8px;text-align:right;font-size:22px;font-weight:700;color:#ffd700">${fmtM(tongPhaiThu)}</div>
     </div>
   </div>
 
@@ -548,7 +556,11 @@ async function xuatExcelBangKe(){
   rows.push('');
   rows.push(['TỔNG PHẦN 1','','','','','','','',tongCuoc,...chiHoTypes.map(type=>chiHoP1.filter(c=>c.loai_chi===type).reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)),'','','','','','',tongP2,''].join('\t'));
   rows.push(['TỔNG PHẦN 2 (chi hộ HĐ)','','','','','','','','','','','','','','','',tongP2,''].join('\t'));
-  rows.push(['TỔNG PHẢI THU','','','','','','','','','','','','','','','','',tongPhaiThu].join('\t'));
+  rows.push([''].join('\t'));
+  rows.push(['TỔNG CƯỚC + PHÁT SINH (chưa VAT)','','','','','','','','',tongTruocVAT,'','','','','','','',''].join('\t'));
+  rows.push(['VAT 8% (Phần 1)','','','','','','','','',vatP1,'','','','','','','',''].join('\t'));
+  rows.push(['TỔNG CHI HỘ CÓ HĐ (Phần 2)','','','','','','','','','','','','','','','',tongP2,''].join('\t'));
+  rows.push(['TỔNG THANH TOÁN','','','','','','','','','','','','','','','','',tongPhaiThu].join('\t'));
 
   const blob=new Blob(['\uFEFF'+rows.join('\n')],{type:'text/tab-separated-values;charset=utf-8'});
   const a=document.createElement('a');
