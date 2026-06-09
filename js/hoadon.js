@@ -151,34 +151,30 @@ async function processOneHD(file){
     r.onerror=()=>rej(new Error('Không đọc được file'));
     r.readAsDataURL(file);
   });
-  
+
   const isImage=file.type.startsWith('image/');
   const mediaType=isImage?file.type:'application/pdf';
-  
-  // Prompt đọc hóa đơn — dùng chung cho cả PDF và ảnh
-  const prompt=`Đây là hóa đơn/biên lai dịch vụ logistics tại cảng Hải Phòng, Việt Nam. File có thể có nhiều trang.
-Đọc TẤT CẢ các trang và trả về JSON duy nhất (chỉ JSON thuần, không markdown, không giải thích):
-{
-  "so_hd": "số hóa đơn hoặc số biên lai (vd: 30486 hoặc 1462063)",
-  "ngay_hd": "ngày trên HĐ format YYYY-MM-DD",
-  "loai_dv": "loại dịch vụ chính: Nâng hàng / Hạ vỏ / Nâng vỏ / Hạ hàng / CSHT / Lưu cont / Phí cảng / Giám sát HQ",
-  "tong_tien": số tiền VNĐ cuối cùng phải thanh toán (số nguyên, không dấu phẩy, không VAT label),
-  "so_cont_list": ["POLU4510295","FFAU7443981"],
-  "loai_cont": "20DC hoặc 40HC hoặc 40DC v.v",
-  "mst_khach": "mã số thuế đơn vị MUA (không phải bán)",
-  "ten_don_vi_xuat": "tên đơn vị BÁN/xuất hóa đơn",
-  "ghi_chu": "thông tin thêm: tờ khai, loại hình, ghi chú quan trọng",
-  "confidence": "cao nếu đọc rõ số cont / trung_binh nếu không chắc / thap nếu mờ hoặc không có"
-}
-Lưu ý: số cont thường xuất hiện sau chữ "Công-te-nơ số:" hoặc trong tên dịch vụ như POLU4510295-40HC-GP`;
 
-  // Build Gemini request — cùng format cho cả ảnh lẫn PDF
-  const filePart={
-    inline_data:{
-      mime_type: mediaType,
-      data: base64,
-    }
-  };
+  // PDF nhiều trang = nhiều HĐ → trả về mảng
+  // Ảnh 1 trang → trả về mảng 1 phần tử
+  const prompt=`Đây là file hóa đơn/biên lai dịch vụ logistics tại cảng Hải Phòng, Việt Nam.
+File có thể có NHIỀU TRANG, mỗi trang là 1 hóa đơn riêng biệt.
+Đọc TẤT CẢ các trang. Trả về JSON ARRAY (chỉ array thuần, không markdown, không giải thích):
+[
+  {
+    "so_hd": "số hóa đơn hoặc số biên lai",
+    "ngay_hd": "ngày trên HĐ format YYYY-MM-DD",
+    "loai_dv": "Nâng hàng / Hạ vỏ / Nâng vỏ / Hạ hàng / CSHT / Lưu cont / Phí cảng / Giám sát HQ",
+    "tong_tien": số tiền VNĐ cuối cùng (số nguyên không dấu phẩy),
+    "so_cont_list": ["POLU4510295"],
+    "loai_cont": "20DC hoặc 40HC v.v",
+    "mst_khach": "mã số thuế đơn vị MUA",
+    "ten_don_vi_xuat": "tên đơn vị BÁN hóa đơn",
+    "ghi_chu": "thông tin thêm quan trọng",
+    "confidence": "cao / trung_binh / thap"
+  }
+]
+Lưu ý: số cont thường sau "Công-te-nơ số:" hoặc trong tên DV như POLU4510295-40HC-GP`;
 
   const response=await fetch(PROXY_URL,{
     method:'POST',
@@ -187,33 +183,50 @@ Lưu ý: số cont thường xuất hiện sau chữ "Công-te-nơ số:" hoặc
       model:'gemini-2.5-flash',
       contents:[{
         parts:[
-          filePart,
-          {text: prompt}
+          {inline_data:{mime_type:mediaType,data:base64}},
+          {text:prompt}
         ]
       }]
     })
   });
 
   const data=await response.json();
-  if(data.error) throw new Error('Gemini: '+data.error);
-  const text=data.text||'{}';
-  const jsonMatch=text.match(/\{[\s\S]*\}/);
-  if(!jsonMatch) throw new Error('AI không trả về JSON hợp lệ');
-  const ai=JSON.parse(jsonMatch[0]);
-  
-  // Try to match with van_don
-  const matched=await matchContToVanDon(ai);
-  
+  if(data.error) throw new Error('Gemini: '+(data.error.message||JSON.stringify(data.error)));
+  const text=data.text||'';
+
+  // Extract JSON array hoặc object từ response
+  const arrMatch=text.match(/\[[\s\S]*\]/);
+  const objMatch=text.match(/\{[\s\S]*\}/);
+  if(!arrMatch&&!objMatch) throw new Error('AI không trả về JSON hợp lệ. Raw: '+text.slice(0,200));
+
+  // Parse thành mảng
+  let aiList=[];
+  if(arrMatch){
+    aiList=JSON.parse(arrMatch[0]);
+    if(!Array.isArray(aiList)) aiList=[aiList];
+  } else {
+    aiList=[JSON.parse(objMatch[0])];
+  }
+
+  // Xử lý từng HĐ trong array, trả về HĐ đầu tiên (caller xử lý batch nếu cần)
+  // Với PDF nhiều trang → trả về phần tử đầu có confidence cao nhất
+  const best=aiList.sort((a,b)=>{
+    const s={cao:3,trung_binh:2,thap:1};
+    return (s[b.confidence]||1)-(s[a.confidence]||1);
+  })[0];
+
+  const matched=await matchContToVanDon(best);
   return{
-    so_hd:ai.so_hd||null,
-    ngay_hd:ai.ngay_hd||null,
-    loai_dv:ai.loai_dv||null,
-    tong_tien:ai.tong_tien||0,
-    so_cont_list:ai.so_cont_list||[],
-    mst_khach:ai.mst_khach||null,
-    ten_don_vi_xuat:ai.ten_don_vi_xuat||null,
-    ai_confidence:ai.confidence||'trung_binh',
-    ai_ghi_chu:ai.ghi_chu||null,
+    so_hd:best.so_hd||null,
+    ngay_hd:best.ngay_hd||null,
+    loai_dv:best.loai_dv||null,
+    tong_tien:best.tong_tien||0,
+    so_cont_list:best.so_cont_list||[],
+    mst_khach:best.mst_khach||null,
+    ten_don_vi_xuat:best.ten_don_vi_xuat||null,
+    ai_confidence:best.confidence||'trung_binh',
+    ai_ghi_chu:best.ghi_chu||null,
+    _all_pages:aiList, // giữ lại toàn bộ để debug
     ...matched,
   };
 }
