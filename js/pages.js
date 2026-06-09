@@ -1,15 +1,6 @@
 // PAGES.JS — Điều vận, Bảng kê, Báo cáo, Trả thầu, Công nợ
 // Requires: config.js, orders.js
-
-function fmtDate(d){
-  if(!d) return '—';
-  // Hỗ trợ cả yyyy-mm-dd và dd/mm/yyyy
-  if(typeof d==='string'&&d.includes('-')){
-    const[y,m,day]=d.split('-');
-    return`${day}/${m}/${y}`;
-  }
-  return d;
-}
+// fmtDate() được khai báo trong orders.js (load trước)
 
 async function pgDieuVan(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
