@@ -297,20 +297,20 @@ function renderTabChiHo(o,list,editable){
       <i class="ti ti-link"></i> Chi phí chung với cont khác (${listThamChieu.length})
     </div>
     ${listThamChieu.map(c=>`
-    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:8px 10px;margin-bottom:6px;font-size:12px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:600;margin-right:6px">Tham chiếu</span>
-          <strong>${c.loai_chi}</strong>
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:8px 10px;margin-bottom:6px;font-size:12px;box-sizing:border-box;width:100%;overflow:hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px;min-width:0">
+          <span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:600;white-space:nowrap">Tham chiếu</span>
+          <strong style="white-space:nowrap">${c.loai_chi}</strong>
         </div>
-        <div style="text-align:right;font-size:11px;color:var(--text-muted)">
+        <div style="font-size:11px;color:var(--text-muted);white-space:nowrap">
           Tổng HĐ: <strong class="text-orange">${fmtM(c.so_tien_hd_goc||0)}</strong>
         </div>
       </div>
       <div style="color:var(--text-muted);margin-top:4px;font-size:11px">
         HĐ: <strong>${c.chung_tu||'—'}</strong> · Ngày: ${c.ngay_chi||'—'}
       </div>
-      <div style="color:#92400e;margin-top:2px;font-size:11px;word-break:break-word;white-space:normal;line-height:1.4">${c.ghi_chu||''}</div>
+      <div style="color:#92400e;margin-top:2px;font-size:11px;word-break:break-all;white-space:normal;line-height:1.5;overflow-wrap:break-word">${(c.ghi_chu||'').replace(/\[Tham chiếu\][^|]*\|/,'').trim()}</div>
     </div>`).join('')}
   </div>`:''}`;
 }
