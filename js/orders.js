@@ -7,8 +7,8 @@ function fmtDate(d){
     return`${day}/${m}/${y}`;
   }
   return d;
-}, Chi hộ, Detail Panel
-// Requires: config.js
+}
+// Chi hộ, Detail Panel — Requires: config.js
 
 async function pgOrders(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
