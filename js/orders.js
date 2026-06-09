@@ -1,4 +1,13 @@
-// ORDERS.JS — Quản lý vận đơn, Chi hộ, Detail Panel
+// ORDERS.JS — Quản lý vận đơn
+// fmtDate: yyyy-mm-dd → dd/mm/yyyy (dùng chung toàn app)
+function fmtDate(d){
+  if(!d) return '—';
+  if(typeof d==='string'&&d.includes('-')&&d.length===10){
+    const[y,m,day]=d.split('-');
+    return`${day}/${m}/${y}`;
+  }
+  return d;
+}, Chi hộ, Detail Panel
 // Requires: config.js
 
 async function pgOrders(c){
@@ -62,7 +71,7 @@ async function pgOrders(c){
     ${list.length===0?`<tr><td colspan="20"><div class="empty"><i class="ti ti-inbox"></i>Chưa có dữ liệu</div></td></tr>`:''}
     ${list.map(o=>`<tr onclick="openDetail('${o.id}')" class="${SEL===o.id?'selected':''} ${o.locked?'locked':''}">
       <td><span style="color:var(--teal);font-weight:600">${o.ma_don}</span>${o.locked?'<i class="ti ti-lock" style="color:var(--success);font-size:10px;margin-left:3px"></i>':''}</td>
-      <td>${o.ngay}</td>
+      <td>${fmtDate(o.ngay)}</td>
       <td>${loaiTag(o.loai_hang)}</td>
       <td style="color:var(--primary);font-weight:500" title="${o.so_bill||o.so_booking||''}">${o.so_bill||o.so_booking||'-'}</td>
       <td>${o.ten_khach}</td>
@@ -308,7 +317,7 @@ function renderTabChiHo(o,list,editable){
         </div>
       </div>
       <div style="color:var(--text-muted);margin-top:4px;font-size:11px">
-        HĐ: <strong>${c.chung_tu||'—'}</strong> · Ngày: ${c.ngay_chi||'—'}
+        HĐ: <strong>${c.chung_tu||'—'}</strong> · Ngày: ${fmtDate(c.ngay_chi)}
       </div>
       <div style="color:#92400e;margin-top:2px;font-size:11px;word-break:break-all;white-space:normal;line-height:1.5;overflow-wrap:break-word">${(c.ghi_chu||'').replace(/\[Tham chiếu\][^|]*\|/,'').trim()}</div>
     </div>`).join('')}
