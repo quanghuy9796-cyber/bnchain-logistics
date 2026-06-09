@@ -256,8 +256,11 @@ function renderTabXe(o,editable){
 }
 
 function renderTabChiHo(o,list,editable){
-  const total=list.reduce((s,c)=>s+(+c.so_tien||0),0);
-  const chuaThu=list.filter(c=>!c.da_thu_lai).reduce((s,c)=>s+(+c.so_tien||0),0);
+  // Tách chi_ho thật và chi_ho tham chiếu
+  const listThat=list.filter(c=>!c.la_tham_chieu);
+  const listThamChieu=list.filter(c=>c.la_tham_chieu);
+  const total=listThat.reduce((s,c)=>s+(+c.so_tien||0),0);
+  const chuaThu=listThat.filter(c=>!c.da_thu_lai).reduce((s,c)=>s+(+c.so_tien||0),0);
   return`
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
     <div><div style="font-size:11px;color:var(--text-muted)">Tổng chi hộ</div>
@@ -265,7 +268,7 @@ function renderTabChiHo(o,list,editable){
     <div style="text-align:right"><div style="font-size:11px;color:var(--text-muted)">Chưa thu lại</div>
       <div style="font-size:14px;font-weight:600;color:var(--danger)">${fmtM(chuaThu)}</div></div>
   </div>
-  ${list.map(c=>`
+  ${listThat.map(c=>`
   <div class="chi-ho-item">
     <div class="chi-ho-left">
       <div class="chi-ho-type">${c.loai_chi}</div>
@@ -286,8 +289,30 @@ function renderTabChiHo(o,list,editable){
       </div>`:''}
     </div>
   </div>`).join('')}
-  ${list.length===0?'<div class="empty" style="padding:20px 0"><i class="ti ti-inbox"></i>Chưa có chi phí phát sinh</div>':''}
-  ${editable?`<button class="add-chi-ho-btn" onclick="openAddChiHo('`+o.id+`','`+o.ma_don+`')"><i class="ti ti-plus"></i> Thêm chi phí phát sinh</button>`:''}`;
+  ${listThat.length===0?'<div class="empty" style="padding:20px 0"><i class="ti ti-inbox"></i>Chưa có chi phí phát sinh</div>':''}
+  ${editable?`<button class="add-chi-ho-btn" onclick="openAddChiHo('`+o.id+`','`+o.ma_don+`')"><i class="ti ti-plus"></i> Thêm chi phí phát sinh</button>`:''}
+  ${listThamChieu.length?`
+  <div style="margin-top:12px;border-top:1px dashed var(--border);padding-top:10px">
+    <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">
+      <i class="ti ti-link"></i> Chi phí chung với cont khác (${listThamChieu.length})
+    </div>
+    ${listThamChieu.map(c=>`
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:8px 10px;margin-bottom:6px;font-size:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:600;margin-right:6px">Tham chiếu</span>
+          <strong>${c.loai_chi}</strong>
+        </div>
+        <div style="text-align:right;font-size:11px;color:var(--text-muted)">
+          Tổng HĐ: <strong class="text-orange">${fmtM(c.so_tien_hd_goc||0)}</strong>
+        </div>
+      </div>
+      <div style="color:var(--text-muted);margin-top:4px;font-size:11px">
+        HĐ: <strong>${c.chung_tu||'—'}</strong> · Ngày: ${c.ngay_chi||'—'}
+      </div>
+      <div style="color:#92400e;margin-top:2px;font-size:11px">${c.ghi_chu||''}</div>
+    </div>`).join('')}
+  </div>`:''}`;
 }
 
 function renderTabCuoc(o,chiHoList,editable,loi){
