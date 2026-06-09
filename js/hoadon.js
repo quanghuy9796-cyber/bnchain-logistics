@@ -155,41 +155,48 @@ async function processOneHD(file){
   const isImage=file.type.startsWith('image/');
   const mediaType=isImage?file.type:'application/pdf';
   
-  // Call Claude API via proxy
-  console.log('Calling proxy:', PROXY_URL);
-  console.log('File type:', mediaType, 'Size:', base64.length);
-  const response=await fetch(PROXY_URL,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      model:'claude-haiku-4-5-20251001',
-      max_tokens:1000,
-      messages:[{
-        role:'user',
-        content:[
-          {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
-          {type:'text',text:`Đây là hóa đơn/biên lai dịch vụ logistics tại cảng Hải Phòng, Việt Nam. File có thể có nhiều trang.
+  // Prompt đọc hóa đơn — dùng chung cho cả PDF và ảnh
+  const prompt=`Đây là hóa đơn/biên lai dịch vụ logistics tại cảng Hải Phòng, Việt Nam. File có thể có nhiều trang.
 Đọc TẤT CẢ các trang và trả về JSON duy nhất (chỉ JSON thuần, không markdown, không giải thích):
 {
   "so_hd": "số hóa đơn hoặc số biên lai (vd: 30486 hoặc 1462063)",
   "ngay_hd": "ngày trên HĐ format YYYY-MM-DD",
   "loai_dv": "loại dịch vụ chính: Nâng hàng / Hạ vỏ / Nâng vỏ / Hạ hàng / CSHT / Lưu cont / Phí cảng / Giám sát HQ",
   "tong_tien": số tiền VNĐ cuối cùng phải thanh toán (số nguyên, không dấu phẩy, không VAT label),
-  "so_cont_list": ["POLU4510295","FFAU7443981"] (mảng số cont tìm được - thường 11 ký tự chữ+số),
+  "so_cont_list": ["POLU4510295","FFAU7443981"],
   "loai_cont": "20DC hoặc 40HC hoặc 40DC v.v",
   "mst_khach": "mã số thuế đơn vị MUA (không phải bán)",
   "ten_don_vi_xuat": "tên đơn vị BÁN/xuất hóa đơn",
   "ghi_chu": "thông tin thêm: tờ khai, loại hình, ghi chú quan trọng",
   "confidence": "cao nếu đọc rõ số cont / trung_binh nếu không chắc / thap nếu mờ hoặc không có"
 }
-Lưu ý: số cont thường xuất hiện sau chữ "Công-te-nơ số:" hoặc trong tên dịch vụ như POLU4510295-40HC-GP`}
+Lưu ý: số cont thường xuất hiện sau chữ "Công-te-nơ số:" hoặc trong tên dịch vụ như POLU4510295-40HC-GP`;
+
+  // Build Gemini request — cùng format cho cả ảnh lẫn PDF
+  const filePart={
+    inline_data:{
+      mime_type: mediaType,
+      data: base64,
+    }
+  };
+
+  const response=await fetch(PROXY_URL,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      model:'gemini-2.0-flash',
+      contents:[{
+        parts:[
+          filePart,
+          {text: prompt}
         ]
       }]
     })
   });
-  
+
   const data=await response.json();
-  const text=data.content?.[0]?.text||'{}';
+  if(data.error) throw new Error('Gemini: '+data.error);
+  const text=data.text||'{}';
   const clean=text.replace(/\`\`\`json|\`\`\`/g,'').trim();
   const ai=JSON.parse(clean);
   
