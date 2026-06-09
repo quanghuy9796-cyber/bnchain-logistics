@@ -1,10 +1,9 @@
 // api/gemini.js — Vercel Serverless Proxy cho Google Gemini API
-// Thay thế api/claude.js cho tính năng đọc hóa đơn
 
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '20mb', // PDF/ảnh base64 có thể lớn
+      sizeLimit: '20mb',
     },
   },
 };
@@ -21,7 +20,7 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEY chưa được cấu hình trong Vercel' });
 
   try {
-    const { model = 'gemini-2.0-flash', contents, generationConfig } = req.body;
+    const { model = 'gemini-2.5-flash', contents } = req.body;
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
@@ -30,9 +29,13 @@ export default async function handler(req, res) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents,
-        generationConfig: generationConfig || {
-          temperature: 0.1,       // Thấp = ổn định, ít hallucinate
-          maxOutputTokens: 1024,
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 4096,  // Tăng lên cho PDF nhiều trang
+        },
+        // Tắt thinking để response ổn định, dễ parse JSON hơn
+        thinkingConfig: {
+          thinkingBudget: 0,
         },
       }),
     });
@@ -43,8 +46,13 @@ export default async function handler(req, res) {
       return res.status(response.status).json({ error: data.error?.message || 'Gemini API error' });
     }
 
-    // Chuẩn hóa response về format dễ dùng
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    // Gộp tất cả text parts, bỏ qua thought parts
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    const text = parts
+      .filter(p => p.text && !p.thought)
+      .map(p => p.text)
+      .join('') || '';
+
     return res.status(200).json({ text, raw: data });
 
   } catch (error) {
