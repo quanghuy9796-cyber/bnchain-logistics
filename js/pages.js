@@ -95,7 +95,7 @@ async function pgChiHo(c){
 // ==================== CÔNG NỢ ====================
 async function pgCongNo(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
-  const{data}=await db.from('van_don').select('*').order('ngay',{ascending:false});
+  const{data}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_hang,so_cont,so_bill,so_booking,gia_cuoc_khach,trang_thai,locked,hanh_trinh').eq('locked',true).order('ngay',{ascending:false}).limit(1000);
   const list=data||[];
   const chuaThu=list.filter(o=>o.thanh_toan_khach!=='Đã thu');
   const chuaTra=list.filter(o=>o.thanh_toan_thau!=='Đã trả'&&(+o.gia_cuoc_thau||0)>0);
@@ -886,7 +886,7 @@ async function xuatExcelBangKe(){
 async function pgTraThau(c){
   if(!canSee(['ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
-  const{data}=await db.from('van_don').select('*').neq('thanh_toan_thau','Đã trả').gt('gia_cuoc_thau',0).order('ngay',{ascending:false});
+  const{data}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,hanh_trinh,ten_lai_xe,gia_cuoc_thau,thanh_toan_thau,ma_thau_phu,so_cont,locked').neq('thanh_toan_thau','Đã trả').gt('gia_cuoc_thau',0).order('ngay',{ascending:false}).limit(500);
   const list=data||[];
   // Group theo thầu phụ
   const groups={};
