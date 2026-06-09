@@ -354,44 +354,99 @@ function showHDResults(results){
 }
 
 async function xuLyHD(id){
-  // Mở modal để chọn vận đơn thủ công
   const{data:hd}=await db.from('hoa_don').select('*').eq('id',id).single();
   if(!hd)return;
-  const vdopts=ORDERS.filter(o=>!o.locked).slice(0,200).map(o=>`<option value="${o.id}">${o.ma_don} — ${o.ten_khach} — ${o.so_cont||'chưa có cont'} — ${o.ngay}</option>`).join('');
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  bg.innerHTML=`<div class="modal" style="width:520px">
-  <div class="modal-head"><h3><i class="ti ti-link" style="color:var(--teal)"></i> Xử lý thủ công</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  bg.innerHTML=`<div class="modal" style="width:540px">
+  <div class="modal-head"><h3><i class="ti ti-link" style="color:var(--teal)"></i> Xử lý hóa đơn thủ công</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body" style="display:block">
-    <div style="background:var(--bg);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;font-size:12px">
-      <div><strong>${hd.loai_dv||'Không rõ loại'}</strong> | ${hd.so_hd||'Không có số HĐ'} | <span class="text-orange fw6">${fmtM(hd.tong_tien)}</span></div>
-      <div style="color:var(--danger);margin-top:4px"><i class="ti ti-alert-circle"></i> ${hd.ly_do_cho}</div>
-      ${(hd.so_cont_list||[]).length?`<div style="margin-top:4px">Số cont AI đọc: <strong>${hd.so_cont_list.join(', ')}</strong></div>`:''}
+    <!-- Thông tin HĐ -->
+    <div style="background:var(--bg);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:12px">
+      <div style="font-weight:600;font-size:13px;margin-bottom:4px">${hd.loai_dv||'Không rõ loại'} — ${hd.so_hd||'Không có số HĐ'}</div>
+      <div style="display:flex;gap:16px;color:var(--text-muted)">
+        <span>💰 <strong class="text-orange">${fmtM(hd.tong_tien)}</strong></span>
+        <span>📅 ${hd.ngay_hd||'—'}</span>
+        <span>🏢 ${hd.ten_don_vi_xuat||'—'}</span>
+      </div>
+      <div style="color:var(--danger);margin-top:6px;font-size:11px"><i class="ti ti-alert-circle"></i> ${hd.ly_do_cho||'Chưa khớp cont'}</div>
     </div>
-    <div class="form-group" style="margin-bottom:10px">
-      <label>Chọn vận đơn liên quan *</label>
-      <select id="xuly-vd" style="font-size:12px"><option value="">-- Tìm và chọn vận đơn --</option>${vdopts}</select>
+    <!-- Điền số cont -->
+    <div class="form-group" style="margin-bottom:12px">
+      <label style="font-weight:600">Số cont liên quan * <span style="font-weight:400;color:var(--text-muted)">(11 ký tự, vd: CSNU1519330)</span></label>
+      <input type="text" id="xuly-cont" placeholder="CSNU1519330" maxlength="11"
+        oninput="this.value=formatCont(this.value);xuLyTimVanDon(this.value)"
+        style="font-family:monospace;font-size:14px;letter-spacing:1px;text-transform:uppercase">
+      <div id="xuly-vd-found" style="margin-top:6px;font-size:12px;min-height:20px"></div>
     </div>
     <div class="form-group">
-      <label>Ghi chú xử lý</label>
-      <textarea id="xuly-gc" rows="2" placeholder="Lý do chọn vận đơn này..."></textarea>
+      <label>Ghi chú</label>
+      <textarea id="xuly-gc" rows="2" placeholder="Ghi chú thêm nếu cần..."></textarea>
     </div>
   </div>
   <div class="modal-foot">
     <button class="btn" onclick="closeModal()">Hủy</button>
-    <button class="btn btn-primary" onclick="saveXuLyHD('${id}')"><i class="ti ti-check"></i> Xác nhận khớp</button>
+    <button class="btn btn-primary" id="xuly-btn-ok" onclick="saveXuLyHD('${id}')"><i class="ti ti-check"></i> Xác nhận & tạo chi hộ</button>
   </div>
   </div>`;
   document.body.appendChild(bg);
 }
 
+function xuLyTimVanDon(cont){
+  const el=document.getElementById('xuly-vd-found');
+  if(!el)return;
+  if(cont.length<6){el.innerHTML='';return;}
+  const found=ORDERS.filter(o=>o.so_cont&&o.so_cont.toUpperCase().includes(cont.toUpperCase())&&!o.locked);
+  if(found.length===0){
+    el.innerHTML=`<span style="color:var(--danger)"><i class="ti ti-x"></i> Không tìm thấy vận đơn nào có cont này</span>`;
+  } else {
+    el.innerHTML=`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--r);padding:6px 10px">
+      <div style="font-weight:600;color:var(--success);margin-bottom:4px"><i class="ti ti-check"></i> Tìm thấy ${found.length} vận đơn:</div>
+      ${found.slice(0,3).map(o=>`<div style="font-size:11px;padding:2px 0">${o.ma_don} — ${o.ten_khach||'—'} — cont: <strong>${o.so_cont}</strong></div>`).join('')}
+    </div>`;
+  }
+}
+
 async function saveXuLyHD(hdId){
-  const vdId=document.getElementById('xuly-vd').value;
+  const cont=document.getElementById('xuly-cont').value.trim().toUpperCase();
   const gc=document.getElementById('xuly-gc').value;
-  if(!vdId){toast('Vui lòng chọn vận đơn','error');return;}
-  const vd=ORDERS.find(x=>x.id===vdId);
-  await db.from('hoa_don').update({trang_thai:'da_khop',ly_do_cho:null,ai_ghi_chu:gc}).eq('id',hdId);
-  await db.from('hoa_don_van_don').insert({hoa_don_id:hdId,van_don_id:vdId,so_cont:vd?.so_cont,ma_don:vd?.ma_don,so_tien:0,la_cont_chinh:true,da_tao_chi_ho:false});
-  toast('Đã khớp vận đơn');closeModal();
+  if(!cont||cont.length<6){toast('Vui lòng điền số cont','error');return;}
+
+  // Tìm vận đơn theo số cont
+  const{data:vds}=await db.from('van_don').select('*').ilike('so_cont','%'+cont+'%').eq('locked',false);
+  if(!vds||vds.length===0){toast('Không tìm thấy vận đơn nào có cont '+cont,'error');return;}
+  const vd=vds[0]; // lấy vận đơn đầu tiên khớp
+
+  // Lấy thông tin HĐ
+  const{data:hd}=await db.from('hoa_don').select('*').eq('id',hdId).single();
+  if(!hd)return;
+
+  // Cập nhật trạng thái HĐ
+  await db.from('hoa_don').update({trang_thai:'da_duyet',ly_do_cho:null,ai_ghi_chu:gc,nguoi_duyet:CU?.id,ngay_duyet:new Date().toISOString()}).eq('id',hdId);
+
+  // Tạo liên kết hoa_don_van_don
+  await db.from('hoa_don_van_don').insert({
+    hoa_don_id:hdId,van_don_id:vd.id,so_cont:vd.so_cont,
+    ma_don:vd.ma_don,so_tien:hd.tong_tien,la_cont_chinh:true,da_tao_chi_ho:true,
+  });
+
+  // Tạo chi_ho luôn
+  await db.from('chi_ho').insert({
+    van_don_id:vd.id,
+    ma_don:vd.ma_don,
+    loai_chi:hd.loai_dv||'Chi hộ HĐ',
+    ngay_chi:hd.ngay_hd||today(),
+    so_tien:hd.tong_tien,
+    tien_thu_khach:hd.tong_tien,
+    tien_tra_thau:0,tien_tra_laixe:0,
+    nguoi_chi:hd.ten_nguoi_upload||'OPS',
+    chung_tu:hd.so_hd,
+    hoa_don_khach:true,
+    da_thu_lai:false,
+    ghi_chu:`HĐ ${hd.so_hd||''} | ${hd.ten_don_vi_xuat||''} | Nhập tay: ${cont}${gc?(' | '+gc):''}`,
+  });
+
+  toast('✅ Đã tạo chi hộ cho cont '+vd.so_cont+' — '+vd.ma_don);
+  closeModal();
   pgHoaDon(document.getElementById('content'));
 }
 
@@ -400,7 +455,48 @@ async function duyetHD(id){
   const{data:hdvds}=await db.from('hoa_don_van_don').select('*').eq('hoa_don_id',id).eq('la_cont_chinh',true);
   const{data:hd}=await db.from('hoa_don').select('*').eq('id',id).single();
   if(!hd||!hdvds?.length){toast('Không tìm thấy thông tin','error');return;}
-  
+
+  // Tìm thông tin vận đơn để hiển thị xác nhận
+  const main=hdvds[0];
+  const vd=ORDERS.find(x=>x.id===main.van_don_id)||{ma_don:main.ma_don,so_cont:main.so_cont,ten_khach:'—'};
+
+  // Modal xác nhận trước khi tạo chi hộ
+  const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
+  bg.innerHTML=`<div class="modal" style="width:480px">
+  <div class="modal-head"><h3><i class="ti ti-check-circle" style="color:var(--success)"></i> Xác nhận duyệt hóa đơn</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  <div class="modal-body" style="display:block">
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--r);padding:12px 14px;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Chi phí sẽ được tạo</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+        <div><span style="color:var(--text-muted)">Loại DV:</span> <strong>${hd.loai_dv||'—'}</strong></div>
+        <div><span style="color:var(--text-muted)">Số HĐ:</span> <strong>${hd.so_hd||'—'}</strong></div>
+        <div><span style="color:var(--text-muted)">Số tiền:</span> <strong class="text-orange">${fmtM(hd.tong_tien)}</strong></div>
+        <div><span style="color:var(--text-muted)">Ngày HĐ:</span> <strong>${hd.ngay_hd||'—'}</strong></div>
+        <div><span style="color:var(--text-muted)">Vận đơn:</span> <strong>${vd.ma_don}</strong></div>
+        <div><span style="color:var(--text-muted)">Số cont:</span> <strong style="font-family:monospace">${vd.so_cont||main.so_cont||'—'}</strong></div>
+        <div style="grid-column:1/-1"><span style="color:var(--text-muted)">Khách hàng:</span> <strong>${vd.ten_khach||'—'}</strong></div>
+        <div style="grid-column:1/-1"><span style="color:var(--text-muted)">Đơn vị xuất HĐ:</span> ${hd.ten_don_vi_xuat||'—'}</div>
+      </div>
+    </div>
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:8px 12px;font-size:11px;color:#92400e">
+      <i class="ti ti-info-circle"></i> Sau khi duyệt, chi phí sẽ tự động vào <strong>Chi hộ có HĐ (Phần 2)</strong> của vận đơn trên.
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">Hủy</button>
+    <button class="btn btn-success" onclick="confirmDuyetHD('${id}')"><i class="ti ti-check"></i> Xác nhận duyệt</button>
+  </div>
+  </div>`;
+  document.body.appendChild(bg);
+}
+
+async function confirmDuyetHD(id){
+  closeModal();
+  if(!canSee(['ke_toan','ceo'])){toast('Không có quyền','error');return;}
+  const{data:hdvds}=await db.from('hoa_don_van_don').select('*').eq('hoa_don_id',id).eq('la_cont_chinh',true);
+  const{data:hd}=await db.from('hoa_don').select('*').eq('id',id).single();
+  if(!hd||!hdvds?.length){toast('Không tìm thấy thông tin','error');return;}
+
   const main=hdvds[0];
   // Tạo chi_ho record
   await db.from('chi_ho').insert({
