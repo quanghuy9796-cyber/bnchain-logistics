@@ -197,8 +197,9 @@ Lưu ý: số cont thường xuất hiện sau chữ "Công-te-nơ số:" hoặc
   const data=await response.json();
   if(data.error) throw new Error('Gemini: '+data.error);
   const text=data.text||'{}';
-  const clean=text.replace(/\`\`\`json|\`\`\`/g,'').trim();
-  const ai=JSON.parse(clean);
+  const jsonMatch=text.match(/\{[\s\S]*\}/);
+  if(!jsonMatch) throw new Error('AI không trả về JSON hợp lệ');
+  const ai=JSON.parse(jsonMatch[0]);
   
   // Try to match with van_don
   const matched=await matchContToVanDon(ai);
