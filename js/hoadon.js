@@ -1,5 +1,29 @@
 // HOADON.JS — Upload & Xử lý Hóa Đơn, AI Scan
-// Requires: config.js
+// Requires: config.js, pdf-lib (CDN)
+
+// Tách từng trang PDF thành File riêng, trả về array File
+async function splitPdfPages(file){
+  if(file.type!=='application/pdf') return [file]; // ảnh → giữ nguyên
+  try{
+    const ab=await file.arrayBuffer();
+    const srcDoc=await PDFLib.PDFDocument.load(ab,{ignoreEncryption:true});
+    const total=srcDoc.getPageCount();
+    if(total<=1) return [file]; // 1 trang → không cần tách
+    const pages=[];
+    for(let i=0;i<total;i++){
+      const newDoc=await PDFLib.PDFDocument.create();
+      const [copied]=await newDoc.copyPages(srcDoc,[i]);
+      newDoc.addPage(copied);
+      const bytes=await newDoc.save();
+      const pageName=file.name.replace(/\.pdf$/i,`_trang${i+1}.pdf`);
+      pages.push(new File([bytes],pageName,{type:'application/pdf'}));
+    }
+    return pages;
+  }catch(e){
+    console.warn('pdf-lib split error, fallback to original:',e);
+    return [file]; // fallback nếu pdf-lib lỗi
+  }
+}
 
 async function pgHoaDon(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
@@ -105,42 +129,50 @@ function handleHDDrop(e){
 
 async function handleHDFiles(files){
   if(!files||!files.length)return;
-  const fileArr=Array.from(files).slice(0,20);
-  
+  const rawArr=Array.from(files).slice(0,20);
+
   // Show progress
   document.getElementById('hd-progress-area').style.display='block';
   document.getElementById('hd-result-area').style.display='none';
-  
+  document.getElementById('hd-progress-label').textContent='Đang chuẩn bị file...';
+  document.getElementById('hd-progress-bar').style.width='0%';
+
+  // Bước 1: Tách tất cả PDF nhiều trang → flat array các file đơn trang
+  const fileArr=[];
+  for(const f of rawArr){
+    const pages=await splitPdfPages(f);
+    fileArr.push(...pages);
+  }
+
   const results={matched:[],pending:[]};
-  
+
   for(let i=0;i<fileArr.length;i++){
     const file=fileArr[i];
     const pct=Math.round((i/fileArr.length)*100);
     document.getElementById('hd-progress-bar').style.width=pct+'%';
     document.getElementById('hd-progress-label').textContent=`Đang xử lý ${i+1}/${fileArr.length}: ${file.name}`;
-    
-    // Update file list
+
     document.getElementById('hd-file-list').innerHTML=fileArr.map((f,j)=>`
       <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">
         <i class="ti ti-${j<i?'check-circle':j===i?'loader-2':''}" style="color:${j<i?'var(--success)':j===i?'var(--teal)':'var(--text-muted)'};${j===i?'animation:spin 1s linear infinite':''}"></i>
         <span style="flex:1">${f.name}</span>
         <span style="color:var(--text-muted);font-size:11px">${j<i?'✅ Xong':j===i?'🔄 Đang đọc...':'⏳ Chờ'}</span>
       </div>`).join('');
-    
+
     try{
+      // AI đọc + upload Storage song song — mỗi file đã là 1 trang riêng
       const[hdList,storagePath]=await Promise.all([
         processOneHD(file),
         uploadHDToStorage(file),
       ]);
-      for(let k=0;k<hdList.length;k++){
-        const hdData=hdList[k];
-        const pageLabel=hdList.length>1?` (trang ${k+1}/${hdList.length})`:'';
+      // processOneHD giờ luôn trả về array 1 phần tử (vì file đã là 1 trang)
+      for(const hdData of hdList){
         try{
-          const saved=await saveHoaDon(hdData,file.name+pageLabel,storagePath);
-          if(hdData.trang_thai==='da_khop') results.matched.push({...hdData,id:saved.id,file:file.name+pageLabel});
-          else results.pending.push({...hdData,id:saved.id,file:file.name+pageLabel,ly_do:hdData.ly_do_cho});
+          const saved=await saveHoaDon(hdData,file.name,storagePath);
+          if(hdData.trang_thai==='da_khop') results.matched.push({...hdData,id:saved.id,file:file.name});
+          else results.pending.push({...hdData,id:saved.id,file:file.name,ly_do:hdData.ly_do_cho});
         }catch(saveErr){
-          results.pending.push({file:file.name+pageLabel,ly_do:'Lỗi lưu: '+saveErr.message,tong_tien:0});
+          results.pending.push({file:file.name,ly_do:'Lỗi lưu: '+saveErr.message,tong_tien:0});
         }
       }
     }catch(err){
@@ -148,9 +180,9 @@ async function handleHDFiles(files){
     }
   }
 
-  // Done — update file list: tất cả xong
+  // Done
   document.getElementById('hd-progress-bar').style.width='100%';
-  document.getElementById('hd-progress-label').textContent=`✅ Hoàn tất ${fileArr.length} hóa đơn`;
+  document.getElementById('hd-progress-label').textContent=`✅ Hoàn tất ${fileArr.length} trang`;
   document.getElementById('hd-file-list').innerHTML=fileArr.map(f=>`
     <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">
       <i class="ti ti-check-circle" style="color:var(--success)"></i>
@@ -158,7 +190,7 @@ async function handleHDFiles(files){
       <span style="color:var(--text-muted);font-size:11px">✅ Xong</span>
     </div>`).join('');
 
-  // Reload queue trước, rồi show kết quả tóm tắt + scroll xuống
+  // Reload queue + scroll xuống kết quả
   await pgHoaDon(document.getElementById('content'));
   showHDResults(results);
   setTimeout(()=>{
@@ -179,11 +211,9 @@ async function processOneHD(file){
   const isImage=file.type.startsWith('image/');
   const mediaType=isImage?file.type:'application/pdf';
 
-  // PDF nhiều trang = nhiều HĐ → trả về mảng
-  // Ảnh 1 trang → trả về mảng 1 phần tử
-  const prompt=`Đây là file hóa đơn/biên lai dịch vụ logistics tại cảng Hải Phòng, Việt Nam.
-File có thể có NHIỀU TRANG, mỗi trang là 1 hóa đơn riêng biệt.
-Đọc TẤT CẢ các trang. Trả về JSON ARRAY (chỉ array thuần, không markdown, không giải thích):
+  // Mỗi file đã được tách thành 1 trang riêng → chỉ cần đọc 1 HĐ
+  const prompt=`Đây là 1 trang hóa đơn/biên lai dịch vụ logistics tại cảng Hải Phòng, Việt Nam.
+Trả về JSON ARRAY với đúng 1 phần tử (chỉ array thuần, không markdown, không giải thích):
 [
   {
     "so_hd": "số hóa đơn hoặc số biên lai",
@@ -305,16 +335,14 @@ async function uploadHDToStorage(file){
     const{error}=await db.storage.from('hoa-don').upload(path,file,{contentType:file.type,upsert:false});
     if(error){console.warn('Storage upload (non-fatal):',error.message);return null;}
     return path;
-  }catch(e){console.warn('Storage upload exception:',e);return null;}
+  }catch(e){console.warn('Storage exception:',e);return null;}
 }
 
 async function xemHoaDon(hdId,storagePath){
   if(!storagePath){
-    if(hdId){
-      const{data:hd}=await db.from('hoa_don').select('storage_path,file_name').eq('id',hdId).single();
-      if(hd?.storage_path) storagePath=hd.storage_path;
-      else{toast('Chưa có file đính kèm cho hóa đơn này','error');return;}
-    } else {toast('Không tìm thấy file','error');return;}
+    const{data:hd}=await db.from('hoa_don').select('storage_path,file_name').eq('id',hdId).single();
+    if(hd?.storage_path) storagePath=hd.storage_path;
+    else{toast('Chưa có file đính kèm','error');return;}
   }
   const{data,error}=await db.storage.from('hoa-don').createSignedUrl(storagePath,3600);
   if(error||!data?.signedUrl){toast('Không thể tải file: '+(error?.message||'Lỗi Storage'),'error');return;}
@@ -324,30 +352,19 @@ async function xemHoaDon(hdId,storagePath){
   bg.innerHTML=`<div class="modal" style="width:90vw;max-width:900px;height:90vh;display:flex;flex-direction:column">
   <div class="modal-head" style="flex-shrink:0">
     <h3><i class="ti ti-file-invoice" style="color:var(--teal)"></i> Xem hóa đơn</h3>
-    <div style="display:flex;gap:6px;align-items:center">
+    <div style="display:flex;gap:6px">
       <a href="${url}" download target="_blank" class="btn btn-sm btn-teal"><i class="ti ti-download"></i> Tải về</a>
       <button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
   </div>
-  <div style="flex:1;overflow:hidden;border-radius:0 0 var(--rl) var(--rl)">
+  <div style="flex:1;overflow:hidden">
     ${isPdf
       ?`<iframe src="${url}" style="width:100%;height:100%;border:none"></iframe>`
       :`<div style="width:100%;height:100%;overflow:auto;display:flex;align-items:center;justify-content:center;background:#f5f5f5">
-          <img src="${url}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px">
-        </div>`
-    }
-  </div>
-  </div>`;
+          <img src="${url}" style="max-width:100%;max-height:100%;object-fit:contain">
+        </div>`}
+  </div></div>`;
   document.body.appendChild(bg);
-}
-
-async function downloadHD(hdId){
-  const{data:hd}=await db.from('hoa_don').select('storage_path,file_name').eq('id',hdId).single();
-  if(!hd?.storage_path){toast('Chưa có file đính kèm','error');return;}
-  const{data,error}=await db.storage.from('hoa-don').createSignedUrl(hd.storage_path,300);
-  if(error||!data?.signedUrl){toast('Lỗi tạo link tải','error');return;}
-  const a=document.createElement('a');a.href=data.signedUrl;a.download=hd.file_name||'hoadon';
-  document.body.appendChild(a);a.click();document.body.removeChild(a);
 }
 
 async function saveHoaDon(hd,fileName,storagePath=null){
@@ -419,9 +436,7 @@ function showHDResults(results){
       ⚠️ ${h.file} — ${h.ly_do||'Lỗi xử lý'}
     </div>`).join('')}
   </div>`:''}
-  <div style="font-size:11px;color:var(--text-muted);text-align:center;padding:6px 0">
-    ↓ Danh sách queue đã được cập nhật bên dưới
-  </div>`;
+  <div style="font-size:11px;color:var(--text-muted);text-align:center;padding:6px 0">↓ Danh sách queue đã cập nhật bên dưới</div>`;
 }
 
 async function xuLyHD(id){
@@ -603,7 +618,7 @@ async function confirmDuyetHD(id,skipReload=false){
     ghi_chu:`HĐ ${hd.so_hd||''} | ${hd.ten_don_vi_xuat||''}${contPhuStr}`,
   });
 
-  // Tạo chi_ho THAM CHIẾU cho các cont phụ — không tính tiền, chỉ để note
+  // Tạo chi_ho THAM CHIẾU cho các cont phụ
   for(const vdPhu of vdPhuList){
     const contChinh=main.so_cont||main.ma_don;
     const contPhiChinh=contPhu.filter(c=>c!==vdPhu.so_cont);
@@ -627,13 +642,12 @@ async function confirmDuyetHD(id,skipReload=false){
     });
   }
 
-  // Cập nhật trạng thái HĐ và liên kết
   await db.from('hoa_don').update({trang_thai:'da_duyet',nguoi_duyet:CU?.id,ngay_duyet:new Date().toISOString()}).eq('id',id);
   await db.from('hoa_don_van_don').update({da_tao_chi_ho:true}).eq('hoa_don_id',id);
 
   if(!skipReload){
     const msg=vdPhuList.length>0
-      ?`✅ Đã duyệt — Tạo chi hộ chính + ${vdPhuList.length} note tham chiếu cho các cont liên quan`
+      ?`✅ Đã duyệt — Tạo chi hộ chính + ${vdPhuList.length} tham chiếu`
       :'✅ Đã duyệt — Chi hộ đã được tạo tự động';
     toast(msg);
     pgHoaDon(document.getElementById('content'));
