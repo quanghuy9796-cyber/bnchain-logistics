@@ -846,10 +846,29 @@ async function updateChiHo(chiHoId, vdId){
   if(o){DP_TAB='chiho';await renderDP(o);}
 }
 
-async function deleteChiHo(chiHoId, vdId){
+async function deleteChiHo(chiHoId,vdId){
   if(!confirm('Xóa khoản chi phí này?'))return;
+
+  // Lấy thông tin chi_ho trước khi xóa (cần hoa_don_id)
+  const{data:ch}=await db.from('chi_ho').select('hoa_don_id,la_tham_chieu').eq('id',chiHoId).single();
+
   const{error}=await db.from('chi_ho').delete().eq('id',chiHoId);
   if(error){toast('Lỗi: '+error.message,'error');return;}
+
+  // Nếu có liên kết hoa_don → kiểm tra còn chi_ho nào khác dùng HĐ đó không
+  if(ch?.hoa_don_id){
+    const{data:conLai}=await db.from('chi_ho').select('id').eq('hoa_don_id',ch.hoa_don_id);
+    if(!conLai?.length){
+      // Không còn chi_ho nào → xóa file Storage + record hoa_don
+      const{data:hd}=await db.from('hoa_don').select('storage_path').eq('id',ch.hoa_don_id).single();
+      if(hd?.storage_path){
+        await db.storage.from('hoa-don').remove([hd.storage_path]);
+      }
+      await db.from('hoa_don_van_don').delete().eq('hoa_don_id',ch.hoa_don_id);
+      await db.from('hoa_don').delete().eq('id',ch.hoa_don_id);
+    }
+  }
+
   toast('Đã xóa chi phí');
   const o=ORDERS.find(x=>x.id===vdId);
   if(o){DP_TAB='chiho';await renderDP(o);}
