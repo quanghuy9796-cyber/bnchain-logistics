@@ -328,7 +328,6 @@ function renderTabChiHo(o,list,editable){
       </div>
       <div style="color:var(--text-muted);margin-top:4px;font-size:11px">
         HĐ: <strong>${c.chung_tu||'—'}</strong> · Ngày: ${fmtDate(c.ngay_chi)}
-        ${c.hoa_don_id?`<button class="btn btn-xs" style="font-size:10px;padding:1px 6px;height:auto;line-height:1.6;margin-left:6px" onclick="xemHoaDon('${c.hoa_don_id}',null)"><i class="ti ti-eye" style="font-size:10px"></i></button>`:''}
       </div>
       <div style="color:#92400e;margin-top:2px;font-size:11px;word-break:break-all;white-space:normal;line-height:1.5;overflow-wrap:break-word">${(c.ghi_chu||'').replace(/\[Tham chiếu\][^|]*\|/,'').trim()}</div>
     </div>`).join('')}
@@ -874,6 +873,7 @@ async function saveChiHo(vdId,maDon){
     nguoi_chi:document.getElementById('ch-nguoi').value,
     chung_tu:document.getElementById('ch-ct').value,
     hoa_don_khach:document.getElementById('ch-hdkh').value==='true',
+    da_thu_lai:false,
     ghi_chu:document.getElementById('ch-ghichu').value,
   };
   const{error}=await db.from('chi_ho').insert(data);
@@ -888,21 +888,35 @@ async function taiTatCaHD(vanDonId){
     .select('hoa_don_id').eq('van_don_id',vanDonId)
     .not('hoa_don_id','is',null).eq('la_tham_chieu',false);
   if(!chiHoList?.length){toast('Không có HĐ nào để tải','error');return;}
+
   const hdIds=[...new Set(chiHoList.map(c=>c.hoa_don_id))];
-  const{data:hdList}=await db.from('hoa_don').select('id,storage_path,file_name,so_hd').in('id',hdIds);
+  const{data:hdList}=await db.from('hoa_don')
+    .select('id,storage_path,file_name,so_hd').in('id',hdIds);
   const coFile=(hdList||[]).filter(h=>h.storage_path);
   if(!coFile.length){toast('Chưa có file đính kèm','error');return;}
+
   toast(`Đang tải ${coFile.length} file...`);
-  for(let i=0;i<coFile.length;i++){
-    const hd=coFile[i];
-    const{data:su}=await db.storage.from('hoa-don').createSignedUrl(hd.storage_path,300);
-    if(!su?.signedUrl) continue;
-    await new Promise(res=>setTimeout(res,400*i));
-    const a=document.createElement('a');
-    a.href=su.signedUrl;a.download=hd.file_name||`hoadon_${hd.so_hd||i+1}.pdf`;
-    a.target='_blank';document.body.appendChild(a);a.click();document.body.removeChild(a);
+  let ok=0;
+  for(const hd of coFile){
+    try{
+      const{data:su}=await db.storage.from('hoa-don').createSignedUrl(hd.storage_path,300);
+      if(!su?.signedUrl) continue;
+      // Dùng fetch + Blob để download thẳng, không mở tab mới
+      const res=await fetch(su.signedUrl);
+      const blob=await res.blob();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;
+      a.download=hd.file_name||`hoadon_${hd.so_hd||ok+1}.pdf`;
+      document.body.appendChild(a);a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      ok++;
+      // Delay nhỏ giữa các file để browser xử lý kịp
+      await new Promise(r=>setTimeout(r,500));
+    }catch(e){console.warn('Lỗi tải file',hd.file_name,e);}
   }
-  toast(`✅ Đã tải ${coFile.length} hóa đơn`);
+  toast(`✅ Đã tải ${ok}/${coFile.length} hóa đơn`);
 }
 
 // ==================== BẢNG ĐIỀU VẬN ====================
