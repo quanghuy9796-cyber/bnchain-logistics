@@ -299,6 +299,7 @@ function renderTabChiHo(o,list,editable){
         ${(c.tien_tra_thau||0)>0?`<span style="font-size:10px;background:#fef3c7;color:var(--warning);padding:1px 6px;border-radius:8px">Trả thầu: ${fmt(c.tien_tra_thau)}</span>`:''}
         ${(c.tien_tra_laixe||0)>0?`<span style="font-size:10px;background:#ede9fe;color:#7c3aed;padding:1px 6px;border-radius:8px">Trả LX: ${fmt(c.tien_tra_laixe)}</span>`:''}
         ${c.hoa_don_khach?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:8px">HĐ KH</span>':''}
+        ${c.hoa_don_id?`<button class="btn btn-xs" style="font-size:10px;padding:1px 7px;height:auto;line-height:1.6" onclick="xemHoaDon('${c.hoa_don_id}',null)" title="Xem hóa đơn gốc"><i class="ti ti-file-invoice" style="font-size:11px"></i> Xem HĐ</button>`:''}
       </div>
     </div>
     <div class="chi-ho-right">
