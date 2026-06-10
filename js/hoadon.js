@@ -1,29 +1,5 @@
 // HOADON.JS — Upload & Xử lý Hóa Đơn, AI Scan
-// Requires: config.js, pdf-lib (CDN)
-
-// Tách từng trang PDF thành File riêng, trả về array File
-async function splitPdfPages(file){
-  if(file.type!=='application/pdf') return [file]; // ảnh → giữ nguyên
-  try{
-    const ab=await file.arrayBuffer();
-    const srcDoc=await PDFLib.PDFDocument.load(ab,{ignoreEncryption:true});
-    const total=srcDoc.getPageCount();
-    if(total<=1) return [file]; // 1 trang → không cần tách
-    const pages=[];
-    for(let i=0;i<total;i++){
-      const newDoc=await PDFLib.PDFDocument.create();
-      const [copied]=await newDoc.copyPages(srcDoc,[i]);
-      newDoc.addPage(copied);
-      const bytes=await newDoc.save();
-      const pageName=file.name.replace(/\.pdf$/i,`_trang${i+1}.pdf`);
-      pages.push(new File([bytes],pageName,{type:'application/pdf'}));
-    }
-    return pages;
-  }catch(e){
-    console.warn('pdf-lib split error, fallback to original:',e);
-    return [file]; // fallback nếu pdf-lib lỗi
-  }
-}
+// Requires: config.js
 
 async function pgHoaDon(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
@@ -81,7 +57,6 @@ async function pgHoaDon(c){
         <td style="font-size:11px;color:var(--danger)">${h.ly_do_cho||'Chưa khớp cont'}</td>
         <td style="font-size:11px">${h.ten_nguoi_upload||'—'}</td>
         <td><div style="display:flex;gap:4px">
-          ${h.storage_path?`<button class="btn btn-xs" onclick="xemHoaDon('${h.id}','${h.storage_path}')" title="Xem file"><i class="ti ti-eye"></i></button>`:''}
           <button class="btn btn-xs btn-teal" onclick="xuLyHD('${h.id}')"><i class="ti ti-link"></i> Xử lý</button>
           <button class="btn btn-xs btn-danger" onclick="huyHD('${h.id}')"><i class="ti ti-x"></i></button>
         </div></td>
@@ -109,7 +84,6 @@ async function pgHoaDon(c){
         <td style="font-size:11px">${(h.so_cont_list||[]).join(', ')||'—'}</td>
         <td><span class="tag ${h.ai_confidence==='cao'?'tag-done':h.ai_confidence==='trung_binh'?'tag-cho':'tag-huy'}">${h.ai_confidence==='cao'?'Cao':h.ai_confidence==='trung_binh'?'TB':'Thấp'}</span></td>
         <td><div style="display:flex;gap:4px">
-          ${h.storage_path?`<button class="btn btn-xs" onclick="xemHoaDon('${h.id}','${h.storage_path}')" title="Xem file"><i class="ti ti-eye"></i></button>`:''}
           ${canSee(['ke_toan','ceo'])?`<button class="btn btn-xs btn-success" onclick="duyetHD('${h.id}')"><i class="ti ti-check"></i> Duyệt</button>`:''}
           <button class="btn btn-xs btn-danger" onclick="huyHD('${h.id}')"><i class="ti ti-x"></i></button>
         </div></td>
@@ -129,74 +103,52 @@ function handleHDDrop(e){
 
 async function handleHDFiles(files){
   if(!files||!files.length)return;
-  const rawArr=Array.from(files).slice(0,20);
-
+  const fileArr=Array.from(files).slice(0,20);
+  
   // Show progress
   document.getElementById('hd-progress-area').style.display='block';
   document.getElementById('hd-result-area').style.display='none';
-  document.getElementById('hd-progress-label').textContent='Đang chuẩn bị file...';
-  document.getElementById('hd-progress-bar').style.width='0%';
-
-  // Bước 1: Tách tất cả PDF nhiều trang → flat array các file đơn trang
-  const fileArr=[];
-  for(const f of rawArr){
-    const pages=await splitPdfPages(f);
-    fileArr.push(...pages);
-  }
-
+  
   const results={matched:[],pending:[]};
-
+  
   for(let i=0;i<fileArr.length;i++){
     const file=fileArr[i];
     const pct=Math.round((i/fileArr.length)*100);
     document.getElementById('hd-progress-bar').style.width=pct+'%';
     document.getElementById('hd-progress-label').textContent=`Đang xử lý ${i+1}/${fileArr.length}: ${file.name}`;
-
+    
+    // Update file list
     document.getElementById('hd-file-list').innerHTML=fileArr.map((f,j)=>`
       <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">
         <i class="ti ti-${j<i?'check-circle':j===i?'loader-2':''}" style="color:${j<i?'var(--success)':j===i?'var(--teal)':'var(--text-muted)'};${j===i?'animation:spin 1s linear infinite':''}"></i>
         <span style="flex:1">${f.name}</span>
         <span style="color:var(--text-muted);font-size:11px">${j<i?'✅ Xong':j===i?'🔄 Đang đọc...':'⏳ Chờ'}</span>
       </div>`).join('');
-
+    
     try{
-      // AI đọc + upload Storage song song — mỗi file đã là 1 trang riêng
-      const[hdList,storagePath]=await Promise.all([
-        processOneHD(file),
-        uploadHDToStorage(file),
-      ]);
-      // processOneHD giờ luôn trả về array 1 phần tử (vì file đã là 1 trang)
-      for(const hdData of hdList){
+      const hdList=await processOneHD(file); // luôn trả về array
+      for(let k=0;k<hdList.length;k++){
+        const hdData=hdList[k];
+        const pageLabel=hdList.length>1?` (trang ${k+1}/${hdList.length})`:'';
         try{
-          const saved=await saveHoaDon(hdData,file.name,storagePath);
-          if(hdData.trang_thai==='da_khop') results.matched.push({...hdData,id:saved.id,file:file.name});
-          else results.pending.push({...hdData,id:saved.id,file:file.name,ly_do:hdData.ly_do_cho});
+          const saved=await saveHoaDon(hdData, file.name+pageLabel);
+          if(hdData.trang_thai==='da_khop') results.matched.push({...hdData,id:saved.id,file:file.name+pageLabel});
+          else results.pending.push({...hdData,id:saved.id,file:file.name+pageLabel,ly_do:hdData.ly_do_cho});
         }catch(saveErr){
-          results.pending.push({file:file.name,ly_do:'Lỗi lưu: '+saveErr.message,tong_tien:0});
+          results.pending.push({file:file.name+pageLabel,ly_do:'Lỗi lưu: '+saveErr.message,tong_tien:0});
         }
       }
     }catch(err){
       results.pending.push({file:file.name,ly_do:'Lỗi đọc AI: '+err.message,tong_tien:0});
     }
   }
-
+  
   // Done
   document.getElementById('hd-progress-bar').style.width='100%';
-  document.getElementById('hd-progress-label').textContent=`✅ Hoàn tất ${fileArr.length} trang`;
-  document.getElementById('hd-file-list').innerHTML=fileArr.map(f=>`
-    <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">
-      <i class="ti ti-check-circle" style="color:var(--success)"></i>
-      <span style="flex:1">${f.name}</span>
-      <span style="color:var(--text-muted);font-size:11px">✅ Xong</span>
-    </div>`).join('');
-
-  // Reload queue + scroll xuống kết quả
-  await pgHoaDon(document.getElementById('content'));
+  document.getElementById('hd-progress-label').textContent=`✅ Hoàn tất ${fileArr.length} hóa đơn`;
+  
+  // Show results
   showHDResults(results);
-  setTimeout(()=>{
-    const ra=document.getElementById('hd-result-area');
-    if(ra) ra.scrollIntoView({behavior:'smooth',block:'start'});
-  },100);
 }
 
 async function processOneHD(file){
@@ -211,9 +163,11 @@ async function processOneHD(file){
   const isImage=file.type.startsWith('image/');
   const mediaType=isImage?file.type:'application/pdf';
 
-  // Mỗi file đã được tách thành 1 trang riêng → chỉ cần đọc 1 HĐ
-  const prompt=`Đây là 1 trang hóa đơn/biên lai dịch vụ logistics tại cảng Hải Phòng, Việt Nam.
-Trả về JSON ARRAY với đúng 1 phần tử (chỉ array thuần, không markdown, không giải thích):
+  // PDF nhiều trang = nhiều HĐ → trả về mảng
+  // Ảnh 1 trang → trả về mảng 1 phần tử
+  const prompt=`Đây là file hóa đơn/biên lai dịch vụ logistics tại cảng Hải Phòng, Việt Nam.
+File có thể có NHIỀU TRANG, mỗi trang là 1 hóa đơn riêng biệt.
+Đọc TẤT CẢ các trang. Trả về JSON ARRAY (chỉ array thuần, không markdown, không giải thích):
 [
   {
     "so_hd": "số hóa đơn hoặc số biên lai",
@@ -326,48 +280,7 @@ async function matchContToVanDon(ai){
   };
 }
 
-async function uploadHDToStorage(file){
-  try{
-    const now=new Date();
-    const ym=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;
-    const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-    const path=`hoadon/${ym}/${Date.now()}_${safeName}`;
-    const{error}=await db.storage.from('hoa-don').upload(path,file,{contentType:file.type,upsert:false});
-    if(error){console.warn('Storage upload (non-fatal):',error.message);return null;}
-    return path;
-  }catch(e){console.warn('Storage exception:',e);return null;}
-}
-
-async function xemHoaDon(hdId,storagePath){
-  if(!storagePath){
-    const{data:hd}=await db.from('hoa_don').select('storage_path,file_name').eq('id',hdId).single();
-    if(hd?.storage_path) storagePath=hd.storage_path;
-    else{toast('Chưa có file đính kèm','error');return;}
-  }
-  const{data,error}=await db.storage.from('hoa-don').createSignedUrl(storagePath,3600);
-  if(error||!data?.signedUrl){toast('Không thể tải file: '+(error?.message||'Lỗi Storage'),'error');return;}
-  const isPdf=storagePath.toLowerCase().endsWith('.pdf');
-  const url=data.signedUrl;
-  const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  bg.innerHTML=`<div class="modal" style="width:90vw;max-width:900px;height:90vh;display:flex;flex-direction:column">
-  <div class="modal-head" style="flex-shrink:0">
-    <h3><i class="ti ti-file-invoice" style="color:var(--teal)"></i> Xem hóa đơn</h3>
-    <div style="display:flex;gap:6px">
-      <a href="${url}" download target="_blank" class="btn btn-sm btn-teal"><i class="ti ti-download"></i> Tải về</a>
-      <button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
-    </div>
-  </div>
-  <div style="flex:1;overflow:hidden">
-    ${isPdf
-      ?`<iframe src="${url}" style="width:100%;height:100%;border:none"></iframe>`
-      :`<div style="width:100%;height:100%;overflow:auto;display:flex;align-items:center;justify-content:center;background:#f5f5f5">
-          <img src="${url}" style="max-width:100%;max-height:100%;object-fit:contain">
-        </div>`}
-  </div></div>`;
-  document.body.appendChild(bg);
-}
-
-async function saveHoaDon(hd,fileName,storagePath=null){
+async function saveHoaDon(hd, fileName){
   const{data,error}=await db.from('hoa_don').insert({
     so_hd:hd.so_hd,
     ngay_hd:hd.ngay_hd,
@@ -383,7 +296,6 @@ async function saveHoaDon(hd,fileName,storagePath=null){
     nguoi_upload:CU?.id,
     ten_nguoi_upload:CU?.ho_ten,
     file_name:fileName,
-    storage_path:storagePath||null,
   }).select().single();
   if(error)throw new Error(error.message);
   
@@ -436,7 +348,9 @@ function showHDResults(results){
       ⚠️ ${h.file} — ${h.ly_do||'Lỗi xử lý'}
     </div>`).join('')}
   </div>`:''}
-  <div style="font-size:11px;color:var(--text-muted);text-align:center;padding:6px 0">↓ Danh sách queue đã cập nhật bên dưới</div>`;
+  <button class="btn btn-teal" style="width:100%;justify-content:center" onclick="pgHoaDon(document.getElementById('content'))">
+    <i class="ti ti-refresh"></i> Xem danh sách queue
+  </button>`;
 }
 
 async function xuLyHD(id){
@@ -529,7 +443,6 @@ async function saveXuLyHD(hdId){
     tien_tra_thau:0,tien_tra_laixe:0,
     nguoi_chi:hd.ten_nguoi_upload||'OPS',
     chung_tu:hd.so_hd,
-    hoa_don_id:hdId,
     hoa_don_khach:true,
     da_thu_lai:false,
     ghi_chu:`HĐ ${hd.so_hd||''} | ${hd.ten_don_vi_xuat||''} | Nhập tay: ${cont}${gc?(' | '+gc):''}`,
@@ -546,41 +459,105 @@ async function duyetHD(id){
   const{data:hd}=await db.from('hoa_don').select('*').eq('id',id).single();
   if(!hd||!hdvds?.length){toast('Không tìm thấy thông tin','error');return;}
 
-  // Tìm thông tin vận đơn để hiển thị xác nhận
   const main=hdvds[0];
   const vd=ORDERS.find(x=>x.id===main.van_don_id)||{ma_don:main.ma_don,so_cont:main.so_cont,ten_khach:'—'};
 
-  // Modal xác nhận trước khi tạo chi hộ
+  // Lấy signed URL nếu có file
+  let previewHtml='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:13px;flex-direction:column;gap:8px"><i class="ti ti-file-off" style="font-size:32px"></i>Chưa có file đính kèm</div>';
+  if(hd.storage_path){
+    const{data:su}=await db.storage.from('hoa-don').createSignedUrl(hd.storage_path,3600);
+    if(su?.signedUrl){
+      const isPdf=hd.storage_path.toLowerCase().endsWith('.pdf');
+      previewHtml=isPdf
+        ?`<iframe src="${su.signedUrl}" style="width:100%;height:100%;border:none"></iframe>`
+        :`<div style="width:100%;height:100%;overflow:auto;display:flex;align-items:center;justify-content:center;background:#f0f0f0">
+            <img src="${su.signedUrl}" style="max-width:100%;max-height:100%;object-fit:contain">
+          </div>`;
+    }
+  }
+
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  bg.innerHTML=`<div class="modal" style="width:480px">
-  <div class="modal-head"><h3><i class="ti ti-check-circle" style="color:var(--success)"></i> Xác nhận duyệt hóa đơn</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-  <div class="modal-body" style="display:block">
-    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--r);padding:12px 14px;margin-bottom:12px">
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Chi phí sẽ được tạo</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
-        <div><span style="color:var(--text-muted)">Loại DV:</span> <strong>${hd.loai_dv||'—'}</strong></div>
-        <div><span style="color:var(--text-muted)">Số HĐ:</span> <strong>${hd.so_hd||'—'}</strong></div>
-        <div><span style="color:var(--text-muted)">Số tiền:</span> <strong class="text-orange">${fmtM(hd.tong_tien)}</strong></div>
-        <div><span style="color:var(--text-muted)">Ngày HĐ:</span> <strong>${hd.ngay_hd||'—'}</strong></div>
-        <div><span style="color:var(--text-muted)">Vận đơn:</span> <strong>${vd.ma_don}</strong></div>
-        <div><span style="color:var(--text-muted)">Số cont:</span> <strong style="font-family:monospace">${vd.so_cont||main.so_cont||'—'}</strong></div>
-        <div style="grid-column:1/-1"><span style="color:var(--text-muted)">Khách hàng:</span> <strong>${vd.ten_khach||'—'}</strong></div>
-        <div style="grid-column:1/-1"><span style="color:var(--text-muted)">Đơn vị xuất HĐ:</span> ${hd.ten_don_vi_xuat||'—'}</div>
+  bg.innerHTML=`<div class="modal" style="width:min(92vw,980px);height:85vh;display:flex;flex-direction:column">
+  <div class="modal-head" style="flex-shrink:0">
+    <h3><i class="ti ti-check-circle" style="color:var(--success)"></i> Duyệt hóa đơn — ${hd.so_hd||'Không có số HĐ'}</h3>
+    <button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:1fr 340px;overflow:hidden;gap:0">
+
+    <!-- TRÁI: Preview file -->
+    <div style="overflow:hidden;border-right:1px solid var(--border)">
+      ${previewHtml}
+    </div>
+
+    <!-- PHẢI: Thông tin + Duyệt -->
+    <div style="overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px">
+      <!-- Thông tin HĐ -->
+      <div style="background:var(--bg);border-radius:var(--r);padding:10px 12px;font-size:12px">
+        <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Thông tin hóa đơn</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;justify-content:space-between">
+            <span style="color:var(--text-muted)">Loại DV</span>
+            <strong>${hd.loai_dv||'—'}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <span style="color:var(--text-muted)">Số HĐ</span>
+            <strong style="color:var(--teal)">${hd.so_hd||'—'}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <span style="color:var(--text-muted)">Ngày HĐ</span>
+            <strong>${hd.ngay_hd||'—'}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <span style="color:var(--text-muted)">Đơn vị xuất</span>
+            <strong style="text-align:right;max-width:180px;word-break:break-word">${hd.ten_don_vi_xuat||'—'}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:5px;margin-top:2px">
+            <span style="color:var(--text-muted)">Số tiền</span>
+            <strong style="font-size:15px;color:var(--warning)">${fmtM(hd.tong_tien)}</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Thông tin vận đơn sẽ được gắn -->
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--r);padding:10px 12px;font-size:12px">
+        <div style="font-size:11px;color:var(--success);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Chi hộ sẽ tạo vào</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;justify-content:space-between">
+            <span style="color:var(--text-muted)">Vận đơn</span>
+            <strong>${vd.ma_don}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <span style="color:var(--text-muted)">Số cont</span>
+            <strong style="font-family:monospace">${vd.so_cont||main.so_cont||'—'}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <span style="color:var(--text-muted)">Khách hàng</span>
+            <strong>${vd.ten_khach||'—'}</strong>
+          </div>
+        </div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid #bbf7d0;font-size:11px;color:#166534">
+          <i class="ti ti-info-circle"></i> Sẽ vào <strong>Chi hộ có HĐ (Phần 2)</strong> của bảng kê
+        </div>
+      </div>
+
+      <div style="flex:1"></div>
+
+      <!-- Nút hành động -->
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button class="btn btn-success" style="width:100%;justify-content:center" onclick="confirmDuyetHD('${id}')">
+          <i class="ti ti-check"></i> Xác nhận duyệt
+        </button>
+        <button class="btn" style="width:100%;justify-content:center" onclick="closeModal()">
+          Hủy
+        </button>
       </div>
     </div>
-    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:8px 12px;font-size:11px;color:#92400e">
-      <i class="ti ti-info-circle"></i> Sau khi duyệt, chi phí sẽ tự động vào <strong>Chi hộ có HĐ (Phần 2)</strong> của vận đơn trên.
-    </div>
-  </div>
-  <div class="modal-foot">
-    <button class="btn" onclick="closeModal()">Hủy</button>
-    <button class="btn btn-success" onclick="confirmDuyetHD('${id}')"><i class="ti ti-check"></i> Xác nhận duyệt</button>
   </div>
   </div>`;
   document.body.appendChild(bg);
 }
 
-async function confirmDuyetHD(id,skipReload=false){
+async function confirmDuyetHD(id){
   closeModal();
   if(!canSee(['ke_toan','ceo'])){toast('Không có quyền','error');return;}
   const{data:hdvds}=await db.from('hoa_don_van_don').select('*').eq('hoa_don_id',id).eq('la_cont_chinh',true);
@@ -611,14 +588,13 @@ async function confirmDuyetHD(id,skipReload=false){
     tien_tra_thau:0,tien_tra_laixe:0,
     nguoi_chi:hd.ten_nguoi_upload||'OPS',
     chung_tu:hd.so_hd,
-    hoa_don_id:id,
     hoa_don_khach:true,
     da_thu_lai:false,
     la_tham_chieu:false,
     ghi_chu:`HĐ ${hd.so_hd||''} | ${hd.ten_don_vi_xuat||''}${contPhuStr}`,
   });
 
-  // Tạo chi_ho THAM CHIẾU cho các cont phụ
+  // Tạo chi_ho THAM CHIẾU cho các cont phụ — không tính tiền, chỉ để note
   for(const vdPhu of vdPhuList){
     const contChinh=main.so_cont||main.ma_don;
     const contPhiChinh=contPhu.filter(c=>c!==vdPhu.so_cont);
@@ -628,30 +604,28 @@ async function confirmDuyetHD(id,skipReload=false){
       ma_don:vdPhu.ma_don,
       loai_chi:hd.loai_dv||'Chi hộ HĐ',
       ngay_chi:hd.ngay_hd||today(),
-      so_tien:0,
+      so_tien:0,              // không tính tiền ở cont phụ
       tien_thu_khach:0,
       tien_tra_thau:0,tien_tra_laixe:0,
       nguoi_chi:hd.ten_nguoi_upload||'OPS',
       chung_tu:hd.so_hd,
-      hoa_don_id:id,
       hoa_don_khach:true,
       da_thu_lai:false,
-      la_tham_chieu:true,
-      so_tien_hd_goc:hd.tong_tien,
+      la_tham_chieu:true,     // flag: chỉ là note tham chiếu
+      so_tien_hd_goc:hd.tong_tien, // lưu tổng tiền HĐ gốc để tra cứu
       ghi_chu:`Tiền ghi nhận tại: ${cungVoiStr}`,
     });
   }
 
+  // Cập nhật trạng thái HĐ và liên kết
   await db.from('hoa_don').update({trang_thai:'da_duyet',nguoi_duyet:CU?.id,ngay_duyet:new Date().toISOString()}).eq('id',id);
   await db.from('hoa_don_van_don').update({da_tao_chi_ho:true}).eq('hoa_don_id',id);
 
-  if(!skipReload){
-    const msg=vdPhuList.length>0
-      ?`✅ Đã duyệt — Tạo chi hộ chính + ${vdPhuList.length} tham chiếu`
-      :'✅ Đã duyệt — Chi hộ đã được tạo tự động';
-    toast(msg);
-    pgHoaDon(document.getElementById('content'));
-  }
+  const msg=vdPhuList.length>0
+    ?`✅ Đã duyệt — Tạo chi hộ chính + ${vdPhuList.length} note tham chiếu cho các cont liên quan`
+    :'✅ Đã duyệt — Chi hộ đã được tạo tự động';
+  toast(msg);
+  pgHoaDon(document.getElementById('content'));
 }
 
 async function duyetTatCa(){
@@ -659,12 +633,8 @@ async function duyetTatCa(){
   if(!confirm('Duyệt tất cả hóa đơn đang chờ?'))return;
   const{data:list}=await db.from('hoa_don').select('id').eq('trang_thai','da_khop');
   if(!list?.length){toast('Không có HĐ nào chờ duyệt');return;}
-  let count=0;
-  for(const h of list){
-    try{await confirmDuyetHD(h.id,true);count++;}catch(e){console.error('Lỗi duyệt',h.id,e);}
-  }
-  toast(`✅ Đã duyệt ${count}/${list.length} hóa đơn`);
-  pgHoaDon(document.getElementById('content'));
+  for(const h of list) await duyetHD(h.id);
+  toast(`✅ Đã duyệt ${list.length} hóa đơn`);
 }
 
 async function huyHD(id){
