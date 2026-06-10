@@ -575,9 +575,16 @@ async function lockOrder(id){
 }
 
 async function refreshOrder(id){
+  // 1. Fetch full data trước (select *) để có đủ tất cả field kể cả loai_chuyen, loai_xe_hang...
   const{data}=await db.from('van_don').select('*').eq('id',id).single();
-  if(data){const idx=ORDERS.findIndex(x=>x.id===id);if(idx>=0)ORDERS[idx]=data;await renderDP(data);}
-  pgOrders(document.getElementById('content'));
+  // 2. Refresh danh sách — pgOrders ghi đè ORDERS bằng COLS-limited data
+  await pgOrders(document.getElementById('content'));
+  // 3. Patch lại ORDERS[idx] bằng full data để DP không bị mất field
+  if(data){
+    const idx=ORDERS.findIndex(x=>x.id===id);
+    if(idx>=0)ORDERS[idx]=data;
+    await renderDP(data);
+  }
 }
 
 // OPEN FORM (thêm mới)
