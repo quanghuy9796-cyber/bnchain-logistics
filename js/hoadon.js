@@ -57,6 +57,7 @@ async function pgHoaDon(c){
         <td style="font-size:11px;color:var(--danger)">${h.ly_do_cho||'Chưa khớp cont'}</td>
         <td style="font-size:11px">${h.ten_nguoi_upload||'—'}</td>
         <td><div style="display:flex;gap:4px">
+          ${h.storage_path?`<button class="btn btn-xs" onclick="xemHoaDon('${h.id}','${h.storage_path||''}')" title="Xem file"><i class="ti ti-eye"></i></button>`:''}
           <button class="btn btn-xs btn-teal" onclick="xuLyHD('${h.id}')"><i class="ti ti-link"></i> Xử lý</button>
           <button class="btn btn-xs btn-danger" onclick="huyHD('${h.id}')"><i class="ti ti-x"></i></button>
         </div></td>
@@ -84,6 +85,7 @@ async function pgHoaDon(c){
         <td style="font-size:11px">${(h.so_cont_list||[]).join(', ')||'—'}</td>
         <td><span class="tag ${h.ai_confidence==='cao'?'tag-done':h.ai_confidence==='trung_binh'?'tag-cho':'tag-huy'}">${h.ai_confidence==='cao'?'Cao':h.ai_confidence==='trung_binh'?'TB':'Thấp'}</span></td>
         <td><div style="display:flex;gap:4px">
+          ${h.storage_path?`<button class="btn btn-xs" onclick="xemHoaDon('${h.id}','${h.storage_path||''}')" title="Xem file"><i class="ti ti-eye"></i></button>`:''}
           ${canSee(['ke_toan','ceo'])?`<button class="btn btn-xs btn-success" onclick="duyetHD('${h.id}')"><i class="ti ti-check"></i> Duyệt</button>`:''}
           <button class="btn btn-xs btn-danger" onclick="huyHD('${h.id}')"><i class="ti ti-x"></i></button>
         </div></td>
@@ -126,12 +128,16 @@ async function handleHDFiles(files){
       </div>`).join('');
     
     try{
-      const hdList=await processOneHD(file); // luôn trả về array
+      // Upload file lên Storage + AI đọc song song
+      const[hdList,storagePath]=await Promise.all([
+        processOneHD(file),
+        uploadHDToStorage(file),
+      ]);
       for(let k=0;k<hdList.length;k++){
         const hdData=hdList[k];
         const pageLabel=hdList.length>1?` (trang ${k+1}/${hdList.length})`:'';
         try{
-          const saved=await saveHoaDon(hdData, file.name+pageLabel);
+          const saved=await saveHoaDon(hdData, file.name+pageLabel, storagePath);
           if(hdData.trang_thai==='da_khop') results.matched.push({...hdData,id:saved.id,file:file.name+pageLabel});
           else results.pending.push({...hdData,id:saved.id,file:file.name+pageLabel,ly_do:hdData.ly_do_cho});
         }catch(saveErr){
@@ -280,7 +286,80 @@ async function matchContToVanDon(ai){
   };
 }
 
-async function saveHoaDon(hd, fileName){
+async function uploadHDToStorage(file){
+  // Upload file lên bucket 'hoa-don' trong Supabase Storage
+  // Tên file: hoadon/<year>/<month>/<timestamp>_<sanitized_name>
+  try{
+    const now=new Date();
+    const ym=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;
+    const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const path=`hoadon/${ym}/${Date.now()}_${safeName}`;
+    const{error}=await db.storage.from('hoa-don').upload(path, file,{
+      contentType:file.type,
+      upsert:false,
+    });
+    if(error){
+      console.warn('Storage upload error (non-fatal):',error.message);
+      return null; // không block luồng chính
+    }
+    return path;
+  }catch(e){
+    console.warn('Storage upload exception (non-fatal):',e);
+    return null;
+  }
+}
+
+async function xemHoaDon(hdId, storagePath){
+  // Nếu có storagePath → lấy URL tạm thời để xem
+  // Nếu không → báo không có file
+  if(!storagePath){
+    // Thử lấy từ DB nếu gọi từ nơi khác
+    if(hdId){
+      const{data:hd}=await db.from('hoa_don').select('storage_path,file_name').eq('id',hdId).single();
+      if(hd?.storage_path) storagePath=hd.storage_path;
+      else{toast('Chưa có file đính kèm cho hóa đơn này','error');return;}
+    } else {toast('Không tìm thấy file','error');return;}
+  }
+  // Tạo signed URL có hiệu lực 60 phút
+  const{data,error}=await db.storage.from('hoa-don').createSignedUrl(storagePath,3600);
+  if(error||!data?.signedUrl){toast('Không thể tải file: '+(error?.message||'Lỗi Storage'),'error');return;}
+
+  // Detect file type từ đường dẫn
+  const isPdf=storagePath.toLowerCase().includes('.pdf');
+  const url=data.signedUrl;
+
+  const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
+  bg.innerHTML=`<div class="modal" style="width:90vw;max-width:900px;height:90vh;display:flex;flex-direction:column">
+  <div class="modal-head" style="flex-shrink:0">
+    <h3><i class="ti ti-file-invoice" style="color:var(--teal)"></i> Xem hóa đơn</h3>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a href="${url}" download target="_blank" class="btn btn-sm btn-teal"><i class="ti ti-download"></i> Tải về</a>
+      <button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
+    </div>
+  </div>
+  <div style="flex:1;overflow:hidden;border-radius:0 0 var(--rl) var(--rl)">
+    ${isPdf
+      ?`<iframe src="${url}" style="width:100%;height:100%;border:none"></iframe>`
+      :`<div style="width:100%;height:100%;overflow:auto;display:flex;align-items:center;justify-content:center;background:#f5f5f5">
+          <img src="${url}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px" onerror="this.parentNode.innerHTML='<div style=padding:20px;color:var(--danger)>Không thể hiển thị ảnh</div>'">
+        </div>`
+    }
+  </div>
+  </div>`;
+  document.body.appendChild(bg);
+}
+
+async function downloadHD(hdId){
+  const{data:hd}=await db.from('hoa_don').select('storage_path,file_name').eq('id',hdId).single();
+  if(!hd?.storage_path){toast('Chưa có file đính kèm','error');return;}
+  const{data,error}=await db.storage.from('hoa-don').createSignedUrl(hd.storage_path,300);
+  if(error||!data?.signedUrl){toast('Lỗi tạo link tải: '+(error?.message||''),'error');return;}
+  // Trigger download
+  const a=document.createElement('a');a.href=data.signedUrl;a.download=hd.file_name||'hoadon';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+
+async function saveHoaDon(hd, fileName, storagePath=null){
   const{data,error}=await db.from('hoa_don').insert({
     so_hd:hd.so_hd,
     ngay_hd:hd.ngay_hd,
@@ -296,6 +375,7 @@ async function saveHoaDon(hd, fileName){
     nguoi_upload:CU?.id,
     ten_nguoi_upload:CU?.ho_ten,
     file_name:fileName,
+    storage_path:storagePath||null,
   }).select().single();
   if(error)throw new Error(error.message);
   
@@ -443,6 +523,7 @@ async function saveXuLyHD(hdId){
     tien_tra_thau:0,tien_tra_laixe:0,
     nguoi_chi:hd.ten_nguoi_upload||'OPS',
     chung_tu:hd.so_hd,
+    hoa_don_id:hdId,
     hoa_don_khach:true,
     da_thu_lai:false,
     ghi_chu:`HĐ ${hd.so_hd||''} | ${hd.ten_don_vi_xuat||''} | Nhập tay: ${cont}${gc?(' | '+gc):''}`,
@@ -524,6 +605,7 @@ async function confirmDuyetHD(id){
     tien_tra_thau:0,tien_tra_laixe:0,
     nguoi_chi:hd.ten_nguoi_upload||'OPS',
     chung_tu:hd.so_hd,
+    hoa_don_id:id,
     hoa_don_khach:true,
     da_thu_lai:false,
     la_tham_chieu:false,
@@ -545,6 +627,7 @@ async function confirmDuyetHD(id){
       tien_tra_thau:0,tien_tra_laixe:0,
       nguoi_chi:hd.ten_nguoi_upload||'OPS',
       chung_tu:hd.so_hd,
+      hoa_don_id:id,
       hoa_don_khach:true,
       da_thu_lai:false,
       la_tham_chieu:true,     // flag: chỉ là note tham chiếu
