@@ -11,7 +11,7 @@ function fmtDate(d){
 // Chi hộ, Detail Panel — Requires: config.js
 let ORDER_PAGE=1;
 const ORDER_PAGE_SIZE=25;
-let _filteredOrders=[];  // cache filtered list để chuyển trang không fetch DB
+let _filteredOrders=[];
 let _canM=false;
 
 async function pgOrders(c){
@@ -39,13 +39,13 @@ async function pgOrders(c){
     const mf=ORDER_FILTER==='all'||o.trang_thai===ORDER_FILTER;
     return mq&&ml&&mf;
   });
-
   _canM=canSee(['ke_toan','ceo']);
+
   const totalPages=Math.max(1,Math.ceil(_filteredOrders.length/ORDER_PAGE_SIZE));
   if(ORDER_PAGE>totalPages)ORDER_PAGE=totalPages;
   if(ORDER_PAGE<1)ORDER_PAGE=1;
-  const pageStart=(ORDER_PAGE-1)*ORDER_PAGE_SIZE;
-  const pageList=_filteredOrders.slice(pageStart,pageStart+ORDER_PAGE_SIZE);
+  const ps=(ORDER_PAGE-1)*ORDER_PAGE_SIZE;
+  const pageList=_filteredOrders.slice(ps,ps+ORDER_PAGE_SIZE);
 
   const now=new Date();
   const thOpts=Array.from({length:6},(_,i)=>{const d=new Date(now.getFullYear(),now.getMonth()-i,1);const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;return`<option value="${v}" ${ORDER_THANG===v?'selected':''}>T${d.getMonth()+1}/${d.getFullYear()}</option>`;}).join('');
@@ -90,7 +90,7 @@ async function pgOrders(c){
     </tbody>
   </table></div>
   ${totalPages>1?`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 4px 2px;flex-wrap:wrap;gap:6px">
-    <span style="font-size:11.5px;color:var(--text-muted)">Hiển thị ${pageStart+1}–${Math.min(pageStart+ORDER_PAGE_SIZE,_filteredOrders.length)} / ${_filteredOrders.length} đơn</span>
+    <span style="font-size:11.5px;color:var(--text-muted)">Hiển thị ${ps+1}–${Math.min(ps+ORDER_PAGE_SIZE,_filteredOrders.length)} / ${_filteredOrders.length} đơn</span>
     <div id="pag-btns" style="display:flex;gap:4px">${_buildPagBtns(ORDER_PAGE,totalPages)}</div>
   </div>`:''}`;
 }
@@ -112,7 +112,6 @@ function _buildRows(list){
     <td>${thuTag(o.thanh_toan_khach)}</td>
   </tr>`).join('');
 }
-
 function _buildPagBtns(cur,total){
   let b='';
   b+=`<button class="btn btn-sm" style="min-width:32px" onclick="ORDER_PAGE--;_goPage()" ${cur===1?'disabled':''}><i class="ti ti-chevron-left"></i></button>`;
@@ -122,15 +121,13 @@ function _buildPagBtns(cur,total){
   b+=`<button class="btn btn-sm" style="min-width:32px" onclick="ORDER_PAGE++;_goPage()" ${cur===total?'disabled':''}><i class="ti ti-chevron-right"></i></button>`;
   return b;
 }
-
 function _goPage(){
   const total=Math.max(1,Math.ceil(_filteredOrders.length/ORDER_PAGE_SIZE));
   if(ORDER_PAGE<1)ORDER_PAGE=1;
   if(ORDER_PAGE>total)ORDER_PAGE=total;
   const s=(ORDER_PAGE-1)*ORDER_PAGE_SIZE;
-  const list=_filteredOrders.slice(s,s+ORDER_PAGE_SIZE);
   const tb=document.getElementById('orders-tbody');
-  if(tb)tb.innerHTML=_buildRows(list);
+  if(tb)tb.innerHTML=_buildRows(_filteredOrders.slice(s,s+ORDER_PAGE_SIZE));
   const pb=document.getElementById('pag-btns');
   if(pb)pb.innerHTML=_buildPagBtns(ORDER_PAGE,total);
 }
@@ -185,7 +182,7 @@ function renderTabInfo(o,editable){
   const isNhap=o.loai_hang==='Nhập';
   const canDelete=canSee(['quan_ly','ceo']);
   return`
-  ${o.locked?`<div class="lock-notice" style="display:flex;justify-content:space-between;align-items:center"><span><i class="ti ti-lock"></i> Vận đơn đã hoàn thành và khóa lại.</span>${canSee(['quan_ly','ceo'])?`<button class="btn btn-xs btn-danger" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa</button>`:''}</div>`:''}
+  ${o.locked?`<div class="lock-notice" style="display:flex;justify-content:space-between;align-items:center"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span>${canSee(['quan_ly','ceo'])?`<button class="btn btn-xs btn-danger" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa để sửa</button>`:''}</div>`:''}
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-file-description"></i>Thông tin cơ bản</div>
     <div class="form-grid">
@@ -223,16 +220,22 @@ function renderTabInfo(o,editable){
     <div class="form-section-title"><i class="ti ti-currency-dong"></i>Dịch vụ cộng thêm</div>
     <div class="form-grid">
       <div class="form-group">
-        <label><input type="checkbox" id="fi-doilenh" ${o.co_doi_lenh?'checked':''} ${dis} style="width:auto;margin-right:5px">Đổi lệnh</label>
-        <input type="text" id="fi-phidl" value="${o.phi_doi_lenh>0?fmtInput(o.phi_doi_lenh):''}" placeholder="Phí / cont (VNĐ)" ${dis}
-          oninput="this.value=fmtInput(this.value)">
-        <span style="font-size:10px;color:var(--text-muted)">thu theo số cont</span>
+        <label><input type="checkbox" id="fi-doilenh" ${o.co_doi_lenh?'checked':''} ${dis} style="width:auto;margin-right:5px"
+          onchange="document.getElementById('grp-phidl').style.display=this.checked?'block':'none'">Đổi lệnh</label>
+        <div id="grp-phidl" style="display:${o.co_doi_lenh?'block':'none'}">
+          <input type="text" id="fi-phidl" value="${o.phi_doi_lenh>0?fmtInput(o.phi_doi_lenh):''}" placeholder="Phí / cont (VNĐ)" ${dis}
+            oninput="this.value=fmtInput(this.value)">
+          <span style="font-size:10px;color:var(--text-muted)">thu theo số cont</span>
+        </div>
       </div>
       <div class="form-group">
-        <label><input type="checkbox" id="fi-tokhai" ${o.co_to_khai?'checked':''} ${dis} style="width:auto;margin-right:5px">Mở tờ khai</label>
-        <input type="text" id="fi-phitk" value="${o.phi_to_khai>0?fmtInput(o.phi_to_khai):''}" placeholder="Phí / lô (VNĐ)" ${dis}
-          oninput="this.value=fmtInput(this.value)">
-        <span style="font-size:10px;color:var(--text-muted)">thu theo lô</span>
+        <label><input type="checkbox" id="fi-tokhai" ${o.co_to_khai?'checked':''} ${dis} style="width:auto;margin-right:5px"
+          onchange="document.getElementById('grp-phitk').style.display=this.checked?'block':'none'">Mở tờ khai</label>
+        <div id="grp-phitk" style="display:${o.co_to_khai?'block':'none'}">
+          <input type="text" id="fi-phitk" value="${o.phi_to_khai>0?fmtInput(o.phi_to_khai):''}" placeholder="Phí / lô (VNĐ)" ${dis}
+            oninput="this.value=fmtInput(this.value)">
+          <span style="font-size:10px;color:var(--text-muted)">thu theo lô</span>
+        </div>
       </div>
     </div>
   </div>
@@ -247,12 +250,14 @@ function renderTabInfo(o,editable){
 
 function renderTabXe(o,editable){
   const dis=!editable?'disabled':'';
+  const _lxVal=o.loai_cont||o.loai_xe_hang||'';
+  const lockBar=o.locked&&canSee(['quan_ly','ceo'])?`<div class="lock-notice" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span><button class="btn btn-xs btn-danger" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa để sửa</button></div>`:(o.locked?'<div class="lock-notice" style="margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>':'');
   const lxOpts=LX.map(l=>`<option value="${l.ho_ten}">`).join('');
   const tpOpts=TP.map(t=>`<option value="${t.ma_thau}">${t.ten_cong_ty}</option>`).join('');
-  const loaiXeOpts=['20 nhẹ','20 nặng','Cont 40','Cont 45','Xe tải 1.25T','Xe tải 2.5T','Xe tải 3.5T','Xe tải 5T','Xe tải 8T','Xe tải 10T','Mooc sàn','Mooc rào','Fooc'].map(v=>`<option ${o.loai_xe_hang===v?'selected':''}>${v}</option>`).join('');
+  const loaiXeOpts=['20 nhẹ','20 nặng','Cont 40','Cont 45','Xe tải 1.25T','Xe tải 2.5T','Xe tải 3.5T','Xe tải 5T','Xe tải 8T','Xe tải 10T','Mooc sàn','Mooc rào','Fooc'].map(v=>`<option ${_lxVal===v?'selected':''}>${v}</option>`).join('');
   const loaiChuyenOpts=['Thường','Kết hợp','Kẹp ghép'].map(s=>`<option ${o.loai_chuyen===s?'selected':''}>${s}</option>`).join('');
   const ttOpts=['Chờ xếp xe','Đang vận chuyển','Chờ xác nhận'].map(s=>`<option ${o.trang_thai===s?'selected':''}>${s}</option>`).join('');
-  return`
+  return`${lockBar}
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-truck"></i>Phân công xe & lái xe</div>
     <div class="form-grid">
@@ -317,7 +322,8 @@ function renderTabChiHo(o,list,editable){
   const listThamChieu=list.filter(c=>c.la_tham_chieu);
   const total=listThat.reduce((s,c)=>s+(+c.so_tien||0),0);
   const coHD=list.some(c=>c.hoa_don_id);
-  return`
+  const lockBar=o.locked&&canSee(['quan_ly','ceo'])?`<div class="lock-notice" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span><button class="btn btn-xs btn-danger" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa để sửa</button></div>`:(o.locked?'<div class="lock-notice" style="margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>':'');
+  return`${lockBar}
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
     <div><div style="font-size:11px;color:var(--text-muted)">Tổng chi hộ</div>
       <div style="font-size:16px;font-weight:700;color:var(--warning)">${fmtM(total)}</div></div>
@@ -372,6 +378,7 @@ function renderTabChiHo(o,list,editable){
 }
 
 function renderTabCuoc(o,chiHoList,editable,loi){
+  const lockBar=o.locked&&canSee(['quan_ly','ceo'])?`<div class="lock-notice" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span><button class="btn btn-xs btn-danger" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa để sửa</button></div>`:(o.locked?'<div class="lock-notice" style="margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>':'');
   const totalCH=chiHoList.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
   const totalTraThau=chiHoList.reduce((s,c)=>s+(+c.tien_tra_thau||0),0);
   const totalTraLX=chiHoList.reduce((s,c)=>s+(+c.tien_tra_laixe||0),0);
@@ -381,7 +388,7 @@ function renderTabCuoc(o,chiHoList,editable,loi){
   const isThauThueLai=o.loai_phan_loai_xe==='thau_thue_lai';
   const thucTraThau=(+o.gia_cuoc_thau||0)+totalTraThau-(isThauThueLai?totalTraLX:0);
   const coThau=!!o.ma_thau_phu;
-  return`
+  return`${lockBar}
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-coins"></i>Cước & Thu khách</div>
     <div class="form-grid">
@@ -447,10 +454,7 @@ function renderTabCuoc(o,chiHoList,editable,loi){
     <i class="ti ti-lock"></i> Hoàn thành & Khóa vận đơn
   </button>
   <p style="font-size:10.5px;color:var(--text-muted);text-align:center;margin-top:5px">⚠️ Sau khi khóa sẽ không thể chỉnh sửa</p>`:''}
-  ${o.locked&&canSee(['quan_ly','ceo'])?`
-  <button class="btn btn-danger" style="width:100%;justify-content:center;margin-top:6px" onclick="unlockOrder('`+o.id+`')">
-    <i class="ti ti-lock-open"></i> Mở khóa để chỉnh sửa
-  </button>`:''}`;
+`;
 }
 
 function calcTong(){
@@ -485,8 +489,8 @@ async function saveInfo(id){
     updated_at:new Date().toISOString(),
   };
   const{error,data:saved}=await db.from('van_don').update(data).eq('id',id).select();
-  if(error){toast('Lỗi: '+error.message,'error');return;}
-  if(!saved||saved.length===0){toast('Không lưu được — kiểm tra quyền Supabase','error');return;}
+  if(error){toast('Lỗi DB: '+error.message,'error');return;}
+  if(!saved||saved.length===0){toast('Không lưu được — kiểm tra quyền Supabase (RLS)','error');return;}
   toast('Đã lưu thông tin');
   await refreshOrder(id);
 }
@@ -560,8 +564,8 @@ async function saveXe(id){
       updated_at:new Date().toISOString(),
     };
     const{error,data:saved}=await db.from('van_don').update(data).eq('id',id).select();
-    if(error){toast('Lỗi: '+error.message,'error');return;}
-    if(!saved||saved.length===0){toast('Không lưu được — kiểm tra quyền Supabase','error');return;}
+    if(error){toast('Lỗi DB: '+error.message,'error');return;}
+    if(!saved||saved.length===0){toast('Không lưu được — kiểm tra quyền Supabase (RLS)','error');return;}
     toast('Đã lưu xe & cont');
     await refreshOrder(id);
   }catch(e){console.error('[saveXe]',e);toast('Lỗi: '+e.message,'error');}
@@ -576,8 +580,8 @@ async function saveCuoc(id){
     updated_at:new Date().toISOString(),
   };
   const{error,data:saved}=await db.from('van_don').update(data).eq('id',id).select();
-  if(error){toast('Lỗi: '+error.message,'error');return;}
-  if(!saved||saved.length===0){toast('Không lưu được — kiểm tra quyền Supabase','error');return;}
+  if(error){toast('Lỗi DB: '+error.message,'error');return;}
+  if(!saved||saved.length===0){toast('Không lưu được — kiểm tra quyền Supabase (RLS)','error');return;}
   toast('Đã lưu cước & thanh toán');
   await refreshOrder(id);
 }
@@ -618,8 +622,11 @@ async function lockOrder(id){
 }
 
 async function refreshOrder(id){
+  // Bước 1: fetch full data trước khi pgOrders ghi đè ORDERS bằng COLS giới hạn
   const{data}=await db.from('van_don').select('*').eq('id',id).single();
+  // Bước 2: await pgOrders — bắt buộc await, không thì race condition overwrite ORDERS
   await pgOrders(document.getElementById('content'));
+  // Bước 3: patch lại ORDERS bằng full data, re-render detail panel
   if(data){
     const idx=ORDERS.findIndex(x=>x.id===id);
     if(idx>=0)ORDERS[idx]=data;
