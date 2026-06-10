@@ -316,6 +316,26 @@ async function matchContToVanDon(ai){
 }
 
 // ── 8. LƯU HÓA ĐƠN + TẠO CHI HỘ NGAY ──────────────────────────────────────
+// Đổi tên file trên Storage sau khi biết loại DV + cont
+// Format: YYYY-MM_LoaiDV_CONT1-CONT2.pdf
+async function renameHDStorage(oldPath, loaiDv, conts, ngayHd){
+  if(!oldPath) return oldPath;
+  try{
+    const ext=oldPath.match(/\.[^.]+$/)?.[0]||'.pdf';
+    const ym=(ngayHd||today()).slice(0,7); // YYYY-MM
+    const loaiSafe=(loaiDv||'HoaDon').replace(/[^a-zA-Z0-9À-ỹ\s]/g,'').trim().replace(/\s+/g,'-');
+    const contSafe=(conts||[]).join('-').replace(/[^A-Z0-9-]/g,'');
+    const newName=`${ym}_${loaiSafe}${contSafe?'_'+contSafe:''}${ext}`;
+    // Giữ nguyên folder, chỉ đổi tên file
+    const folder=oldPath.substring(0,oldPath.lastIndexOf('/')+1);
+    const newPath=`${folder}${newName}`;
+    if(newPath===oldPath) return oldPath;
+    const{error}=await db.storage.from('hoa-don').move(oldPath,newPath);
+    if(error){console.warn('Storage rename (non-fatal):',error.message);return oldPath;}
+    return newPath;
+  }catch(e){console.warn('Storage rename exception:',e);return oldPath;}
+}
+
 async function saveHoaDon(hd,fileName,storagePath=null){
   // Khớp cont → da_duyet ngay, không qua bước chờ
   const trangThai=hd.trang_thai==='da_khop'?'da_duyet':hd.trang_thai;
@@ -333,9 +353,16 @@ async function saveHoaDon(hd,fileName,storagePath=null){
   if(error) throw new Error(error.message);
 
   if(hd.trang_thai==='da_khop'&&hd.van_don_matches?.length){
-    // Tên chi hộ: "Nâng hàng + CONT1" hoặc "CSHT + CONT1, CONT2"
-    const allConts=hd.van_don_matches.map(v=>v.so_cont).join(', ');
-    const loaiChi=`${hd.loai_dv||'Chi hộ HĐ'} + ${allConts}`;
+    // Đổi tên file: YYYY-MM_LoaiDV_CONT1-CONT2.pdf
+    const allConts=hd.van_don_matches.map(v=>v.so_cont);
+    const newPath=await renameHDStorage(storagePath,hd.loai_dv,allConts,hd.ngay_hd);
+    if(newPath&&newPath!==storagePath){
+      await db.from('hoa_don').update({storage_path:newPath,file_name:newPath.split('/').pop()}).eq('id',data.id);
+      storagePath=newPath;
+    }
+
+    const allContsStr=allConts.join(', ');
+    const loaiChi=`${hd.loai_dv||'Chi hộ HĐ'} + ${allContsStr}`;
     for(let i=0;i<hd.van_don_matches.length;i++){
       const vd=hd.van_don_matches[i];
       const laChinh=i===0;
@@ -503,6 +530,9 @@ async function saveXuLyHD(hdId){
   }
   if(!vdList.length){toast('Không tìm thấy vận đơn nào khớp','error');return;}
 
+  // Đổi tên file trên Storage
+  const newPath=await renameHDStorage(hd.storage_path,hd.loai_dv,conts,hd.ngay_hd);
+
   // Tên chi hộ: "CSHT + CONT1, CONT2" hoặc "Nâng hàng + CONT1"
   const contStr=conts.join(', ');
   const loaiChi=`${hd.loai_dv||'Chi hộ HĐ'} + ${contStr}`;
@@ -511,6 +541,8 @@ async function saveXuLyHD(hdId){
     trang_thai:'da_duyet',ly_do_cho:null,ai_ghi_chu:gc,
     nguoi_duyet:CU?.id,ngay_duyet:new Date().toISOString(),
     so_cont_list:conts,
+    storage_path:newPath||hd.storage_path,
+    file_name:newPath?newPath.split('/').pop():hd.file_name,
   }).eq('id',hdId);
 
   for(let i=0;i<vdList.length;i++){
