@@ -62,31 +62,30 @@ async function pgDieuVan(c){
 // ==================== CHI HO ====================
 async function pgChiHo(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
-  const{data}=await db.from('chi_ho').select('*').order('ngay_chi',{ascending:false}).limit(300);
+  const{data}=await db.from('chi_ho').select('*').eq('la_tham_chieu',false).order('ngay_chi',{ascending:false}).limit(300);
   const list=data||[];
   const total=list.reduce((s,o)=>s+(+o.so_tien||0),0);
-  const dathu=list.filter(o=>o.da_thu_lai).reduce((s,o)=>s+(+o.so_tien||0),0);
   const hdkh=list.filter(o=>o.hoa_don_khach).reduce((s,o)=>s+(+o.so_tien||0),0);
+  const khongHD=list.filter(o=>!o.hoa_don_khach).reduce((s,o)=>s+(+o.so_tien||0),0);
   c.innerHTML=`
   <div class="stats-row stats-4">
     <div class="stat-card"><div class="stat-lbl">Tổng chi hộ</div><div class="stat-val text-red">${fmt(Math.round(total/1e6))}tr</div></div>
     <div class="stat-card"><div class="stat-lbl">HĐ theo MST khách</div><div class="stat-val text-orange">${fmt(Math.round(hdkh/1e6))}tr</div></div>
-    <div class="stat-card"><div class="stat-lbl">Đã thu lại</div><div class="stat-val text-green">${fmt(Math.round(dathu/1e6))}tr</div></div>
-    <div class="stat-card"><div class="stat-lbl">Chưa thu lại</div><div class="stat-val" style="color:var(--danger)">${fmt(Math.round((total-dathu)/1e6))}tr</div></div>
+    <div class="stat-card"><div class="stat-lbl">Không có HĐ</div><div class="stat-val text-blue">${fmt(Math.round(khongHD/1e6))}tr</div></div>
+    <div class="stat-card"><div class="stat-lbl">Số khoản</div><div class="stat-val">${list.length}</div></div>
   </div>
   <div class="tbl-wrap"><table class="tbl">
-    <colgroup><col style="width:130px"><col style="width:85px"><col style="width:140px"><col style="width:90px"><col style="width:100px"><col style="width:90px"><col style="width:80px"><col style="width:80px"><col style="width:120px"></colgroup>
-    <thead><tr><th>Mã đơn</th><th>Ngày chi</th><th>Loại chi</th><th>Số tiền</th><th>Người chi</th><th>Chứng từ</th><th>HĐ KH</th><th>Thu lại</th><th>Ghi chú</th></tr></thead>
+    <colgroup><col style="width:130px"><col style="width:85px"><col style="width:140px"><col style="width:90px"><col style="width:100px"><col style="width:90px"><col style="width:70px"><col style="width:150px"></colgroup>
+    <thead><tr><th>Mã đơn</th><th>Ngày chi</th><th>Loại chi</th><th>Số tiền</th><th>Người chi</th><th>Chứng từ</th><th>HĐ KH</th><th>Ghi chú</th></tr></thead>
     <tbody>
-    ${list.length===0?`<tr><td colspan="9"><div class="empty"><i class="ti ti-inbox"></i>Chưa có dữ liệu</div></td></tr>`:''}
-    ${list.map(o=>`<tr>
+    ${list.length===0?`<tr><td colspan="8"><div class="empty"><i class="ti ti-inbox"></i>Chưa có dữ liệu</div></td></tr>`:''}
+    ${list.map(o=>`<tr onclick="openDetail('${o.van_don_id}')" style="cursor:pointer">
       <td style="color:var(--teal);font-weight:500">${o.ma_don||'—'}</td>
       <td>${o.ngay_chi}</td><td>${o.loai_chi}</td>
       <td class="text-orange fw6">${fmtM(o.so_tien)}</td>
       <td>${o.nguoi_chi||'—'}</td><td>${o.chung_tu||'—'}</td>
       <td>${o.hoa_don_khach?'<span class="tag" style="background:#e0f2fe;color:#0369a1;font-size:10px">Có</span>':'—'}</td>
-      <td><span class="tag ${o.da_thu_lai?'tag-dathu':'tag-chuathu'}" style="font-size:10px">${o.da_thu_lai?'Đã thu':'Chưa'}</span></td>
-      <td>${o.ghi_chu||'—'}</td>
+      <td style="font-size:11px">${o.ghi_chu||'—'}</td>
     </tr>`).join('')}
     </tbody>
   </table></div>`;
