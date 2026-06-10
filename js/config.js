@@ -63,8 +63,7 @@ function thuTag(t){
 }
 function canSee(roles){return roles.includes(CU?.vai_tro);}
 function canEdit(o){
-  // CEO và quan_ly có thể sửa kể cả đã khóa
-  if(o?.locked && canSee(['quan_ly','ceo'])) return true;
+  // Locked = chỉ xem, kể cả CEO/QL — phải bấm Mở khóa trước mới sửa được
   if(o?.locked) return false;
   return canSee(['nhan_vien','quan_ly','ke_toan','ceo']);
 }
