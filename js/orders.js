@@ -276,20 +276,15 @@ function renderTabXe(o,editable){
 }
 
 function renderTabChiHo(o,list,editable){
-  // Tách chi_ho thật và chi_ho tham chiếu
   const listThat=list.filter(c=>!c.la_tham_chieu);
   const listThamChieu=list.filter(c=>c.la_tham_chieu);
   const total=listThat.reduce((s,c)=>s+(+c.so_tien||0),0);
-  const chuaThu=listThat.filter(c=>!c.da_thu_lai).reduce((s,c)=>s+(+c.so_tien||0),0);
+  const coHD=list.some(c=>c.hoa_don_id);
   return`
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
     <div><div style="font-size:11px;color:var(--text-muted)">Tổng chi hộ</div>
       <div style="font-size:16px;font-weight:700;color:var(--warning)">${fmtM(total)}</div></div>
-    <div style="display:flex;align-items:center;gap:8px">
-      ${list.some(c=>c.hoa_don_id)?`<button class="btn btn-xs btn-teal" onclick="taiTatCaHD('${o.id}')"><i class="ti ti-download"></i> Tải HĐ</button>`:''}
-      <div style="text-align:right"><div style="font-size:11px;color:var(--text-muted)">Chưa thu lại</div>
-        <div style="font-size:14px;font-weight:600;color:var(--danger)">${fmtM(chuaThu)}</div></div>
-    </div>
+    ${coHD?`<button class="btn btn-xs btn-teal" onclick="taiTatCaHD('${o.id}')"><i class="ti ti-download"></i> Tải HĐ</button>`:''}
   </div>
   ${listThat.map(c=>`
   <div class="chi-ho-item">
@@ -302,7 +297,7 @@ function renderTabChiHo(o,list,editable){
         ${(c.tien_tra_thau||0)>0?`<span style="font-size:10px;background:#fef3c7;color:var(--warning);padding:1px 6px;border-radius:8px">Trả thầu: ${fmt(c.tien_tra_thau)}</span>`:''}
         ${(c.tien_tra_laixe||0)>0?`<span style="font-size:10px;background:#ede9fe;color:#7c3aed;padding:1px 6px;border-radius:8px">Trả LX: ${fmt(c.tien_tra_laixe)}</span>`:''}
         ${c.hoa_don_khach?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:8px">HĐ KH</span>':''}
-        ${c.hoa_don_id?`<button class="btn btn-xs" style="font-size:10px;padding:1px 7px;height:auto;line-height:1.6" onclick="xemHoaDon('${c.hoa_don_id}',null)" title="Xem hóa đơn gốc"><i class="ti ti-file-invoice" style="font-size:11px"></i> Xem HĐ</button>`:''}
+        ${c.hoa_don_id?`<button class="btn btn-xs" style="font-size:10px;padding:1px 7px;height:auto;line-height:1.6" onclick="xemHoaDon('${c.hoa_don_id}',null)"><i class="ti ti-eye" style="font-size:11px"></i> Xem HĐ</button>`:''}
       </div>
     </div>
     <div class="chi-ho-right">
@@ -333,6 +328,7 @@ function renderTabChiHo(o,list,editable){
       </div>
       <div style="color:var(--text-muted);margin-top:4px;font-size:11px">
         HĐ: <strong>${c.chung_tu||'—'}</strong> · Ngày: ${fmtDate(c.ngay_chi)}
+        ${c.hoa_don_id?`<button class="btn btn-xs" style="font-size:10px;padding:1px 6px;height:auto;line-height:1.6;margin-left:6px" onclick="xemHoaDon('${c.hoa_don_id}',null)"><i class="ti ti-eye" style="font-size:10px"></i></button>`:''}
       </div>
       <div style="color:#92400e;margin-top:2px;font-size:11px;word-break:break-all;white-space:normal;line-height:1.5;overflow-wrap:break-word">${(c.ghi_chu||'').replace(/\[Tham chiếu\][^|]*\|/,'').trim()}</div>
     </div>`).join('')}
@@ -878,7 +874,6 @@ async function saveChiHo(vdId,maDon){
     nguoi_chi:document.getElementById('ch-nguoi').value,
     chung_tu:document.getElementById('ch-ct').value,
     hoa_don_khach:document.getElementById('ch-hdkh').value==='true',
-    da_thu_lai:false,
     ghi_chu:document.getElementById('ch-ghichu').value,
   };
   const{error}=await db.from('chi_ho').insert(data);
@@ -890,19 +885,13 @@ async function saveChiHo(vdId,maDon){
 
 async function taiTatCaHD(vanDonId){
   const{data:chiHoList}=await db.from('chi_ho')
-    .select('hoa_don_id,loai_chi,chung_tu')
-    .eq('van_don_id',vanDonId)
-    .not('hoa_don_id','is',null)
-    .eq('la_tham_chieu',false);
+    .select('hoa_don_id').eq('van_don_id',vanDonId)
+    .not('hoa_don_id','is',null).eq('la_tham_chieu',false);
   if(!chiHoList?.length){toast('Không có HĐ nào để tải','error');return;}
-
   const hdIds=[...new Set(chiHoList.map(c=>c.hoa_don_id))];
-  const{data:hdList}=await db.from('hoa_don')
-    .select('id,storage_path,file_name,so_hd,loai_dv')
-    .in('id',hdIds);
+  const{data:hdList}=await db.from('hoa_don').select('id,storage_path,file_name,so_hd').in('id',hdIds);
   const coFile=(hdList||[]).filter(h=>h.storage_path);
-  if(!coFile.length){toast('Chưa có file đính kèm cho HĐ nào','error');return;}
-
+  if(!coFile.length){toast('Chưa có file đính kèm','error');return;}
   toast(`Đang tải ${coFile.length} file...`);
   for(let i=0;i<coFile.length;i++){
     const hd=coFile[i];
@@ -910,10 +899,8 @@ async function taiTatCaHD(vanDonId){
     if(!su?.signedUrl) continue;
     await new Promise(res=>setTimeout(res,400*i));
     const a=document.createElement('a');
-    a.href=su.signedUrl;
-    a.download=hd.file_name||`hoadon_${hd.so_hd||i+1}.pdf`;
-    a.target='_blank';
-    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    a.href=su.signedUrl;a.download=hd.file_name||`hoadon_${hd.so_hd||i+1}.pdf`;
+    a.target='_blank';document.body.appendChild(a);a.click();document.body.removeChild(a);
   }
   toast(`✅ Đã tải ${coFile.length} hóa đơn`);
 }
