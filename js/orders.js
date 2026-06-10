@@ -447,8 +447,9 @@ async function saveInfo(id){
     ghi_chu:document.getElementById('fi-ghichu')?.value||null,
     updated_at:new Date().toISOString(),
   };
-  const{error}=await db.from('van_don').update(data).eq('id',id);
+  const{error,data:saved}=await db.from('van_don').update(data).eq('id',id).select();
   if(error){toast('Lỗi: '+error.message,'error');return;}
+  if(!saved||saved.length===0){toast('Không lưu được — có thể do quyền Supabase. Mở F12 Console để xem chi tiết.','error');return;}
   toast('Đã lưu thông tin');
   await refreshOrder(id);
 }
@@ -516,20 +517,19 @@ async function saveXe(id){
       loai_cont:document.getElementById('fx-loaixe')?.value||'',
       loai_xe_hang:document.getElementById('fx-loaixe')?.value||'',
       ghi_chu_xe:document.getElementById('fx-ghichuXe')?.value||'',
-      trang_thai:document.getElementById('fx-tt')?.value||'Cho xac nhan',
+      trang_thai:document.getElementById('fx-tt')?.value||'Chờ xác nhận',
       loai_phan_loai_xe:plVal,
       la_xe_noi_bo:plVal==='noi_bo',
       updated_at:new Date().toISOString(),
     };
-    console.log('[saveXe] saving:', JSON.stringify(data));
-    const{error,data:res}=await db.from('van_don').update(data).eq('id',id).select();
-    console.log('[saveXe] result:', res, 'error:', error);
-    if(error){toast('Loi luu: '+error.message,'error');return;}
-    toast('Da luu xe & cont');
+    const{error,data:saved}=await db.from('van_don').update(data).eq('id',id).select();
+    if(error){toast('Lỗi: '+error.message,'error');return;}
+    if(!saved||saved.length===0){toast('Không lưu được — có thể do quyền Supabase. Mở F12 Console để xem chi tiết.','error');return;}
+    toast('Đã lưu xe & cont');
     await refreshOrder(id);
   }catch(e){
-    console.error('[saveXe] exception:', e);
-    toast('Loi: '+e.message,'error');
+    console.error('[saveXe]',e);
+    toast('Lỗi JS: '+e.message,'error');
   }
 }
 
@@ -541,8 +541,9 @@ async function saveCuoc(id){
     thanh_toan_thau:document.getElementById('fc-trathau')?.value||'Chưa trả',
     updated_at:new Date().toISOString(),
   };
-  const{error}=await db.from('van_don').update(data).eq('id',id);
+  const{error,data:saved}=await db.from('van_don').update(data).eq('id',id).select();
   if(error){toast('Lỗi: '+error.message,'error');return;}
+  if(!saved||saved.length===0){toast('Không lưu được — có thể do quyền Supabase. Mở F12 Console để xem chi tiết.','error');return;}
   toast('Đã lưu cước & thanh toán');
   await refreshOrder(id);
 }
@@ -583,9 +584,16 @@ async function lockOrder(id){
 }
 
 async function refreshOrder(id){
+  // 1. Fetch full data trước khi pgOrders ghi đè ORDERS bằng COLS giới hạn
   const{data}=await db.from('van_don').select('*').eq('id',id).single();
-  if(data){const idx=ORDERS.findIndex(x=>x.id===id);if(idx>=0)ORDERS[idx]=data;await renderDP(data);}
-  pgOrders(document.getElementById('content'));
+  // 2. Refresh danh sách (await để hoàn tất)
+  await pgOrders(document.getElementById('content'));
+  // 3. Patch lại ORDERS[idx] bằng full data để detail panel hiển thị đúng
+  if(data){
+    const idx=ORDERS.findIndex(x=>x.id===id);
+    if(idx>=0)ORDERS[idx]=data;
+    await renderDP(data);
+  }
 }
 
 // OPEN FORM (thêm mới)
