@@ -333,6 +333,9 @@ async function saveHoaDon(hd,fileName,storagePath=null){
   if(error) throw new Error(error.message);
 
   if(hd.trang_thai==='da_khop'&&hd.van_don_matches?.length){
+    // Tên chi hộ: "Nâng hàng + CONT1" hoặc "CSHT + CONT1, CONT2"
+    const allConts=hd.van_don_matches.map(v=>v.so_cont).join(', ');
+    const loaiChi=`${hd.loai_dv||'Chi hộ HĐ'} + ${allConts}`;
     for(let i=0;i<hd.van_don_matches.length;i++){
       const vd=hd.van_don_matches[i];
       const laChinh=i===0;
@@ -341,11 +344,9 @@ async function saveHoaDon(hd,fileName,storagePath=null){
         ma_don:vd.ma_don,so_tien:laChinh?hd.tong_tien:0,
         la_cont_chinh:laChinh,da_tao_chi_ho:true,
       });
-      const contPhuStr=hd.van_don_matches.length>1&&laChinh
-        ?` | Chung với: ${hd.van_don_matches.slice(1).map(v=>v.so_cont).join(', ')}`:'';
       await db.from('chi_ho').insert({
         van_don_id:vd.id,ma_don:vd.ma_don,
-        loai_chi:hd.loai_dv||'Chi hộ HĐ',
+        loai_chi:loaiChi,
         ngay_chi:hd.ngay_hd||today(),
         so_tien:laChinh?hd.tong_tien:0,
         tien_thu_khach:laChinh?hd.tong_tien:0,
@@ -356,7 +357,7 @@ async function saveHoaDon(hd,fileName,storagePath=null){
         la_tham_chieu:!laChinh,
         so_tien_hd_goc:laChinh?null:hd.tong_tien,
         ghi_chu:laChinh
-          ?`HĐ ${hd.so_hd||''} | ${hd.ten_don_vi_xuat||''}${contPhuStr}`
+          ?`HĐ ${hd.so_hd||''} | ${hd.ten_don_vi_xuat||''}`
           :`Tiền ghi nhận tại: ${hd.van_don_matches[0].so_cont}`,
       });
     }
@@ -404,15 +405,14 @@ async function xuLyHD(id){
   const{data:hd}=await db.from('hoa_don').select('*').eq('id',id).single();
   if(!hd)return;
 
-  // Preview file nếu có
-  let previewHtml='<div style="height:200px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;background:var(--bg);border-radius:var(--r);margin-bottom:12px"><i class="ti ti-file-off" style="margin-right:6px"></i>Chưa có file đính kèm</div>';
+  let previewHtml='<div style="height:180px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;background:var(--bg);border-radius:var(--r);margin-bottom:12px"><i class="ti ti-file-off" style="margin-right:6px"></i>Chưa có file đính kèm</div>';
   if(hd.storage_path){
     const{data:su}=await db.storage.from('hoa-don').createSignedUrl(hd.storage_path,3600);
     if(su?.signedUrl){
       const isPdf=hd.storage_path.toLowerCase().endsWith('.pdf');
       previewHtml=isPdf
-        ?`<iframe src="${su.signedUrl}" style="width:100%;height:280px;border:none;border-radius:var(--r);margin-bottom:12px"></iframe>`
-        :`<img src="${su.signedUrl}" style="width:100%;max-height:280px;object-fit:contain;border-radius:var(--r);margin-bottom:12px;background:var(--bg)">`;
+        ?`<iframe src="${su.signedUrl}" style="width:100%;height:260px;border:none;border-radius:var(--r);margin-bottom:12px"></iframe>`
+        :`<img src="${su.signedUrl}" style="width:100%;max-height:220px;object-fit:contain;border-radius:var(--r);margin-bottom:12px;background:var(--bg)">`;
     }
   }
 
@@ -422,18 +422,24 @@ async function xuLyHD(id){
   <div class="modal-body" style="display:block">
     ${previewHtml}
     <div style="background:var(--bg);border-radius:var(--r);padding:10px 14px;margin-bottom:12px;font-size:12px">
-      <div style="font-weight:600;font-size:13px;margin-bottom:4px">${hd.loai_dv||'Không rõ loại'} — ${fmtM(hd.tong_tien)}</div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:4px">${hd.loai_dv||'Không rõ loại'} — <span class="text-orange">${fmtM(hd.tong_tien)}</span></div>
       <div style="display:flex;gap:16px;color:var(--text-muted)">
-        <span>📅 ${hd.ngay_hd||'—'}</span>
-        <span>🏢 ${hd.ten_don_vi_xuat||'—'}</span>
+        <span>📅 ${hd.ngay_hd||'—'}</span><span>🏢 ${hd.ten_don_vi_xuat||'—'}</span>
       </div>
       <div style="color:var(--danger);margin-top:6px;font-size:11px"><i class="ti ti-alert-circle"></i> ${hd.ly_do_cho||'Chưa khớp cont'}</div>
     </div>
-    <div class="form-group" style="margin-bottom:12px">
-      <label style="font-weight:600">Số cont *</label>
-      <input type="text" id="xuly-cont" placeholder="CSNU1519330" maxlength="11"
-        oninput="this.value=formatCont(this.value);xuLyTimVanDon(this.value)"
-        style="font-family:monospace;font-size:14px;letter-spacing:1px;text-transform:uppercase">
+    <div class="form-group" style="margin-bottom:8px">
+      <label style="font-weight:600">Số cont *
+        <span style="font-weight:400;color:var(--text-muted);font-size:11px">— CSHT có thể điền nhiều cont</span>
+      </label>
+      <div id="xuly-cont-list" style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" class="xuly-cont-input" placeholder="CSNU1519330" maxlength="11"
+            oninput="this.value=formatCont(this.value);xuLyTimVanDon()"
+            style="font-family:monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;flex:1">
+          <button class="btn btn-xs btn-teal" onclick="xuLyThemCont()" title="Thêm cont"><i class="ti ti-plus"></i></button>
+        </div>
+      </div>
       <div id="xuly-vd-found" style="margin-top:6px;font-size:12px;min-height:20px"></div>
     </div>
     <div class="form-group">
@@ -449,57 +455,91 @@ async function xuLyHD(id){
   document.body.appendChild(bg);
 }
 
-function xuLyTimVanDon(cont){
+function xuLyThemCont(){
+  const list=document.getElementById('xuly-cont-list');
+  const div=document.createElement('div');
+  div.style.cssText='display:flex;gap:6px;align-items:center';
+  div.innerHTML=`<input type="text" class="xuly-cont-input" placeholder="CSNU1519330" maxlength="11"
+    oninput="this.value=formatCont(this.value);xuLyTimVanDon()"
+    style="font-family:monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;flex:1">
+    <button class="btn btn-xs btn-danger" onclick="this.parentElement.remove();xuLyTimVanDon()" title="Xóa"><i class="ti ti-x"></i></button>`;
+  list.appendChild(div);
+}
+
+function xuLyTimVanDon(){
   const el=document.getElementById('xuly-vd-found');
   if(!el)return;
-  if(cont.length<6){el.innerHTML='';return;}
-  const found=ORDERS.filter(o=>o.so_cont&&o.so_cont.toUpperCase().includes(cont.toUpperCase()));
+  const conts=[...document.querySelectorAll('.xuly-cont-input')]
+    .map(i=>i.value.trim().toUpperCase()).filter(v=>v.length>=6);
+  if(!conts.length){el.innerHTML='';return;}
+  const found=ORDERS.filter(o=>o.so_cont&&conts.some(c=>o.so_cont.toUpperCase().includes(c)));
   if(!found.length){
     el.innerHTML=`<span style="color:var(--danger)"><i class="ti ti-x"></i> Không tìm thấy vận đơn nào</span>`;
   } else {
     el.innerHTML=`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--r);padding:6px 10px">
       <div style="font-weight:600;color:var(--success);margin-bottom:4px"><i class="ti ti-check"></i> Tìm thấy ${found.length} vận đơn:</div>
-      ${found.slice(0,3).map(o=>`<div style="font-size:11px;padding:3px 0">
+      ${found.slice(0,5).map(o=>`<div style="font-size:11px;padding:3px 0">
         ${o.ma_don} — ${o.ten_khach||'—'} — cont: <strong>${o.so_cont}</strong>
-        ${o.locked?'<span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 5px;font-size:10px">🔒 Đã khóa</span>':''}
+        ${o.locked?'<span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 5px;font-size:10px">🔒</span>':''}
       </div>`).join('')}
     </div>`;
   }
 }
 
 async function saveXuLyHD(hdId){
-  const cont=document.getElementById('xuly-cont').value.trim().toUpperCase();
+  const conts=[...document.querySelectorAll('.xuly-cont-input')]
+    .map(i=>i.value.trim().toUpperCase()).filter(v=>v.length>=6);
   const gc=document.getElementById('xuly-gc').value;
-  if(!cont||cont.length<6){toast('Vui lòng điền số cont','error');return;}
-  const{data:vds}=await db.from('van_don').select('*').ilike('so_cont','%'+cont+'%');
-  if(!vds||!vds.length){toast('Không tìm thấy vận đơn nào có cont '+cont,'error');return;}
-  const vd=vds[0];
+  if(!conts.length){toast('Vui lòng điền ít nhất 1 số cont','error');return;}
+
   const{data:hd}=await db.from('hoa_don').select('*').eq('id',hdId).single();
   if(!hd)return;
+
+  // Tìm tất cả vận đơn khớp
+  const vdList=[];
+  for(const cont of conts){
+    const{data:vds}=await db.from('van_don').select('*').ilike('so_cont','%'+cont+'%');
+    if(vds?.length) vdList.push(...vds.filter(v=>!vdList.find(x=>x.id===v.id)));
+  }
+  if(!vdList.length){toast('Không tìm thấy vận đơn nào khớp','error');return;}
+
+  // Tên chi hộ: "CSHT + CONT1, CONT2" hoặc "Nâng hàng + CONT1"
+  const contStr=conts.join(', ');
+  const loaiChi=`${hd.loai_dv||'Chi hộ HĐ'} + ${contStr}`;
 
   await db.from('hoa_don').update({
     trang_thai:'da_duyet',ly_do_cho:null,ai_ghi_chu:gc,
     nguoi_duyet:CU?.id,ngay_duyet:new Date().toISOString(),
+    so_cont_list:conts,
   }).eq('id',hdId);
 
-  await db.from('hoa_don_van_don').insert({
-    hoa_don_id:hdId,van_don_id:vd.id,so_cont:vd.so_cont,
-    ma_don:vd.ma_don,so_tien:hd.tong_tien,la_cont_chinh:true,da_tao_chi_ho:true,
-  });
+  for(let i=0;i<vdList.length;i++){
+    const vd=vdList[i];
+    const laChinh=i===0;
+    await db.from('hoa_don_van_don').insert({
+      hoa_don_id:hdId,van_don_id:vd.id,so_cont:vd.so_cont,
+      ma_don:vd.ma_don,so_tien:laChinh?hd.tong_tien:0,
+      la_cont_chinh:laChinh,da_tao_chi_ho:true,
+    });
+    await db.from('chi_ho').insert({
+      van_don_id:vd.id,ma_don:vd.ma_don,
+      loai_chi:loaiChi,
+      ngay_chi:hd.ngay_hd||today(),
+      so_tien:laChinh?hd.tong_tien:0,
+      tien_thu_khach:laChinh?hd.tong_tien:0,
+      tien_tra_thau:0,tien_tra_laixe:0,
+      nguoi_chi:CU?.ho_ten||'OPS',
+      chung_tu:hd.so_hd,hoa_don_id:hdId,
+      hoa_don_khach:true,
+      la_tham_chieu:!laChinh,
+      so_tien_hd_goc:laChinh?null:hd.tong_tien,
+      ghi_chu:laChinh
+        ?`HĐ ${hd.so_hd||''} | ${hd.ten_don_vi_xuat||''}${gc?' | '+gc:''}`
+        :`Tiền ghi nhận tại: ${vdList[0].so_cont}`,
+    });
+  }
 
-  await db.from('chi_ho').insert({
-    van_don_id:vd.id,ma_don:vd.ma_don,
-    loai_chi:hd.loai_dv||'Chi hộ HĐ',
-    ngay_chi:hd.ngay_hd||today(),
-    so_tien:hd.tong_tien,tien_thu_khach:hd.tong_tien,
-    tien_tra_thau:0,tien_tra_laixe:0,
-    nguoi_chi:CU?.ho_ten||'OPS',
-    chung_tu:hd.so_hd,hoa_don_id:hdId,
-    hoa_don_khach:true,
-    ghi_chu:`HĐ ${hd.so_hd||''} | ${hd.ten_don_vi_xuat||''} | Nhập tay: ${cont}${gc?' | '+gc:''}`,
-  });
-
-  toast('✅ Đã tạo chi hộ cho cont '+vd.so_cont+' — '+vd.ma_don);
+  toast(`✅ Đã tạo chi hộ "${loaiChi}" cho ${vdList.length} vận đơn`);
   closeModal();
   pgHoaDon(document.getElementById('content'));
 }
