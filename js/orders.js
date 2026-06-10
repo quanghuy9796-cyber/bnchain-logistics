@@ -504,25 +504,33 @@ async function onBienChange(bien){
 
 
 async function saveXe(id){
-  const bien=document.getElementById('fx-bien').value.trim().toUpperCase();
-  const plVal=document.getElementById('fx-phanloai')?.value||'';
-  const data={
-    bien_kiem_soat:bien,
-    ten_lai_xe:document.getElementById('fx-laixe')?.value||'',
-    ma_thau_phu:document.getElementById('fx-thauphu').value,
-    loai_chuyen:document.getElementById('fx-lchuyen').value,
-    so_cont:document.getElementById('fx-cont').value,
-    loai_xe_hang:document.getElementById('fx-loaixe').value,
-    ghi_chu_xe:document.getElementById('fx-ghichuXe').value,
-    trang_thai:document.getElementById('fx-tt').value,
-    loai_phan_loai_xe:plVal,
-    la_xe_noi_bo:plVal==='noi_bo',
-    updated_at:new Date().toISOString(),
-  };
-  const{error}=await db.from('van_don').update(data).eq('id',id);
-  if(error){toast('Lỗi: '+error.message,'error');return;}
-  toast('Đã lưu xe & cont');
-  await refreshOrder(id);
+  try{
+    const bien=document.getElementById('fx-bien')?.value.trim().toUpperCase()||'';
+    const plVal=document.getElementById('fx-phanloai')?.value||'';
+    const data={
+      bien_kiem_soat:bien,
+      ten_lai_xe:document.getElementById('fx-laixe')?.value||'',
+      ma_thau_phu:document.getElementById('fx-thauphu')?.value||'',
+      loai_chuyen:document.getElementById('fx-lchuyen')?.value||'',
+      so_cont:document.getElementById('fx-cont')?.value||'',
+      loai_cont:document.getElementById('fx-loaixe')?.value||'',
+      loai_xe_hang:document.getElementById('fx-loaixe')?.value||'',
+      ghi_chu_xe:document.getElementById('fx-ghichuXe')?.value||'',
+      trang_thai:document.getElementById('fx-tt')?.value||'Cho xac nhan',
+      loai_phan_loai_xe:plVal,
+      la_xe_noi_bo:plVal==='noi_bo',
+      updated_at:new Date().toISOString(),
+    };
+    console.log('[saveXe] saving:', JSON.stringify(data));
+    const{error,data:res}=await db.from('van_don').update(data).eq('id',id).select();
+    console.log('[saveXe] result:', res, 'error:', error);
+    if(error){toast('Loi luu: '+error.message,'error');return;}
+    toast('Da luu xe & cont');
+    await refreshOrder(id);
+  }catch(e){
+    console.error('[saveXe] exception:', e);
+    toast('Loi: '+e.message,'error');
+  }
 }
 
 async function saveCuoc(id){
@@ -575,16 +583,9 @@ async function lockOrder(id){
 }
 
 async function refreshOrder(id){
-  // 1. Fetch full data trước (select *) để có đủ tất cả field kể cả loai_chuyen, loai_xe_hang...
   const{data}=await db.from('van_don').select('*').eq('id',id).single();
-  // 2. Refresh danh sách — pgOrders ghi đè ORDERS bằng COLS-limited data
-  await pgOrders(document.getElementById('content'));
-  // 3. Patch lại ORDERS[idx] bằng full data để DP không bị mất field
-  if(data){
-    const idx=ORDERS.findIndex(x=>x.id===id);
-    if(idx>=0)ORDERS[idx]=data;
-    await renderDP(data);
-  }
+  if(data){const idx=ORDERS.findIndex(x=>x.id===id);if(idx>=0)ORDERS[idx]=data;await renderDP(data);}
+  pgOrders(document.getElementById('content'));
 }
 
 // OPEN FORM (thêm mới)
