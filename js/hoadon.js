@@ -40,21 +40,23 @@ async function uploadHDToStorage(file){
 
 // ── 3. XEM HÓA ĐƠN (popup) ──────────────────────────────────────────────────
 async function xemHoaDon(hdId,storagePath){
+  let displayName=null;
   if(!storagePath){
     const{data:hd}=await db.from('hoa_don').select('storage_path,file_name').eq('id',hdId).single();
-    if(hd?.storage_path) storagePath=hd.storage_path;
+    if(hd?.storage_path){storagePath=hd.storage_path;displayName=hd.file_name;}
     else{toast('Chưa có file đính kèm','error');return;}
   }
   const{data,error}=await db.storage.from('hoa-don').createSignedUrl(storagePath,3600);
   if(error||!data?.signedUrl){toast('Không thể tải file: '+(error?.message||'Lỗi Storage'),'error');return;}
   const isPdf=storagePath.toLowerCase().endsWith('.pdf');
   const url=data.signedUrl;
+  const dlName=displayName||storagePath.split('/').pop();
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
   bg.innerHTML=`<div class="modal" style="width:90vw;max-width:900px;height:90vh;display:flex;flex-direction:column">
   <div class="modal-head" style="flex-shrink:0">
     <h3><i class="ti ti-file-invoice" style="color:var(--teal)"></i> Xem hóa đơn</h3>
     <div style="display:flex;gap:6px">
-      <a href="${url}" download target="_blank" class="btn btn-sm btn-teal"><i class="ti ti-download"></i> Tải về</a>
+      <button class="btn btn-sm btn-teal" onclick="taiMotHoaDon('${url}','${dlName}')"><i class="ti ti-download"></i> Tải về</button>
       <button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
   </div>
@@ -66,6 +68,18 @@ async function xemHoaDon(hdId,storagePath){
         </div>`}
   </div></div>`;
   document.body.appendChild(bg);
+}
+
+async function taiMotHoaDon(url,fileName){
+  try{
+    const res=await fetch(url);
+    const blob=await res.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=fileName||'hoadon.pdf';
+    document.body.appendChild(a);a.click();
+    document.body.removeChild(a);
+  }catch(e){toast('Lỗi tải file','error');}
 }
 
 // ── 4. TRANG UPLOAD HÓA ĐƠN ─────────────────────────────────────────────────
@@ -316,29 +330,30 @@ async function matchContToVanDon(ai){
 }
 
 // ── 8. LƯU HÓA ĐƠN + TẠO CHI HỘ NGAY ──────────────────────────────────────
-// Đổi tên file trên Storage sau khi biết loại DV + cont
+// Tạo tên file hiển thị đẹp để dùng khi tải về — KHÔNG đụng vào Storage
 // Format: YYYY-MM_LoaiDV_CONT1-CONT2.pdf
-async function renameHDStorage(oldPath, loaiDv, conts, ngayHd){
-  if(!oldPath) return oldPath;
+function buildDisplayName(loaiDv, conts, ngayHd){
   try{
-    const ext=oldPath.match(/\.[^.]+$/)?.[0]||'.pdf';
-    const ym=(ngayHd||today()).slice(0,7); // YYYY-MM
-    const loaiSafe=(loaiDv||'HoaDon').replace(/[^a-zA-Z0-9À-ỹ\s]/g,'').trim().replace(/\s+/g,'-');
+    const ym=(ngayHd||today()).slice(0,7);
+    const loaiSafe=(loaiDv||'HoaDon')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // bỏ dấu
+      .replace(/[^a-zA-Z0-9\s]/g,'').trim().replace(/\s+/g,'-');
     const contSafe=(conts||[]).join('-').replace(/[^A-Z0-9-]/g,'');
-    const newName=`${ym}_${loaiSafe}${contSafe?'_'+contSafe:''}${ext}`;
-    // Giữ nguyên folder, chỉ đổi tên file
-    const folder=oldPath.substring(0,oldPath.lastIndexOf('/')+1);
-    const newPath=`${folder}${newName}`;
-    if(newPath===oldPath) return oldPath;
-    const{error}=await db.storage.from('hoa-don').move(oldPath,newPath);
-    if(error){console.warn('Storage rename (non-fatal):',error.message);return oldPath;}
-    return newPath;
-  }catch(e){console.warn('Storage rename exception:',e);return oldPath;}
+    return`${ym}_${loaiSafe}${contSafe?'_'+contSafe:''}.pdf`;
+  }catch(e){return null;}
 }
 
 async function saveHoaDon(hd,fileName,storagePath=null){
   // Khớp cont → da_duyet ngay, không qua bước chờ
   const trangThai=hd.trang_thai==='da_khop'?'da_duyet':hd.trang_thai;
+
+  // Tên hiển thị khi tải về (lưu vào file_name, không đổi file trên Storage)
+  let displayName=fileName;
+  if(hd.trang_thai==='da_khop'&&hd.van_don_matches?.length){
+    const n=buildDisplayName(hd.loai_dv,hd.van_don_matches.map(v=>v.so_cont),hd.ngay_hd);
+    if(n) displayName=n;
+  }
+
   const{data,error}=await db.from('hoa_don').insert({
     so_hd:hd.so_hd,ngay_hd:hd.ngay_hd,loai_dv:hd.loai_dv,
     tong_tien:hd.tong_tien,so_cont_list:hd.so_cont_list,
@@ -348,19 +363,12 @@ async function saveHoaDon(hd,fileName,storagePath=null){
     nguoi_upload:CU?.id,ten_nguoi_upload:CU?.ho_ten,
     nguoi_duyet:hd.trang_thai==='da_khop'?CU?.id:null,
     ngay_duyet:hd.trang_thai==='da_khop'?new Date().toISOString():null,
-    file_name:fileName,storage_path:storagePath||null,
+    file_name:displayName,storage_path:storagePath||null,
   }).select().single();
   if(error) throw new Error(error.message);
 
   if(hd.trang_thai==='da_khop'&&hd.van_don_matches?.length){
-    // Đổi tên file: YYYY-MM_LoaiDV_CONT1-CONT2.pdf
     const allConts=hd.van_don_matches.map(v=>v.so_cont);
-    const newPath=await renameHDStorage(storagePath,hd.loai_dv,allConts,hd.ngay_hd);
-    if(newPath&&newPath!==storagePath){
-      await db.from('hoa_don').update({storage_path:newPath,file_name:newPath.split('/').pop()}).eq('id',data.id);
-      storagePath=newPath;
-    }
-
     const allContsStr=allConts.join(', ');
     const loaiChi=`${hd.loai_dv||'Chi hộ HĐ'} + ${allContsStr}`;
     for(let i=0;i<hd.van_don_matches.length;i++){
@@ -530,10 +538,10 @@ async function saveXuLyHD(hdId){
   }
   if(!vdList.length){toast('Không tìm thấy vận đơn nào khớp','error');return;}
 
-  // Đổi tên file trên Storage
-  const newPath=await renameHDStorage(hd.storage_path,hd.loai_dv,conts,hd.ngay_hd);
+  // Tên file tải về đẹp: YYYY-MM_LoaiDV_CONT1-CONT2.pdf
+  const displayName=buildDisplayName(hd.loai_dv,conts,hd.ngay_hd);
 
-  // Tên chi hộ: "CSHT + CONT1, CONT2" hoặc "Nâng hàng + CONT1"
+  // Tên chi hộ
   const contStr=conts.join(', ');
   const loaiChi=`${hd.loai_dv||'Chi hộ HĐ'} + ${contStr}`;
 
@@ -541,8 +549,7 @@ async function saveXuLyHD(hdId){
     trang_thai:'da_duyet',ly_do_cho:null,ai_ghi_chu:gc,
     nguoi_duyet:CU?.id,ngay_duyet:new Date().toISOString(),
     so_cont_list:conts,
-    storage_path:newPath||hd.storage_path,
-    file_name:newPath?newPath.split('/').pop():hd.file_name,
+    file_name:displayName||hd.file_name,
   }).eq('id',hdId);
 
   for(let i=0;i<vdList.length;i++){
