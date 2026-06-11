@@ -123,6 +123,8 @@ async function renderDP(o){
   const dp=document.getElementById('dp');
   const canM=canSee(['ke_toan','ceo']);
   const editable=canEdit(o);
+  // ke_toan/ceo luôn nhập được cước dù đơn đã locked — không cần mở khóa
+  const editableCuoc=canM&&!editable?true:editable;
   const{data:chiHoList}=await db.from('chi_ho').select('*').eq('van_don_id',o.id).order('ngay_chi');
   const totalCH=(chiHoList||[]).reduce((s,c)=>s+(+c.so_tien||0),0);
   const loi=(+o.gia_cuoc_khach||0)-(+o.gia_cuoc_thau||0)-totalCH;
@@ -145,7 +147,7 @@ async function renderDP(o){
   ${DP_TAB==='info'?renderTabInfo(o,editable):''}
   ${DP_TAB==='xe'?renderTabXe(o,editable):''}
   ${DP_TAB==='chiho'?renderTabChiHo(o,chiHoList||[],editable):''}
-  ${DP_TAB==='cuoc'&&canM?renderTabCuoc(o,chiHoList||[],editable,loi):''}
+  ${DP_TAB==='cuoc'&&canM?renderTabCuoc(o,chiHoList||[],editableCuoc,loi):''}
   </div>`;
 }
 
@@ -362,7 +364,14 @@ function renderTabChiHo(o,list,editable){
 }
 
 function renderTabCuoc(o,chiHoList,editable,loi){
-  const lockBar=o.locked&&canSee(['quan_ly','ceo'])?`<div class="lock-notice" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span><button class="btn btn-xs btn-danger" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa để sửa</button></div>`:(o.locked?'<div class="lock-notice" style="margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>':'');
+  // ke_toan/ceo: khi locked vẫn nhập cước được — chỉ hiện banner nhắc nhở thay vì lockBar
+  const lockBar=o.locked&&canSee(['ke_toan','ceo'])
+    ?`<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--r);padding:8px 12px;margin-bottom:10px;font-size:12px;color:#1d4ed8;display:flex;align-items:center;gap:6px">
+        <i class="ti ti-lock" style="font-size:14px"></i>
+        Điều vận đã hoàn thành chuyến. Nhập cước & lưu để chốt sổ.
+        <button class="btn btn-xs btn-danger" style="margin-left:auto" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa sửa nội dung</button>
+      </div>`
+    :(o.locked?'<div class="lock-notice" style="margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>':'');
   const totalCH=chiHoList.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
   const totalTraThau=chiHoList.reduce((s,c)=>s+(+c.tien_tra_thau||0),0);
   const totalTraLX=chiHoList.reduce((s,c)=>s+(+c.tien_tra_laixe||0),0);
@@ -434,13 +443,16 @@ function renderTabCuoc(o,chiHoList,editable,loi){
   <button class="btn btn-teal" style="width:100%;justify-content:center;margin-bottom:8px" onclick="saveCuoc('`+o.id+`')">
     <i class="ti ti-device-floppy"></i> Lưu cước & thanh toán
   </button>
+  ${!o.locked?`
   <button class="btn btn-success" style="width:100%;justify-content:center" onclick="lockOrder('`+o.id+`')">
     <i class="ti ti-lock"></i> Hoàn thành & Khóa vận đơn
   </button>
-  <p style="font-size:10.5px;color:var(--text-muted);text-align:center;margin-top:5px">⚠️ Sau khi khóa sẽ không thể chỉnh sửa</p>`:''}
+  <p style="font-size:10.5px;color:var(--text-muted);text-align:center;margin-top:5px">⚠️ Sau khi khóa sẽ không thể chỉnh sửa</p>
+  `:''}
+  `:''}
   ${o.locked&&canSee(['quan_ly','ceo'])?`
-  <button class="btn btn-danger" style="width:100%;justify-content:center;margin-top:6px" onclick="unlockOrder('`+o.id+`')">
-    <i class="ti ti-lock-open"></i> Mở khóa để chỉnh sửa
+  <button class="btn btn-danger btn-sm" style="width:100%;justify-content:center;margin-top:6px" onclick="unlockOrder('`+o.id+`')">
+    <i class="ti ti-lock-open"></i> Mở khóa để sửa nội dung xe / chi hộ
   </button>`:''}`;
 }
 
