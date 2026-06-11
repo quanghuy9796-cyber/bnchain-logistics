@@ -99,21 +99,34 @@ async function doLogin(){
   document.getElementById('u-role').textContent=rMap[data.vai_tro];
   document.getElementById('role-pill').textContent=rMap[data.vai_tro];
   document.getElementById('today-lbl').textContent=new Date().toLocaleDateString('vi-VN',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'});
-  await loadMaster();
-  renderPage();
+  try{
+    await loadMaster();
+    renderPage();
+  }catch(err){
+    console.error('[doLogin] renderPage error:',err);
+    toast('Lỗi khởi động: '+err.message+' — thử F5 lại','error');
+    document.getElementById('content').innerHTML='<div class="empty"><i class="ti ti-alert-circle" style="color:var(--danger)"></i>Lỗi tải trang — mở Console (F12) để xem chi tiết, hoặc thử F5.</div>';
+  }
 }
 function doLogout(){CU=null;document.getElementById('app-page').style.display='none';document.getElementById('login-page').style.display='flex';}
 
 async function loadMaster(){
-  const[a,b,c,d,e,f]=await Promise.all([
-    db.from('khach_hang').select('*').eq('active',true).order('ten_cong_ty'),
-    db.from('lai_xe').select('*').eq('active',true).order('ho_ten'),
-    db.from('thau_phu').select('*').eq('active',true).order('ten_cong_ty'),
-    db.from('users').select('*').eq('active',true).order('ho_ten'),
-    db.from('xe').select('id,bien_so,loai_phan_loai,ma_thau_phu,ten_lai_xe_mac_dinh,loai_xe').eq('active',true).order('bien_so'),
-    db.from('dia_diem').select('id,ten_chuan,viet_tat,loai,dia_phuong').eq('active',true).order('ten_chuan'),
-  ]);
-  KH=a.data||[];LX=b.data||[];TP=c.data||[];NV=d.data||[];XE=e.data||[];DD=f.data||[];
+  try{
+    const[a,b,c,d,e]=await Promise.all([
+      db.from('khach_hang').select('*').eq('active',true).order('ten_cong_ty'),
+      db.from('lai_xe').select('*').eq('active',true).order('ho_ten'),
+      db.from('thau_phu').select('*').eq('active',true).order('ten_cong_ty'),
+      db.from('users').select('*').eq('active',true).order('ho_ten'),
+      db.from('xe').select('id,bien_so,loai_phan_loai,ma_thau_phu,ten_lai_xe_mac_dinh,loai_xe').eq('active',true).order('bien_so'),
+    ]);
+    KH=a.data||[];LX=b.data||[];TP=c.data||[];NV=d.data||[];XE=e.data||[];
+  }catch(err){console.error('[loadMaster] core tables error:',err);}
+  // dia_diem load riêng — bảng có thể chưa tồn tại, không được crash toàn bộ
+  try{
+    const{data,error}=await db.from('dia_diem').select('id,ten_chuan,viet_tat,loai,dia_phuong').eq('active',true).order('ten_chuan');
+    DD=error?[]:data||[];
+    if(error)console.warn('[loadMaster] dia_diem chưa có hoặc lỗi:',error.message);
+  }catch(err){DD=[];console.warn('[loadMaster] dia_diem exception:',err);}
 }
 
 // NAV
