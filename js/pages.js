@@ -4,62 +4,121 @@
 
 async function pgDieuVan(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
-  let q=db.from('van_don').select('*').in('trang_thai',['Chờ xếp xe','Đang vận chuyển','Chờ xác nhận']).order('ngay_yeu_cau',{ascending:true,nullsFirst:false}).order('ngay',{ascending:true});
-  // nhan_vien chỉ thấy đơn mình tạo
-  if(CU?.vai_tro==='nhan_vien') q=q.eq('created_by',CU.id);
-  const{data}=await q;
-  const list=data||[];
+  const isNV=CU?.vai_tro==='nhan_vien';
+  const canM=canSee(['ke_toan','ceo']);
+
+  // Query 1: đơn chưa hoàn thành (tất cả role)
+  let q1=db.from('van_don').select('id,ma_don,ngay,trang_thai,ten_khach,loai_hang,so_bill,so_booking,so_cont,loai_cont,bien_kiem_soat,ten_lai_xe,hanh_trinh,ngay_yeu_cau,created_by,locked,gia_cuoc_khach')
+    .in('trang_thai',['Chờ xếp xe','Đang vận chuyển','Chờ xác nhận'])
+    .order('ngay_yeu_cau',{ascending:true,nullsFirst:false})
+    .order('ngay',{ascending:true});
+  if(isNV) q1=q1.eq('created_by',CU.id);
+
+  // Query 2: đơn đã khóa nhưng chưa nhập cước (chỉ KT/CEO)
+  let q2Promise=null;
+  if(canM){
+    q2Promise=db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_hang,so_cont,bien_kiem_soat,ten_lai_xe,hanh_trinh,gia_cuoc_khach')
+      .eq('locked',true).eq('gia_cuoc_khach',0)
+      .order('ngay',{ascending:false}).limit(100);
+  }
+
+  const [{data:d1}, q2res]=await Promise.all([q1, q2Promise||Promise.resolve({data:[]})]);
+  const list=d1||[];
+  const chuaCuoc=(q2res?.data||[]);
+
   const cho=list.filter(o=>o.trang_thai==='Chờ xếp xe');
-  const chay=list.filter(o=>o.trang_thai==='Đang vận chuyển');
-  const xn=list.filter(o=>o.trang_thai==='Chờ xác nhận');
+  const chay=list.filter(o=>o.trang_thai==='Đang vận chuyển'||o.trang_thai==='Chờ xác nhận');
+
+  const colXe=`<colgroup>
+    <col style="width:130px"><col style="width:70px"><col style="width:50px">
+    <col style="width:100px"><col style="width:100px"><col style="width:80px">
+    <col style="width:90px"><col style="width:105px"><col style="width:110px">
+  </colgroup>`;
 
   c.innerHTML=`
-  <div class="stats-row stats-3" style="margin-bottom:14px">
-    <div class="stat-card"><div class="stat-icon" style="background:#fef3c7;color:var(--warning)"><i class="ti ti-clock"></i></div><div class="stat-lbl">Chờ xếp xe</div><div class="stat-val text-orange">${cho.length}</div><div class="stat-sub">cần sắp xếp</div></div>
-    <div class="stat-card"><div class="stat-icon" style="background:#dbeafe;color:#2563eb"><i class="ti ti-truck"></i></div><div class="stat-lbl">Đang vận chuyển</div><div class="stat-val" style="color:#2563eb">${chay.length}</div><div class="stat-sub">xe đang chạy</div></div>
-    <div class="stat-card"><div class="stat-icon" style="background:#dcfce7;color:var(--success)"><i class="ti ti-check"></i></div><div class="stat-lbl">Chờ xác nhận</div><div class="stat-val text-green">${xn.length}</div><div class="stat-sub">chờ kế toán chốt</div></div>
+  <div class="stats-row stats-${canM?'3':'2'}" style="margin-bottom:14px">
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#fef3c7;color:var(--warning)"><i class="ti ti-clock"></i></div>
+      <div class="stat-lbl">Chờ xếp xe</div>
+      <div class="stat-val text-orange">${cho.length}</div>
+      <div class="stat-sub">cần phân công xe</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#dbeafe;color:#2563eb"><i class="ti ti-truck"></i></div>
+      <div class="stat-lbl">Đang vận chuyển</div>
+      <div class="stat-val" style="color:#2563eb">${chay.length}</div>
+      <div class="stat-sub">xe đang chạy</div>
+    </div>
+    ${canM?`<div class="stat-card">
+      <div class="stat-icon" style="background:#fff3e6;color:var(--primary)"><i class="ti ti-coins"></i></div>
+      <div class="stat-lbl">Chưa nhập cước</div>
+      <div class="stat-val text-orange">${chuaCuoc.length}</div>
+      <div class="stat-sub">đã khóa, chờ kế toán</div>
+    </div>`:''}
   </div>
+
   ${cho.length?`
-  <div style="font-size:12px;font-weight:600;color:var(--warning);margin-bottom:8px;display:flex;align-items:center;gap:5px"><i class="ti ti-clock"></i>CHỜ XẾP XE (${cho.length})</div>
-  <div class="tbl-wrap" style="margin-bottom:14px"><table class="tbl">
-    <colgroup><col style="width:130px"><col style="width:70px"><col style="width:55px"><col style="width:110px"><col style="width:120px"><col style="width:160px"><col style="width:100px"><col style="width:100px"></colgroup>
-    <thead><tr><th>Mã đơn</th><th>Ngày</th><th>Loại</th><th>Bill/Booking</th><th>Khách</th><th>Hành trình</th><th>Yêu cầu giao</th><th>Thao tác</th></tr></thead>
+  <div style="font-size:12px;font-weight:600;color:var(--warning);margin:0 0 8px;display:flex;align-items:center;gap:5px">
+    <i class="ti ti-clock"></i> CHỜ XẾP XE (${cho.length})
+  </div>
+  <div class="tbl-wrap" style="margin-bottom:18px"><table class="tbl">
+    <colgroup>
+      <col style="width:130px"><col style="width:70px"><col style="width:50px">
+      <col style="width:100px"><col style="width:150px"><col style="width:110px"><col style="width:110px">
+    </colgroup>
+    <thead><tr><th>Mã đơn</th><th>Ngày</th><th>Loại</th><th>Bill/Booking</th><th>Khách — Hành trình</th><th>Yêu cầu giao</th><th>Thao tác</th></tr></thead>
     <tbody>${cho.map(o=>`<tr>
-      <td style="color:var(--teal);font-weight:600">${o.ma_don}</td><td>${o.ngay}</td>
+      <td style="color:var(--teal);font-weight:600">${o.ma_don}</td>
+      <td>${fmtDate(o.ngay)}</td>
       <td>${loaiTag(o.loai_hang)}</td>
       <td style="color:var(--primary);font-weight:500">${o.so_bill||o.so_booking||'—'}</td>
-      <td>${o.ten_khach}</td><td title="${o.hanh_trinh||''}">${o.hanh_trinh||'—'}</td>
-      <td>${o.ngay_yeu_cau||'—'}</td>
-      <td><button class="btn btn-sm btn-primary" onclick="openDetail('${o.id}')"><i class="ti ti-truck"></i> Xếp xe</button></td>
+      <td><div style="font-weight:500">${o.ten_khach}</div><div style="font-size:11px;color:var(--text-muted)">${o.hanh_trinh||'—'}</div></td>
+      <td>${o.ngay_yeu_cau?`<span style="color:var(--danger);font-weight:500">${fmtDate(o.ngay_yeu_cau)}</span>`:'—'}</td>
+      <td><button class="btn btn-sm btn-primary" onclick="openDetail('${o.id}','xe')"><i class="ti ti-truck"></i> Xếp xe</button></td>
     </tr>`).join('')}</tbody>
   </table></div>`:''}
+
   ${chay.length?`
-  <div style="font-size:12px;font-weight:600;color:#2563eb;margin-bottom:8px;display:flex;align-items:center;gap:5px"><i class="ti ti-truck"></i>ĐANG VẬN CHUYỂN (${chay.length})</div>
-  <div class="tbl-wrap" style="margin-bottom:14px"><table class="tbl">
-    <colgroup><col style="width:130px"><col style="width:70px"><col style="width:55px"><col style="width:110px"><col style="width:100px"><col style="width:95px"><col style="width:90px"><col style="width:100px"><col style="width:100px"></colgroup>
-    <thead><tr><th>Mã đơn</th><th>Ngày</th><th>Loại</th><th>Bill/Booking</th><th>Khách</th><th>Số cont</th><th>Biển số</th><th>Lái xe</th><th>Thao tác</th></tr></thead>
+  <div style="font-size:12px;font-weight:600;color:#2563eb;margin:0 0 8px;display:flex;align-items:center;gap:5px">
+    <i class="ti ti-truck"></i> ĐANG VẬN CHUYỂN (${chay.length})
+  </div>
+  <div class="tbl-wrap" style="margin-bottom:18px"><table class="tbl">
+    ${colXe}
+    <thead><tr><th>Mã đơn</th><th>Ngày</th><th>Loại</th><th>Cont</th><th>Khách hàng</th><th>Biển số</th><th>Lái xe</th><th>Hành trình</th><th>Thao tác</th></tr></thead>
     <tbody>${chay.map(o=>`<tr>
-      <td style="color:var(--teal);font-weight:600">${o.ma_don}</td><td>${o.ngay}</td>
+      <td style="color:var(--teal);font-weight:600">${o.ma_don}</td>
+      <td>${fmtDate(o.ngay)}</td>
       <td>${loaiTag(o.loai_hang)}</td>
-      <td style="color:var(--primary);font-weight:500">${o.so_bill||o.so_booking||'—'}</td>
-      <td>${o.ten_khach}</td><td>${o.so_cont||'—'}</td><td>${o.bien_kiem_soat||'—'}</td><td>${o.ten_lai_xe||'—'}</td>
-      <td><button class="btn btn-sm" onclick="openDetail('${o.id}')"><i class="ti ti-receipt"></i> Chi phí</button></td>
+      <td style="font-family:monospace;font-size:11px">${o.so_cont||'—'}</td>
+      <td>${o.ten_khach}</td>
+      <td style="font-weight:600">${o.bien_kiem_soat||'—'}</td>
+      <td>${o.ten_lai_xe||'—'}</td>
+      <td style="font-size:11px;color:var(--text-muted)" title="${o.hanh_trinh||''}">${o.hanh_trinh||'—'}</td>
+      <td><button class="btn btn-sm btn-teal" onclick="openDetail('${o.id}','xe')"><i class="ti ti-lock"></i> Hoàn thành</button></td>
     </tr>`).join('')}</tbody>
   </table></div>`:''}
-  ${xn.length?`
-  <div style="font-size:12px;font-weight:600;color:var(--success);margin-bottom:8px;display:flex;align-items:center;gap:5px"><i class="ti ti-check"></i>CHỜ XÁC NHẬN / CHỐT (${xn.length})</div>
+
+  ${canM&&chuaCuoc.length?`
+  <div style="font-size:12px;font-weight:600;color:var(--primary);margin:0 0 8px;display:flex;align-items:center;gap:5px">
+    <i class="ti ti-coins"></i> ĐÃ KHÓA — CHƯA NHẬP CƯỚC (${chuaCuoc.length})
+  </div>
   <div class="tbl-wrap"><table class="tbl">
-    <colgroup><col style="width:130px"><col style="width:70px"><col style="width:55px"><col style="width:110px"><col style="width:100px"><col style="width:95px"><col style="width:90px"><col style="width:100px"><col style="width:100px"></colgroup>
-    <thead><tr><th>Mã đơn</th><th>Ngày</th><th>Loại</th><th>Bill/Booking</th><th>Khách</th><th>Số cont</th><th>Biển số</th><th>Lái xe</th><th>Thao tác</th></tr></thead>
-    <tbody>${xn.map(o=>`<tr>
-      <td style="color:var(--teal);font-weight:600">${o.ma_don}</td><td>${o.ngay}</td>
+    ${colXe}
+    <thead><tr><th>Mã đơn</th><th>Ngày</th><th>Loại</th><th>Cont</th><th>Khách hàng</th><th>Biển số</th><th>Lái xe</th><th>Hành trình</th><th>Thao tác</th></tr></thead>
+    <tbody>${chuaCuoc.map(o=>`<tr>
+      <td style="color:var(--teal);font-weight:600">${o.ma_don}</td>
+      <td>${fmtDate(o.ngay)}</td>
       <td>${loaiTag(o.loai_hang)}</td>
-      <td style="color:var(--primary);font-weight:500">${o.so_bill||o.so_booking||'—'}</td>
-      <td>${o.ten_khach}</td><td>${o.so_cont||'—'}</td><td>${o.bien_kiem_soat||'—'}</td><td>${o.ten_lai_xe||'—'}</td>
-      <td><button class="btn btn-sm btn-success" onclick="openDetail('${o.id}')"><i class="ti ti-coins"></i> Chốt</button></td>
+      <td style="font-family:monospace;font-size:11px">${o.so_cont||'—'}</td>
+      <td>${o.ten_khach}</td>
+      <td style="font-weight:600">${o.bien_kiem_soat||'—'}</td>
+      <td>${o.ten_lai_xe||'—'}</td>
+      <td style="font-size:11px;color:var(--text-muted)" title="${o.hanh_trinh||''}">${o.hanh_trinh||'—'}</td>
+      <td><button class="btn btn-sm btn-primary" onclick="openDetail('${o.id}','cuoc')"><i class="ti ti-coins"></i> Nhập cước</button></td>
     </tr>`).join('')}</tbody>
   </table></div>`:''}
-  ${!list.length?'<div class="empty"><i class="ti ti-checks"></i>Không có đơn nào đang xử lý</div>':''}`;
+
+  ${!cho.length&&!chay.length&&!chuaCuoc.length?'<div class="empty"><i class="ti ti-checks"></i>Tất cả đơn đã hoàn thành và có cước</div>':''}`;
 }
 
 // ==================== CHI HO ====================
