@@ -475,11 +475,14 @@ async function saveInfo(id){
 }
 
 function onBienInput(el){
-  el.value=formatBienSo(el.value);
+  // KHÔNG gọi formatBienSo ở đây — sẽ reset dropdown datalist đang mở
+  // Format sẽ chạy khi blur (validateBienInput)
   document.getElementById('fx-tt').value='Đang vận chuyển';
   onBienChange(el.value);
 }
 function validateBienInput(el){
+  // Format trước khi validate (chạy khi blur)
+  el.value=formatBienSo(el.value);
   const err=document.getElementById('fx-bien-err');
   if(el.value&&!validateBienSo(el.value)){
     el.style.borderColor='var(--danger)';
