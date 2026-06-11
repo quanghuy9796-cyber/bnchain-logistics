@@ -308,7 +308,7 @@ async function deleteLX(id,ten){
 async function pgNV(c){
   if(!canSee(['ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Chỉ CEO có quyền</div>';return;}
   const{data}=await db.from('users').select('*').order('vai_tro');
-  const rMap={nhan_vien:'Nhân viên',quan_ly:'Quản lý',ke_toan:'Kế toán',ceo:'CEO'};
+  const rMap={nhan_vien:'Nhân viên',ops_hp:'OPS Hải Phòng',quan_ly:'Quản lý',ke_toan:'Kế toán',ceo:'CEO'};
   c.innerHTML=`
   <div class="toolbar">
     <button class="btn btn-primary" onclick="openAddNV()"><i class="ti ti-plus"></i> Thêm tài khoản</button>
@@ -356,6 +356,7 @@ function openAddNV(existing={}){
     <div class="form-group full"><label>Vai trò</label>
       <select id="nv-role">
         <option value="nhan_vien" ${existing.vai_tro==='nhan_vien'?'selected':''}>Nhân viên — Vận hành cơ bản</option>
+        <option value="ops_hp" ${existing.vai_tro==='ops_hp'?'selected':''}>OPS Hải Phòng — Upload & duyệt hóa đơn</option>
         <option value="quan_ly" ${existing.vai_tro==='quan_ly'?'selected':''}>Quản lý — Mở khóa đơn, danh mục</option>
         <option value="ke_toan" ${existing.vai_tro==='ke_toan'?'selected':''}>Kế toán — Nhập cước, bảng kê</option>
         <option value="ceo" ${existing.vai_tro==='ceo'?'selected':''}>CEO — Toàn quyền</option>
