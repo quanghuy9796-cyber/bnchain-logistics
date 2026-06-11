@@ -235,12 +235,12 @@ function renderTabXe(o,editable){
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-truck"></i>Phân công xe & lái xe</div>
     <div class="form-grid">
-      <div class="form-group"><label>Biển kiểm soát</label>
+      <div class="form-group" style="position:relative"><label>Biển kiểm soát</label>
         <input type="text" id="fx-bien" value="${o.bien_kiem_soat||''}" placeholder="99H-06375"
           ${dis} oninput="onBienInput(this)"
           onblur="validateBienInput(this)"
-          list="bien-dl" autocomplete="off">
-        <datalist id="bien-dl">${bienOpts}</datalist>
+          autocomplete="off">
+        <div id="fx-bien-drop" style="display:none;position:absolute;z-index:999;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:220px;overflow-y:auto"></div>
         <span id="fx-bien-err" style="font-size:10px;color:var(--danger);display:none">Định dạng: 99H-06375</span>
         <span style="font-size:10px;color:var(--text-muted)">Thầu phụ tự động theo biển số</span>
       </div>
@@ -475,13 +475,43 @@ async function saveInfo(id){
 }
 
 function onBienInput(el){
-  // KHÔNG gọi formatBienSo ở đây — sẽ reset dropdown datalist đang mở
-  // Format sẽ chạy khi blur (validateBienInput)
+  const q=el.value.trim().toUpperCase();
   document.getElementById('fx-tt').value='Đang vận chuyển';
-  onBienChange(el.value);
+  // Custom dropdown lọc full-text
+  const drop=document.getElementById('fx-bien-drop');
+  if(!drop)return;
+  if(!q){drop.style.display='none';return;}
+  const matches=(XE||[]).filter(x=>x.bien_so.replace(/-/g,'').includes(q.replace(/-/g,'')));
+  if(!matches.length){drop.style.display='none';}
+  else{
+    drop.innerHTML=matches.map(x=>`
+      <div onclick="pickBien('${x.bien_so}')"
+        style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px"
+        onmouseover="this.style.background='var(--teal-light)'"
+        onmouseout="this.style.background=''">
+        <span style="font-weight:600;color:var(--sidebar-bg)">${x.bien_so}</span>
+        ${x.ma_thau_phu?`<span style="color:var(--text-muted);margin-left:6px">— ${x.ma_thau_phu}</span>`:''}
+      </div>`).join('');
+    drop.style.display='block';
+  }
+  // Debounce lookup DB khi biển số đủ dài
+  clearTimeout(window._bienT);
+  window._bienT=setTimeout(()=>onBienChange(el.value),400);
+}
+function pickBien(bien){
+  const el=document.getElementById('fx-bien');
+  if(el){el.value=bien;}
+  const drop=document.getElementById('fx-bien-drop');
+  if(drop)drop.style.display='none';
+  onBienChange(bien);
 }
 function validateBienInput(el){
-  // Format trước khi validate (chạy khi blur)
+  // Đóng dropdown khi rời ô (dùng setTimeout để pickBien kịp chạy trước)
+  setTimeout(()=>{
+    const drop=document.getElementById('fx-bien-drop');
+    if(drop)drop.style.display='none';
+  },200);
+  // Format + validate
   el.value=formatBienSo(el.value);
   const err=document.getElementById('fx-bien-err');
   if(el.value&&!validateBienSo(el.value)){
