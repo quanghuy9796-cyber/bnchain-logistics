@@ -180,10 +180,16 @@ function renderTabInfo(o,editable){
       <div class="form-group" id="grp-booking" ${isNhap?'style="display:none"':''}>
         <label>Số Booking</label>
         <input type="text" id="fi-booking" value="${o.so_booking||''}" placeholder="Số booking hàng xuất" ${dis}></div>
-      <div class="form-group"><label>Điểm lấy hàng *</label>
-        <input type="text" id="fi-lay" value="${o.diem_lay||''}" placeholder="Kho / KCN / Cảng..." ${dis}></div>
-      <div class="form-group"><label>Điểm trả hàng *</label>
-        <input type="text" id="fi-tra" value="${o.diem_tra||''}" placeholder="Kho / KCN / Cảng..." ${dis}></div>
+      <div class="form-group" style="position:relative"><label>Điểm lấy hàng *</label>
+        <input type="text" id="fi-lay" value="${o.diem_lay||''}" placeholder="Gõ tên / viết tắt để tìm..." autocomplete="off" ${dis}
+          oninput="if(!this.disabled)onDiemInput(this,'fi-lay-drop')" onblur="closeDiemDrop('fi-lay-drop')">
+        <div id="fi-lay-drop" data-input-id="fi-lay" style="display:none;position:absolute;z-index:999;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:240px;overflow-y:auto"></div>
+      </div>
+      <div class="form-group" style="position:relative"><label>Điểm trả hàng *</label>
+        <input type="text" id="fi-tra" value="${o.diem_tra||''}" placeholder="Gõ tên / viết tắt để tìm..." autocomplete="off" ${dis}
+          oninput="if(!this.disabled)onDiemInput(this,'fi-tra-drop')" onblur="closeDiemDrop('fi-tra-drop')">
+        <div id="fi-tra-drop" data-input-id="fi-tra" style="display:none;position:absolute;z-index:999;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:240px;overflow-y:auto"></div>
+      </div>
       <div class="form-group full"><label>Điểm trả phát sinh thêm</label>
         <input type="text" id="fi-traphat" value="${o.diem_tra_phat_sinh||''}" placeholder="Nếu có thêm điểm trả..." ${dis}></div>
       <div class="form-group"><label>Ngày yêu cầu giao</label>
@@ -495,13 +501,14 @@ async function saveInfo(id){
 }
 
 function onBienInput(el){
-  const q=el.value.trim().toUpperCase();
+  const raw=el.value.trim();
+  const q=removeAccents(raw).replace(/-/g,'');
   document.getElementById('fx-tt').value='Đang vận chuyển';
-  // Custom dropdown lọc full-text
+  // Custom dropdown lọc full-text + không dấu
   const drop=document.getElementById('fx-bien-drop');
   if(!drop)return;
   if(!q){drop.style.display='none';return;}
-  const matches=(XE||[]).filter(x=>x.bien_so.replace(/-/g,'').includes(q.replace(/-/g,'')));
+  const matches=(XE||[]).filter(x=>removeAccents(x.bien_so).replace(/-/g,'').includes(q));
   if(!matches.length){drop.style.display='none';}
   else{
     drop.innerHTML=matches.map(x=>`
@@ -524,6 +531,47 @@ function pickBien(bien){
   const drop=document.getElementById('fx-bien-drop');
   if(drop)drop.style.display='none';
   onBienChange(bien);
+}
+
+// DROPDOWN DIA DIEM (dung chung cho moi o diem_lay / diem_tra)
+function onDiemInput(el,dropId){
+  const q=removeAccents(el.value.trim());
+  const drop=document.getElementById(dropId);
+  if(!drop)return;
+  if(!q){drop.style.display='none';return;}
+  const matches=(DD||[]).filter(d=>{
+    const haystack=removeAccents((d.ten_chuan||'')+' '+(d.viet_tat||'')+' '+(d.dia_phuong||''));
+    return haystack.includes(q);
+  }).slice(0,8);
+  if(!matches.length){drop.style.display='none';return;}
+  const loaiIcon={'Cang':'\u{1F6A2}','KCN':'\u{1F3ED}','Kho':'\u{1F4E6}','Depot':'\u{1F532}','Cua khau':'\u{1F6C3}','Khac':'\u{1F4CD}'};
+  drop.innerHTML=matches.map(d=>{
+    const loaiKey=removeAccents(d.loai||'');
+    const icon=Object.entries(loaiIcon).find(([k])=>loaiKey.includes(k));
+    const ico=icon?icon[1]:'\u{1F4CD}';
+    const safe=d.ten_chuan.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return '<div onclick="pickDiem(\''+dropId+'\',\''+safe+'\')"'
+      +' style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px"'
+      +' onmouseover="this.style.background=\'var(--teal-light)\'"'
+      +' onmouseout="this.style.background=\'\'">'
+      +'<span style="margin-right:6px">'+ico+'</span>'
+      +'<span style="font-weight:600;color:var(--sidebar-bg)">'+d.ten_chuan+'</span>'
+      +(d.dia_phuong?'<span style="color:var(--text-muted);margin-left:6px;font-size:11px">'+d.dia_phuong+'</span>':'')
+      +(d.viet_tat?'<span style="color:var(--teal);margin-left:6px;font-size:11px">'+d.viet_tat+'</span>':'')
+      +'</div>';
+  }).join('');
+  drop.style.display='block';
+}
+function pickDiem(dropId,tenChuan){
+  const drop=document.getElementById(dropId);
+  if(!drop)return;
+  const inputId=drop.dataset.inputId;
+  const input=inputId?document.getElementById(inputId):null;
+  if(input)input.value=tenChuan;
+  setTimeout(()=>{if(drop)drop.style.display='none';},80);
+}
+function closeDiemDrop(dropId){
+  setTimeout(()=>{const d=document.getElementById(dropId);if(d)d.style.display='none';},200);
 }
 function validateBienInput(el){
   // Đóng dropdown khi rời ô (dùng setTimeout để pickBien kịp chạy trước)
@@ -768,8 +816,16 @@ function openForm(){
           <option value="Mooc sàn"><option value="Mooc rào"><option value="Fooc">
         </datalist>
       </div>
-      <div class="form-group"><label>Điểm lấy hàng *</label><input type="text" id="nf-lay" placeholder="Kho / KCN / Cảng..."></div>
-      <div class="form-group"><label>Điểm trả hàng *</label><input type="text" id="nf-tra" placeholder="Kho / KCN / Cảng..."></div>
+      <div class="form-group" style="position:relative"><label>Điểm lấy hàng *</label>
+        <input type="text" id="nf-lay" placeholder="Gõ tên / viết tắt để tìm..." autocomplete="off"
+          oninput="onDiemInput(this,'nf-lay-drop')" onblur="closeDiemDrop('nf-lay-drop')">
+        <div id="nf-lay-drop" data-input-id="nf-lay" style="display:none;position:absolute;z-index:999;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:240px;overflow-y:auto"></div>
+      </div>
+      <div class="form-group" style="position:relative"><label>Điểm trả hàng *</label>
+        <input type="text" id="nf-tra" placeholder="Gõ tên / viết tắt để tìm..." autocomplete="off"
+          oninput="onDiemInput(this,'nf-tra-drop')" onblur="closeDiemDrop('nf-tra-drop')">
+        <div id="nf-tra-drop" data-input-id="nf-tra" style="display:none;position:absolute;z-index:999;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:240px;overflow-y:auto"></div>
+      </div>
       <div class="form-group full"><label>Ghi chú</label><textarea id="nf-ghichu" rows="2"></textarea></div>
     </div>
     <div class="form-section-title" style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 8px"><i class="ti ti-currency-dong"></i> Dịch vụ kèm theo</div>
