@@ -367,3 +367,90 @@ async function toggleNV(id,active,ten){
   if(error){toast('Lỗi: '+error.message,'error');return;}
   toast(active?'Đã vô hiệu hóa':'Đã kích hoạt lại');pgNV(document.getElementById('content'));
 }
+
+// ============ ĐỊA ĐIỂM ============
+async function pgDiaDiem(c){
+  if(!canSee(['quan_ly','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
+  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
+  const{data}=await db.from('dia_diem').select('*').eq('active',true).order('loai').order('ten_chuan');
+  const list=data||[];
+  const loaiIcon={'Cảng':'🚢','KCN':'🏭','Kho':'📦','Depot':'🔲','Cửa khẩu':'🛃','Khác':'📍'};
+  c.innerHTML=`
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn btn-primary" onclick="openAddDD()"><i class="ti ti-plus"></i> Thêm địa điểm</button>
+    <span style="font-size:12px;color:var(--text-muted);align-self:center">${list.length} địa điểm</span>
+  </div>
+  <div class="tbl-wrap"><table class="tbl">
+    <colgroup><col style="width:220px"><col style="width:90px"><col style="width:120px"><col style="width:180px"><col style="width:90px"></colgroup>
+    <thead><tr><th>Tên chuẩn</th><th>Loại</th><th>Địa phương</th><th>Viết tắt / gợi ý tìm</th><th>Thao tác</th></tr></thead>
+    <tbody>${list.length?list.map(d=>`<tr>
+      <td style="font-weight:600">${loaiIcon[d.loai]||'📍'} ${d.ten_chuan}</td>
+      <td><span class="tag">${d.loai||'—'}</span></td>
+      <td style="font-size:12px;color:var(--text-muted)">${d.dia_phuong||'—'}</td>
+      <td style="font-size:12px;color:var(--teal)">${d.viet_tat||'—'}</td>
+      <td><div style="display:flex;gap:4px">
+        <button class="btn btn-xs btn-teal" onclick="editDD('${d.id}')"><i class="ti ti-edit"></i></button>
+        <button class="btn btn-xs btn-danger" onclick="deleteDD('${d.id}','${d.ten_chuan.replace(/'/g,"\\'")}')"><i class="ti ti-trash"></i></button>
+      </div></td>
+    </tr>`).join(''):'<tr><td colspan="5"><div class="empty"><i class="ti ti-map-pin-off"></i>Chưa có địa điểm nào. Bấm "Thêm địa điểm" để bắt đầu.</div></td></tr>'}
+    </tbody>
+  </table></div>`;
+}
+
+function openAddDD(existing={}){
+  const isEdit=!!existing.id;
+  const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
+  bg.innerHTML=`<div class="modal" style="width:500px">
+  <div class="modal-head"><h3>${isEdit?'Sửa':'Thêm'} địa điểm</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="form-group full"><label>Tên chuẩn *<span style="font-size:10px;color:var(--text-muted);margin-left:6px">Viết HOA, đầy đủ dấu</span></label>
+      <input id="dd-ten" value="${existing.ten_chuan||''}" placeholder="VD: CẢNG HẢI PHÒNG, KCN QUẾ VÕ BẮC NINH"></div>
+    <div class="form-group"><label>Loại</label>
+      <select id="dd-loai">
+        ${['Cảng','KCN','Kho','Depot','Cửa khẩu','Khác'].map(l=>`<option value="${l}" ${(existing.loai||'Khác')===l?'selected':''}>${l}</option>`).join('')}
+      </select></div>
+    <div class="form-group"><label>Địa phương<span style="font-size:10px;color:var(--text-muted);margin-left:4px">VD: Hải An, Hải Phòng</span></label>
+      <input id="dd-dphuong" value="${existing.dia_phuong||''}" placeholder="Phường/xã, tỉnh/thành"></div>
+    <div class="form-group full"><label>Viết tắt / từ khóa tìm kiếm<span style="font-size:10px;color:var(--text-muted);margin-left:6px">Cách nhau bằng dấu phẩy</span></label>
+      <input id="dd-viettat" value="${existing.viet_tat||''}" placeholder="VD: CHP, cảng HP, hai phong">
+      <span style="font-size:10px;color:var(--teal)">Điều vận gõ bất kỳ từ nào trong này sẽ ra gợi ý</span></div>
+  </div></div>
+  <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button>
+    <button class="btn btn-primary" onclick="saveDD('${existing.id||''}')"><i class="ti ti-device-floppy"></i> Lưu</button>
+  </div></div>`;
+  document.body.appendChild(bg);
+  setTimeout(()=>document.getElementById('dd-ten')?.focus(),50);
+}
+
+async function editDD(id){
+  const{data}=await db.from('dia_diem').select('*').eq('id',id).single();
+  if(data)openAddDD(data);
+}
+
+async function saveDD(id=''){
+  if(!canSee(['quan_ly','ceo'])){toast('Không có quyền','error');return;}
+  const ten=document.getElementById('dd-ten').value.trim();
+  if(!ten){toast('Nhập tên chuẩn','error');return;}
+  const d={
+    ten_chuan:ten,
+    loai:document.getElementById('dd-loai').value,
+    dia_phuong:document.getElementById('dd-dphuong').value.trim()||null,
+    viet_tat:document.getElementById('dd-viettat').value.trim()||null,
+  };
+  let error;
+  if(id){({error}=await db.from('dia_diem').update(d).eq('id',id));}
+  else{({error}=await db.from('dia_diem').insert(d));}
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast(id?'Đã cập nhật địa điểm':'Đã thêm địa điểm');
+  closeModal();
+  await loadMaster();
+  pgDiaDiem(document.getElementById('content'));
+}
+
+async function deleteDD(id,ten){
+  if(!canSee(['quan_ly','ceo'])){toast('Không có quyền','error');return;}
+  if(!confirm('Xóa địa điểm "'+ten+'"?\nCác vận đơn cũ không bị ảnh hưởng.'))return;
+  const{error}=await db.from('dia_diem').update({active:false}).eq('id',id);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast('Đã xóa');await loadMaster();pgDiaDiem(document.getElementById('content'));
+}
