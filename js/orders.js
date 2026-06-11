@@ -262,7 +262,7 @@ function renderTabXe(o,editable){
       </div>
       <input type="hidden" id="fx-phanloai" value="${o.loai_phan_loai_xe||''}">
       <input type="hidden" id="fx-noibo" value="${o.la_xe_noi_bo?'true':'false'}">
-      <div class="form-group"><label>Thầu phụ <span style="font-size:10px;color:var(--teal)">(tự động / tự điền)</span></label>
+      <div class="form-group" id="fx-thauphu-group"><label>Thầu phụ <span style="font-size:10px;color:var(--teal)">(tự động / tự điền)</span></label>
         <input type="text" id="fx-thauphu" value="${o.ma_thau_phu||''}" placeholder="Tự điền nếu chưa có..." list="tp-dl" ${dis}>
         <datalist id="tp-dl">${tpOpts}</datalist>
       </div>
@@ -524,7 +524,12 @@ function onBienInput(el){
   }
   // Debounce lookup DB khi biển số đủ dài
   clearTimeout(window._bienT);
-  window._bienT=setTimeout(()=>onBienChange(el.value),400);
+  // Chỉ debounce khi không có dropdown hiện (tức là gõ tự do, không chọn từ list)
+  window._bienT=setTimeout(()=>{
+    const d=document.getElementById('fx-bien-drop');
+    if(d&&d.style.display==='block')return; // đang hiện dropdown → chờ pickBien
+    onBienChange(el.value);
+  },500);
 }
 function pickBien(bien){
   clearTimeout(window._bienT); // hủy debounce đang chờ, tránh double-call
@@ -711,15 +716,17 @@ async function onBienChange(bien){
     const show=xe.loai_phan_loai!=='thau_tu_lai';
     lxGroup.style.display=show?'':'none';
   }
-  // Xe nội bộ: lái xe cố định theo danh mục, không cho tự ý sửa
-  if(lxEl){
-    if(xe.loai_phan_loai==='noi_bo'){
-      lxEl.setAttribute('disabled','');
-      lxEl.title='Xe nội bộ — lái xe cố định theo danh mục xe';
-    } else {
-      lxEl.removeAttribute('disabled');
-      lxEl.title='';
-    }
+  // Xe nội bộ: lái xe + thầu phụ cố định, không cho sửa
+  const tpGroup=document.getElementById('fx-thauphu-group');
+  if(xe.loai_phan_loai==='noi_bo'){
+    // Ẩn thầu phụ — xe nội bộ không có thầu phụ
+    if(tpGroup)tpGroup.style.display='none';
+    if(tpEl)tpEl.value='';
+    // Disable lái xe — cố định theo danh mục
+    if(lxEl){lxEl.setAttribute('disabled','');lxEl.title='Xe nội bộ — lái xe cố định theo danh mục xe';}
+  } else {
+    if(tpGroup)tpGroup.style.display='';
+    if(lxEl){lxEl.removeAttribute('disabled');lxEl.title='';}
   }
   if(nbEl)nbEl.value=xe.loai_phan_loai==='noi_bo'?'true':'false';
   // Bắt buộc chọn lại loại chuyến khi đổi xe
