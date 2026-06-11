@@ -88,9 +88,12 @@ function canEdit(o){
 
 // AUTH
 async function doLogin(){
-  const email=document.getElementById('li-email').value.trim();
-  const{data,error}=await db.from('users').select('*').eq('email',email).eq('active',true).single();
-  if(error||!data){toast('Email không tồn tại','error');return;}
+  const username=document.getElementById('li-user').value.trim();
+  const pass=document.getElementById('li-pass').value;
+  if(!username||!pass){toast('Nhập tên đăng nhập và mật khẩu','error');return;}
+  const{data,error}=await db.from('users').select('*').eq('username',username).eq('active',true).single();
+  if(error||!data){toast('Tên đăng nhập không đúng hoặc tài khoản đã bị khóa','error');return;}
+  if(data.password!==pass){toast('Mật khẩu không đúng','error');return;}
   CU=data;
   document.getElementById('login-page').style.display='none';
   document.getElementById('app-page').style.display='flex';
