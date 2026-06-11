@@ -318,9 +318,9 @@ async function loadBangKe(){
   });
   let p2Rows='';
   Object.entries(p2ByCont).forEach(([cont,{items}],i)=>{
-    const csht=items.find(c=>c.loai_chi==='Phí CSHT'||c.loai_chi==='CSHT'||c.loai_chi?.includes('CSHT')||c.loai_chi?.includes('Hạ tầng'));
-    const nang=items.find(c=>c.loai_chi==='Nâng hàng'||c.loai_chi==='Nâng vỏ'||c.loai_chi?.startsWith('Nâng hàng')||c.loai_chi?.startsWith('Nâng vỏ')||c.loai_chi?.startsWith('Nâng, hạ')||c.loai_chi?.startsWith('Nâng hạ'));
-    const ha=items.find(c=>c.loai_chi==='Hạ hàng'||c.loai_chi==='Hạ vỏ'||c.loai_chi?.startsWith('Hạ hàng')||c.loai_chi?.startsWith('Hạ vỏ'));
+    const csht=items.find(c=>c.loai_chi?.includes('CSHT')||c.loai_chi?.includes('Hạ tầng')||c.loai_chi?.includes('Phí CSHT'));
+    const nang=items.find(c=>c.loai_chi?.includes('Nâng hàng')||c.loai_chi?.includes('Nâng vỏ')||c.loai_chi?.includes('Nâng, hạ')||c.loai_chi?.includes('Nâng hạ'));
+    const ha=items.find(c=>c.loai_chi?.includes('Hạ hàng')||c.loai_chi?.includes('Hạ vỏ'));
     const khac=items.filter(c=>c!==csht&&c!==nang&&c!==ha);
     const tongCont=items.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
     const khacTien=khac.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
