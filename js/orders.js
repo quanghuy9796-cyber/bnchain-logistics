@@ -904,10 +904,11 @@ function showLockConfirm(id, coChiHo, soChiHo, o){
       </div>
     </div>`:''}
 
-    ${!coChiHo&&!coWarnDV?`
-    <div style="padding:10px 20px 0">
+    ${!coChiHo?`
+    <div style="padding:${coWarnDV?'10px':'10px'} 20px 0">
       <div style="background:#fef3c7;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e">
-        ⚠️ Bỏ sót chi phí → kế toán phải mở lại → mất thời gian 2 bên.
+        ⚠️ Chưa có chi phí phát sinh (lưu ca, cao tốc, bốc xếp...) — kiểm tra kỹ trước khi khóa.<br>
+        <span style="opacity:.8">Bỏ sót → kế toán phải mở lại → mất thời gian 2 bên.</span>
       </div>
     </div>`:''}
 
