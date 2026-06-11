@@ -529,9 +529,16 @@ function onBienInput(el){
 function pickBien(bien){
   clearTimeout(window._bienT); // hủy debounce đang chờ, tránh double-call
   const el=document.getElementById('fx-bien');
-  if(el){el.value=bien;}
+  if(el){
+    el.value=bien;
+    // Xóa border đỏ validate nếu có
+    el.style.borderColor='';
+    const err=document.getElementById('fx-bien-err');
+    if(err)err.style.display='none';
+  }
   const drop=document.getElementById('fx-bien-drop');
   if(drop)drop.style.display='none';
+  // Gọi thẳng với giá trị chuẩn — el.value đã được set ở trên
   onBienChange(bien);
 }
 
@@ -699,7 +706,7 @@ async function onBienChange(bien){
   if(tpEl)tpEl.value=xe.ma_thau_phu||'';
   if(lxEl)lxEl.value=xe.ten_lai_xe_mac_dinh||'';
   if(plEl)plEl.value=xe.loai_phan_loai||'thau_tu_lai';
-  if(lxhEl&&xe.loai_xe)lxhEl.value=xe.loai_xe;
+  // Không auto-fill loại cont khi đổi biển — loại cont gắn với cont, không với xe
   if(lxGroup){
     const show=xe.loai_phan_loai!=='thau_tu_lai';
     lxGroup.style.display=show?'':'none';
