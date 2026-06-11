@@ -83,6 +83,8 @@ function canSee(roles){return roles.includes(CU?.vai_tro);}
 function canEdit(o){
   // locked = chỉ xem tuyệt đối, kể cả CEO/QL — phải bấm Mở khóa trước
   if(o?.locked) return false;
+  // ops_hp không bao giờ edit vận đơn
+  if(CU?.vai_tro==='ops_hp') return false;
   return canSee(['nhan_vien','quan_ly','ke_toan','ceo']);
 }
 
@@ -98,7 +100,7 @@ async function doLogin(){
   document.getElementById('login-page').style.display='none';
   document.getElementById('app-page').style.display='flex';
   document.getElementById('u-name').textContent=data.ho_ten;
-  const rMap={nhan_vien:'Nhân viên',quan_ly:'Quản lý',ke_toan:'Kế toán',ceo:'CEO'};
+  const rMap={nhan_vien:'Nhân viên',quan_ly:'Quản lý',ke_toan:'Kế toán',ceo:'CEO',ops_hp:'OPS Hải Phòng'};
   document.getElementById('u-role').textContent=rMap[data.vai_tro];
   document.getElementById('role-pill').textContent=rMap[data.vai_tro];
   document.getElementById('today-lbl').textContent=new Date().toLocaleDateString('vi-VN',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'});
