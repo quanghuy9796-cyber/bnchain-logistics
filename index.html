@@ -8,11 +8,13 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    /* Logo PNG nền trong suốt — dùng chung login + sidebar */
+    /* Logo login — PNG trong suốt */
     .login-brand img.logo-img { width: 200px; height: auto; display: block; margin: 0 auto 6px; }
-    .logo { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.08); cursor: pointer; text-align: center; }
-    .logo img.logo-sidebar { width: 156px; height: auto; display: block; margin: 0 auto;
-      background: #fff; border-radius: 8px; padding: 7px 10px; }
+    /* Logo sidebar — text gốc */
+    .logo { padding: 16px 14px; border-bottom: 1px solid rgba(255,255,255,.08); cursor: pointer; }
+    .logo-brand { font-size: 19px; font-weight: 700; color: #fff; letter-spacing: .5px; }
+    .logo-brand span { color: #E8820C; }
+    .logo-sub { font-size: 9px; color: rgba(168,192,200,.45); letter-spacing: 1.2px; text-transform: uppercase; margin-top: 3px; }
   </style>
 </head>
 <body>
@@ -37,7 +39,8 @@
   <!-- SIDEBAR -->
   <div class="sidebar">
     <div class="logo" onclick="nav('orders',document.querySelector('.nav-item'))">
-      <img src="logo.png" alt="BN CHAIN" class="logo-sidebar">
+      <div class="logo-brand"><span>BN</span> CHAIN</div>
+      <div class="logo-sub">LOGISTICS & SOLUTIONS</div>
     </div>
     <div class="nav-sec">
       <div class="nav-lbl">VẬN HÀNH</div>
