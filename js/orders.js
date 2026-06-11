@@ -851,19 +851,21 @@ async function unlockOrder(id){
 
 async function lockOrder(id){
   const o=ORDERS.find(x=>x.id===id);
-  const{data:chiHo}=await db.from('chi_ho').select('id').eq('van_don_id',id).eq('la_tham_chieu',false);
-  const coChiHo=(chiHo||[]).length>0;
-  const soChiHo=(chiHo||[]).length;
-  showLockConfirm(id, coChiHo, soChiHo, o);
+  const{data:chiHo}=await db.from('chi_ho').select('id,loai_chi').eq('van_don_id',id).eq('la_tham_chieu',false);
+  const list=chiHo||[];
+  const coChiHo=list.length>0;
+  const soChiHo=list.length;
+  // Kiểm tra có lưu ca hoặc bốc xếp chưa
+  const coLuuCa=list.some(c=>c.loai_chi?.includes('Lưu ca')||c.loai_chi?.includes('Công nhân bốc xếp'));
+  showLockConfirm(id, coChiHo, soChiHo, o, coLuuCa);
 }
 
-function showLockConfirm(id, coChiHo, soChiHo, o){
+function showLockConfirm(id, coChiHo, soChiHo, o, coLuuCa=false){
   document.getElementById('lock-confirm-modal')?.remove();
 
-  // Chỉ cảnh báo khi CHƯA tick dịch vụ (không block — cho khóa sau khi xác nhận)
   const chuaDL=!o?.co_doi_lenh;
-  const chuaTK=!o?.co_to_khai;
-  const coWarnDV=chuaDL||chuaTK;
+  const chuaLuuCa=!coLuuCa; // chưa có lưu ca / bốc xếp trong chi hộ
+  const coWarnDV=chuaDL||chuaLuuCa;
 
   const wrap=document.createElement('div');
   wrap.id='lock-confirm-modal';
@@ -883,9 +885,9 @@ function showLockConfirm(id, coChiHo, soChiHo, o){
           <input type="checkbox" id="lc-dl" style="width:16px;height:16px;cursor:pointer">
           <span>Không có <strong>Đổi lệnh</strong> trong chuyến này</span>
         </label>`:''}
-        ${chuaTK?`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:8px">
-          <input type="checkbox" id="lc-tk" style="width:16px;height:16px;cursor:pointer">
-          <span>Không có <strong>Mở tờ khai</strong> trong chuyến này</span>
+        ${chuaLuuCa?`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:8px">
+          <input type="checkbox" id="lc-luuca" style="width:16px;height:16px;cursor:pointer">
+          <span>Không phát sinh <strong>Lưu ca / Công nhân bốc xếp</strong></span>
         </label>`:''}
       </div>
     </div>`:''}
@@ -917,7 +919,7 @@ function showLockConfirm(id, coChiHo, soChiHo, o){
         style="padding:8px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:500;cursor:pointer;color:#374151">
         ${coWarnDV?'Quay lại':'Hủy'}
       </button>
-      <button onclick="_confirmLock('${id}',${chuaDL},${chuaTK})"
+      <button onclick="_confirmLock('${id}',${chuaDL},${chuaLuuCa})"
         style="padding:8px 18px;border-radius:8px;border:none;background:${coChiHo?'#059669':'#d97706'};color:#fff;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px">
         <i class="ti ti-lock"></i> ${coWarnDV?'Xác nhận & Khóa':'Xác nhận khóa'}
       </button>
@@ -927,15 +929,14 @@ function showLockConfirm(id, coChiHo, soChiHo, o){
   document.body.appendChild(wrap);
 }
 
-function _confirmLock(id, chuaDL, chuaTK){
-  // Bắt buộc check xác nhận từng dịch vụ chưa tick
+function _confirmLock(id, chuaDL, chuaLuuCa){
   if(chuaDL&&document.getElementById('lc-dl')&&!document.getElementById('lc-dl').checked){
     document.getElementById('lc-dl').closest('label').style.borderColor='var(--danger)';
     toast('Xác nhận không có Đổi lệnh trước khi khóa','error');return;
   }
-  if(chuaTK&&document.getElementById('lc-tk')&&!document.getElementById('lc-tk').checked){
-    document.getElementById('lc-tk').closest('label').style.borderColor='var(--danger)';
-    toast('Xác nhận không có Mở tờ khai trước khi khóa','error');return;
+  if(chuaLuuCa&&document.getElementById('lc-luuca')&&!document.getElementById('lc-luuca').checked){
+    document.getElementById('lc-luuca').closest('label').style.borderColor='var(--danger)';
+    toast('Xác nhận không có lưu ca / bốc xếp trước khi khóa','error');return;
   }
   doLockOrder(id);
 }
