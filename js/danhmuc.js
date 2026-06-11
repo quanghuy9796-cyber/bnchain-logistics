@@ -419,6 +419,7 @@ async function saveNV(id=''){
     if(dup&&dup.length>0){toast('Tên đăng nhập đã tồn tại, chọn tên khác','error');return;}
     d.username=uname;
     d.password=pass;
+    d.email=uname+'@bnchain.local'; // placeholder — cột email NOT NULL trong DB
     d.active=true;
     ({error}=await db.from('users').insert(d));
   }
