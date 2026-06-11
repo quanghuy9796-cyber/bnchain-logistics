@@ -248,7 +248,7 @@ function renderTabXe(o,editable){
     <div class="form-section-title"><i class="ti ti-truck"></i>Phân công xe & lái xe</div>
     <div class="form-grid">
       <div class="form-group" style="position:relative"><label>Biển kiểm soát</label>
-        <input type="text" id="fx-bien" value="${o.bien_kiem_soat||''}" placeholder="99H-06375"
+        <input type="text" id="fx-bien" value="${o.bien_kiem_soat||''}" placeholder="Nhập biển kiểm soát..."
           ${dis} oninput="onBienInput(this)"
           onblur="validateBienInput(this)"
           autocomplete="off">
