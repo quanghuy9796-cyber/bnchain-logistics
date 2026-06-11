@@ -26,7 +26,6 @@ const fmtInput = v => v.toString().replace(/\D/g,'').replace(/\B(?=(\d{3})+(?!\d
 const parseNum = v => parseInt(v.toString().replace(/,/g,''))||0;
 
 // IME guard — ngăn fmtInput chạy khi bộ gõ tiếng Việt đang compose (VIE/Telex/VNI)
-// Dùng: oninput="if(!window._ime)this.value=fmtInput(this.value)"
 window._ime=false;
 document.addEventListener('compositionstart',()=>window._ime=true);
 document.addEventListener('compositionend',e=>{
@@ -35,6 +34,9 @@ document.addEventListener('compositionend',e=>{
   const el=document.activeElement;
   if(el&&el.dataset&&el.dataset.money==='1')el.value=fmtInput(el.value);
 });
+// Safe fmtInput cho oninput: bỏ qua khi IME đang compose, format bình thường khi không
+function fmtOnInput(el){if(!window._ime)el.value=fmtInput(el.value);}
+function fmtOnInputCalc(el){if(!window._ime){el.value=fmtInput(el.value);calcTong();}}
 
 // Validate biển số: 99H-06375 hoặc 99A-123.45
 
