@@ -305,7 +305,7 @@ function renderTabXe(o,editable){
   </div>
   ${editable?`
   <button class="btn btn-teal" style="width:100%;justify-content:center;margin-bottom:8px" onclick="saveXe('`+o.id+`')"><i class="ti ti-device-floppy"></i> Lưu xe & cont</button>
-  ${!canSee(['ke_toan','ceo'])?`
+  ${!o.locked?`
   <button class="btn btn-success" style="width:100%;justify-content:center" onclick="lockOrder('`+o.id+`')">
     <i class="ti ti-lock"></i> Hoàn thành & Khóa vận đơn
   </button>
