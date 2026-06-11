@@ -290,7 +290,15 @@ function renderTabXe(o,editable){
       <select id="fx-tt" ${dis}>${ttOpts}</select>
     </div>
   </div>
-  ${editable?`<button class="btn btn-teal" style="width:100%;justify-content:center" onclick="saveXe('`+o.id+`')"><i class="ti ti-device-floppy"></i> Lưu xe & cont</button>`:''}`;
+  ${editable?`
+  <button class="btn btn-teal" style="width:100%;justify-content:center;margin-bottom:8px" onclick="saveXe('`+o.id+`')"><i class="ti ti-device-floppy"></i> Lưu xe & cont</button>
+  ${!canSee(['ke_toan','ceo'])?`
+  <button class="btn btn-success" style="width:100%;justify-content:center" onclick="lockOrder('`+o.id+`')">
+    <i class="ti ti-lock"></i> Hoàn thành & Khóa vận đơn
+  </button>
+  <p style="font-size:10.5px;color:var(--text-muted);text-align:center;margin-top:5px">⚠️ Xe đã giao hàng xong — khóa lại để kế toán chốt</p>
+  `:''}
+  `:''}`;
 }
 
 function renderTabChiHo(o,list,editable){
