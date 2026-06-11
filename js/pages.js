@@ -345,8 +345,8 @@ async function loadBangKe(){
         <td style="font-size:10px" title="${o.hanh_trinh||''}">${o.diem_lay||''}${o.diem_tra?' → '+o.diem_tra:''}</td>
         <td style="font-size:11px">${o.bien_kiem_soat||'—'}</td>
         <td class="text-blue fw6">${fmt(o.gia_cuoc_khach)}</td>
-        <td>${o.phi_doi_lenh>0||o.phi_to_khai>0?`<span style="font-size:11px">${fmt(phiDV)}</span>`:'—'}</td>
-        <td style="font-size:11px;color:var(--text-muted)">${[o.phi_doi_lenh>0?'ĐL':'',o.phi_to_khai>0?'TK':''].filter(Boolean).join('+')}</td>
+        <td style="font-size:11px">${o.phi_doi_lenh>0?fmt(o.phi_doi_lenh):'—'}</td>
+        <td style="font-size:11px">${o.phi_to_khai>0?fmt(o.phi_to_khai):'—'}</td>
         ${chiHoTypes.map(type=>{
           const v=chP1.filter(c=>c.loai_chi===type).reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
           return`<td style="font-size:11px">${v>0?fmt(v):'—'}</td>`;
@@ -364,7 +364,8 @@ async function loadBangKe(){
       p1Rows+=`<tr style="background:#f5f9fb;font-style:italic;font-size:11px">
         <td colspan="8" style="color:var(--text-muted)">Cộng ${items[0].loai_hang==='Nhập'?'Bill':'Booking'}: ${bill}</td>
         <td class="fw6">${fmt(subCuoc)}</td>
-        <td colspan="${chiHoTypes.length+2}"></td>
+        <td></td><td></td>
+        <td colspan="${chiHoTypes.length}"></td>
         <td style="font-weight:700;color:var(--teal)">${fmt(subTotal)}</td>
         <td></td>
       </tr>`;
@@ -432,7 +433,7 @@ async function loadBangKe(){
   window.BK_DATA={list,chiHoAll:chiHoAll||[],groups,chiHoTypes,chiHoP1,chiHoP2,chuyenChuyenKy,khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongTruocVAT,vatP1,tongPhaiThu};
 
   // Build HTML
-  const colP1=`<col style="width:28px"><col style="width:76px"><col style="width:100px"><col style="width:48px"><col style="width:90px"><col style="width:52px"><col style="width:140px"><col style="width:68px"><col style="width:78px"><col style="width:68px"><col style="width:40px">${chiHoTypes.map(()=>'<col style="width:72px">').join('')}<col style="width:80px"><col style="width:100px">`;
+  const colP1=`<col style="width:28px"><col style="width:76px"><col style="width:100px"><col style="width:48px"><col style="width:90px"><col style="width:52px"><col style="width:140px"><col style="width:68px"><col style="width:78px"><col style="width:68px"><col style="width:68px">${chiHoTypes.map(()=>'<col style="width:72px">').join('')}<col style="width:80px"><col style="width:100px">`;
 
   const html=`
   <div id="print-area">
@@ -458,7 +459,7 @@ async function loadBangKe(){
         <tr>
           <th>STT</th><th>Ngày</th><th>Mã đơn</th><th>Loại</th>
           <th>Số cont</th><th>Loại cont</th><th>Tuyến đường</th><th>BKS</th>
-          <th>Cước</th><th>Phát sinh</th><th>Note DV</th>
+          <th>Cước</th><th>Đổi lệnh</th><th>Tờ khai</th>
           ${chiHoTypes.map(t=>`<th style="font-size:10px">${t}</th>`).join('')}
           <th style="background:#f0f9f0">Tổng</th><th>Ghi chú</th>
         </tr>
@@ -467,7 +468,8 @@ async function loadBangKe(){
         <tr style="background:#e8f4f7;font-weight:700;font-size:12px">
           <td colspan="8">CỘNG PHẦN 1</td>
           <td class="text-blue">${fmt(tongCuoc)}</td>
-          <td>${fmt(tongDV)}</td><td></td>
+          <td>${fmt(list.reduce((s,o)=>s+(+o.phi_doi_lenh||0),0))}</td>
+          <td>${fmt(list.reduce((s,o)=>s+(+o.phi_to_khai||0),0))}</td>
           ${chiHoTypes.map(type=>{
             const s=chiHoP1.filter(c=>c.loai_chi===type).reduce((a,c)=>a+(+(c.tien_thu_khach||c.so_tien)||0),0);
             return`<td>${fmt(s)}</td>`;
@@ -644,7 +646,7 @@ async function xuatExcelBangKe(){
   const push=(row,styles)=>{R.push(row);S.push(styles||[]);};
   const pushEmpty=()=>push([],[]);
 
-  // Số cột cố định trước chi hộ types: STT,Ngày,Mã đơn,Loại,Cont,LoạiCont,Tuyến,BKS,Cước,GSHQ,PS = 11
+  // Số cột cố định trước chi hộ types: STT,Ngày,Mã đơn,Loại,Cont,LoạiCont,Tuyến,BKS,Cước,ĐổiLệnh,TờKhai = 11
   const COL_FIXED=11;
   const COL_CHITYPES=chiHoTypes.length;
   const COL_TONG=COL_FIXED+COL_CHITYPES;     // cột Tổng P1
@@ -688,7 +690,7 @@ async function xuatExcelBangKe(){
   // Dòng header xanh đậm — hàng 1
   const hStyle=cs({bold:true,sz:9,color:C_WHITE,bg:C_HEADER_BG,align:'center',borderBold:true});
   const hRow1=['STT','NGÀY','MÃ ĐƠN','LOẠI','SỐ CONT','LOẠI CONT','TUYẾN ĐƯỜNG','BKS',
-    'CƯỚC','GSHQ','PHÁT SINH',
+    'CƯỚC','ĐỔI LỆNH','TỜ KHAI',
     ...(chiHoTypes.length?['CHI HỘ KHÔNG HĐ']:chiHoTypes),
     'TỔNG','GHI CHÚ'];
   // Merge "CHI HỘ KHÔNG HĐ" nếu nhiều loại
@@ -704,7 +706,7 @@ async function xuatExcelBangKe(){
     const hRow2=[...Array(COL_FIXED).fill(''),...chiHoTypes,...Array(2).fill('')];
     push(hRow2,Array(TOTAL_COLS).fill(hStyle2));
     // Merge các cột fixed ở hàng 2 với hàng 1
-    ['STT','NGÀY','MÃ ĐƠN','LOẠI','SỐ CONT','LOẠI CONT','TUYẾN ĐƯỜNG','BKS','CƯỚC','GSHQ','PHÁT SINH','TỔNG','GHI CHÚ'].forEach((_,ci)=>{
+    ['STT','NGÀY','MÃ ĐƠN','LOẠI','SỐ CONT','LOẠI CONT','TUYẾN ĐƯỜNG','BKS','CƯỚC','ĐỔI LỆNH','TỜ KHAI','TỔNG','GHI CHÚ'].forEach((_,ci)=>{
       const col=ci<COL_FIXED?ci:(ci===COL_FIXED?COL_TONG:COL_NOTE);
       if(ci!==COL_FIXED) MERGES.push({s:{r:headerRowIdx,c:col},e:{r:headerRowIdx+1,c:col}});
     });
@@ -739,9 +741,9 @@ async function xuatExcelBangKe(){
         o.bien_kiem_soat||'',
         +o.gia_cuoc_khach||0,
         +o.phi_doi_lenh||0,
-        phiDV,
+        +o.phi_to_khai||0,
         ...chiHoTypes.map(type=>ch.filter(c=>c.loai_chi===type)
-          .reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)||0),
+          .reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)),
         tongDong,
         o.ghi_chu||'',
       ],[ctrStyle,ctrStyle,dStyle,ctrStyle,monoStyle,ctrStyle,dStyle,ctrStyle,
@@ -761,11 +763,13 @@ async function xuatExcelBangKe(){
       },0);
       const subStyle=cs({sz:8,bg:'F0F7FF',italic:true,color:'595959'});
       const subNum=cs({sz:8,bg:'F0F7FF',align:'right',fmt:fmtNum,bold:true});
+      const subDL=items.reduce((s,o)=>s+(+o.phi_doi_lenh||0),0);
+      const subTK=items.reduce((s,o)=>s+(+o.phi_to_khai||0),0);
       push([
         `Cộng ${items[0].loai_hang==='Nhập'?'Bill':'Booking'}: ${bill}`,
-        '',' ','','','','','',subCuoc,'','',
+        '',' ','','','','','',subCuoc,subDL,subTK,
         ...chiHoTypes.map(()=>0),subTotal,''
-      ],[subStyle,...Array(7).fill(subStyle),subNum,...Array(2).fill(subStyle),
+      ],[subStyle,...Array(7).fill(subStyle),subNum,subNum,subNum,
         ...chiHoTypes.map(()=>subNum),subNum,subStyle]);
       MERGES.push({s:{r:R.length-1,c:0},e:{r:R.length-1,c:7}});
     }
@@ -774,9 +778,11 @@ async function xuatExcelBangKe(){
   // Dòng tổng P1
   const totStyle=cs({bold:true,sz:9,bg:C_TOTAL_BG,align:'right',fmt:fmtNum,borderBold:true});
   const totLblStyle=cs({bold:true,sz:9,bg:C_TOTAL_BG,borderBold:true});
+  const tongDL=list.reduce((s,o)=>s+(+o.phi_doi_lenh||0),0);
+  const tongTK=list.reduce((s,o)=>s+(+o.phi_to_khai||0),0);
   push([
     'CỘNG PHẦN 1','','','','','','','',
-    tongCuoc,tongDV,0,
+    tongCuoc,tongDL,tongTK,
     ...chiHoTypes.map(type=>chiHoP1.filter(c=>c.loai_chi===type)
       .reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)),
     tongTruocVAT,'',
