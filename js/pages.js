@@ -4,7 +4,10 @@
 
 async function pgDieuVan(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
-  const{data}=await db.from('van_don').select('*').in('trang_thai',['Chờ xếp xe','Đang vận chuyển','Chờ xác nhận']).order('ngay_yeu_cau',{ascending:true,nullsFirst:false}).order('ngay',{ascending:true});
+  let q=db.from('van_don').select('*').in('trang_thai',['Chờ xếp xe','Đang vận chuyển','Chờ xác nhận']).order('ngay_yeu_cau',{ascending:true,nullsFirst:false}).order('ngay',{ascending:true});
+  // nhan_vien chỉ thấy đơn mình tạo
+  if(CU?.vai_tro==='nhan_vien') q=q.eq('created_by',CU.id);
+  const{data}=await q;
   const list=data||[];
   const cho=list.filter(o=>o.trang_thai==='Chờ xếp xe');
   const chay=list.filter(o=>o.trang_thai==='Đang vận chuyển');
