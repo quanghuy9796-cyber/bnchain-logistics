@@ -198,7 +198,7 @@ function renderTabInfo(o,editable){
           onchange="document.getElementById('grp-phidl').style.display=this.checked?'block':'none'">Đổi lệnh</label>
         <div id="grp-phidl" style="display:${o.co_doi_lenh?'block':'none'}">
           <input type="text" id="fi-phidl" value="${o.phi_doi_lenh>0?fmtInput(o.phi_doi_lenh):''}" placeholder="Phí / cont (VNĐ)" ${dis}
-            oninput="if(!window._ime)this.value=fmtInput(this.value)">
+            oninput="fmtOnInput(this)">
           <span style="font-size:10px;color:var(--text-muted)">thu theo số cont</span>
         </div>
       </div>
@@ -207,7 +207,7 @@ function renderTabInfo(o,editable){
           onchange="document.getElementById('grp-phitk').style.display=this.checked?'block':'none'">Mở tờ khai</label>
         <div id="grp-phitk" style="display:${o.co_to_khai?'block':'none'}">
           <input type="text" id="fi-phitk" value="${o.phi_to_khai>0?fmtInput(o.phi_to_khai):''}" placeholder="Phí / lô (VNĐ)" ${dis}
-            oninput="if(!window._ime)this.value=fmtInput(this.value)">
+            oninput="fmtOnInput(this)">
           <span style="font-size:10px;color:var(--text-muted)">thu theo lô</span>
         </div>
       </div>
@@ -387,7 +387,7 @@ function renderTabCuoc(o,chiHoList,editable,loi){
     <div class="form-grid">
       <div class="form-group"><label>Cước vận chuyển (VNĐ)</label>
         <input type="text" id="fc-cuockh" value="${o.gia_cuoc_khach>0?fmtInput(o.gia_cuoc_khach):''}"
-          placeholder="0" ${!editable?'disabled':''} oninput="if(!window._ime){this.value=fmtInput(this.value);calcTong()}"></div>
+          placeholder="0" ${!editable?'disabled':''} oninput="fmtOnInputCalc(this)"></div>
       <div class="form-group"><label>Trạng thái thu</label>
         <select id="fc-thukh" ${!editable?'disabled':''}>
           ${['Chưa thu','Đã thu một phần','Đã thu'].map(s=>`<option ${o.thanh_toan_khach===s?'selected':''}>${s}</option>`).join('')}
@@ -409,7 +409,7 @@ function renderTabCuoc(o,chiHoList,editable,loi){
     <div class="form-grid">
       <div class="form-group"><label>Cước thầu (VNĐ)</label>
         <input type="text" id="fc-cuocthau" value="${o.gia_cuoc_thau>0?fmtInput(o.gia_cuoc_thau):''}"
-          placeholder="0" ${!editable?'disabled':''} oninput="if(!window._ime){this.value=fmtInput(this.value);calcTong()}"></div>
+          placeholder="0" ${!editable?'disabled':''} oninput="fmtOnInputCalc(this)"></div>
       <div class="form-group"><label>Trạng thái trả thầu</label>
         <select id="fc-trathau" ${!editable?'disabled':''}>
           ${['Chưa trả','Đã trả một phần','Đã trả'].map(s=>`<option ${o.thanh_toan_thau===s?'selected':''}>${s}</option>`).join('')}
@@ -776,12 +776,12 @@ function openForm(){
     <div class="form-grid">
       <div class="form-group">
         <label><input type="checkbox" id="nf-doilenh" style="width:auto;margin-right:5px">Đổi lệnh</label>
-        <input type="text" id="nf-phidl" placeholder="Phí / cont (VNĐ)" oninput="if(!window._ime)this.value=fmtInput(this.value)">
+        <input type="text" id="nf-phidl" placeholder="Phí / cont (VNĐ)" oninput="fmtOnInput(this)">
         <span style="font-size:10px;color:var(--text-muted)">thu theo số cont</span>
       </div>
       <div class="form-group">
         <label><input type="checkbox" id="nf-tokhai" style="width:auto;margin-right:5px">Mở tờ khai</label>
-        <input type="text" id="nf-phitk" placeholder="Phí / lô (VNĐ)" oninput="if(!window._ime)this.value=fmtInput(this.value)">
+        <input type="text" id="nf-phitk" placeholder="Phí / lô (VNĐ)" oninput="fmtOnInput(this)">
         <span style="font-size:10px;color:var(--text-muted)">thu theo lô</span>
       </div>
     </div>
@@ -886,7 +886,7 @@ function openAddChiHo(vdId,maDon){
           <div class="form-group">
             <label>Thu khách (VNĐ) *</label>
             <input type="text" id="ch-thukh" placeholder="0"
-              oninput="clearTimeout(window._fmtT1);window._fmtT1=setTimeout(()=>{if(!window._ime){this.value=fmtInput(this.value);autoFillTraThau()}},300)"
+              oninput="fmtOnInput(this);autoFillTraThau()"
               style="border-color:var(--teal)">
             <span style="font-size:10px;color:var(--teal)">Vào bảng kê thu khách</span>
           </div>
@@ -894,7 +894,7 @@ function openAddChiHo(vdId,maDon){
           <div class="form-group">
             <label>Trả thầu (VNĐ) <span style="font-size:10px;color:var(--warning)">· ${o.ma_thau_phu||''}</span></label>
             <input type="text" id="ch-trathau" placeholder="0"
-              oninput="clearTimeout(window._fmtT2);window._fmtT2=setTimeout(()=>{if(!window._ime)this.value=fmtInput(this.value)},300)"
+              oninput="fmtOnInput(this)"
               style="border-color:var(--warning)">
             <span style="font-size:10px;color:var(--warning)">BN Chain trả thầu khoản này</span>
           </div>`:`<input type="hidden" id="ch-trathau" value="0">`}
@@ -902,7 +902,7 @@ function openAddChiHo(vdId,maDon){
           <div class="form-group">
             <label>Trả lái xe (VNĐ) <span style="font-size:10px;color:#8b5cf6">· ${o.ten_lai_xe||''}</span></label>
             <input type="text" id="ch-tralaixe" placeholder="0"
-              oninput="clearTimeout(window._fmtT3);window._fmtT3=setTimeout(()=>{if(!window._ime)this.value=fmtInput(this.value)},300)"
+              oninput="fmtOnInput(this)"
               style="border-color:#8b5cf6">
             <span style="font-size:10px;color:#8b5cf6">${isThauThueLai?'Lương BN Chain trả hộ — trừ vào cước thầu khi quyết toán':'BN Chain trả lái xe chuyến này'}</span>
           </div>`:`<input type="hidden" id="ch-tralaixe" value="0">`}
@@ -970,18 +970,18 @@ async function editChiHo(chiHoId, vdId, maDon){
           <div class="form-group">
             <label>Thu khách (VNĐ) *</label>
             <input type="text" id="ch-thukh" value="${fmtInput(data.tien_thu_khach||data.so_tien||0)}"
-              oninput="clearTimeout(window._fmtT1);window._fmtT1=setTimeout(()=>{if(!window._ime)this.value=fmtInput(this.value)},300)" style="border-color:var(--teal)">
+              oninput="fmtOnInput(this)" style="border-color:var(--teal)">
           </div>
           ${coThau?`<div class="form-group">
             <label>Trả thầu (VNĐ)</label>
             <input type="text" id="ch-trathau" value="${fmtInput(data.tien_tra_thau||0)}"
-              oninput="clearTimeout(window._fmtT2);window._fmtT2=setTimeout(()=>{if(!window._ime)this.value=fmtInput(this.value)},300)" style="border-color:var(--warning)">
+              oninput="fmtOnInput(this)" style="border-color:var(--warning)">
             <span style="font-size:10px;color:var(--warning)">BN Chain trả thầu khoản này</span>
           </div>`:`<input type="hidden" id="ch-trathau" value="0">`}
           ${coLaiXe?`<div class="form-group">
             <label>Trả lái xe (VNĐ)</label>
             <input type="text" id="ch-tralaixe" value="${fmtInput(data.tien_tra_laixe||0)}"
-              oninput="clearTimeout(window._fmtT3);window._fmtT3=setTimeout(()=>{if(!window._ime)this.value=fmtInput(this.value)},300)" style="border-color:#8b5cf6">
+              oninput="fmtOnInput(this)" style="border-color:#8b5cf6">
           </div>`:`<input type="hidden" id="ch-tralaixe" value="0">`}
           <div class="form-group">
             <label>Người chi</label>
