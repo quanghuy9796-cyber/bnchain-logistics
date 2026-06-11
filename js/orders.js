@@ -633,7 +633,16 @@ async function unlockOrder(id){
 }
 
 async function lockOrder(id){
-  if(!confirm('Xác nhận HOÀN THÀNH và KHÓA vận đơn này?\nSau khi khóa sẽ không thể chỉnh sửa!'))return;
+  // Kiểm tra chi hộ trước khi cho khóa
+  const{data:chiHo}=await db.from('chi_ho').select('id').eq('van_don_id',id).eq('la_tham_chieu',false);
+  const coChiHo=(chiHo||[]).length>0;
+  let msg;
+  if(!coChiHo){
+    msg='📋 Chưa ghi nhận chi phí nào cho chuyến này. Cao tốc, lưu ca, bốc xếp, Lạch Huyện... — kiểm tra kỹ trước khi bấm hoàn thành.\n\nVẫn tiếp tục khóa?';
+  } else {
+    msg=`Xác nhận HOÀN THÀNH và KHÓA vận đơn này?\nĐang có ${chiHo.length} chi phí phát sinh đã ghi nhận.\nSau khi khóa sẽ không thể chỉnh sửa!`;
+  }
+  if(!confirm(msg))return;
   const{error}=await db.from('van_don').update({trang_thai:'Hoàn thành',locked:true,locked_at:new Date().toISOString(),locked_by:CU.id,updated_at:new Date().toISOString()}).eq('id',id);
   if(error){toast('Lỗi: '+error.message,'error');return;}
   toast('Đã hoàn thành và khóa vận đơn');
