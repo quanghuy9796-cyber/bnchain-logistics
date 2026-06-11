@@ -10,7 +10,7 @@ let CU=null; // current user
 let PAGE='orders';
 let SEL=null; // selected id
 let ORDERS=[];
-let KH=[],LX=[],TP=[],NV=[];
+let KH=[],LX=[],TP=[],NV=[],XE=[];
 let DP_TAB='info'; // detail panel tab
 let ORDER_FILTER='all';
 let ORDER_SEARCH='';
@@ -87,13 +87,14 @@ async function doLogin(){
 function doLogout(){CU=null;document.getElementById('app-page').style.display='none';document.getElementById('login-page').style.display='flex';}
 
 async function loadMaster(){
-  const[a,b,c,d]=await Promise.all([
+  const[a,b,c,d,e]=await Promise.all([
     db.from('khach_hang').select('*').eq('active',true).order('ten_cong_ty'),
     db.from('lai_xe').select('*').eq('active',true).order('ho_ten'),
     db.from('thau_phu').select('*').eq('active',true).order('ten_cong_ty'),
     db.from('users').select('*').eq('active',true).order('ho_ten'),
+    db.from('xe').select('id,bien_so,loai_phan_loai,ma_thau_phu,ten_lai_xe_mac_dinh,loai_xe').eq('active',true).order('bien_so'),
   ]);
-  KH=a.data||[];LX=b.data||[];TP=c.data||[];NV=d.data||[];
+  KH=a.data||[];LX=b.data||[];TP=c.data||[];NV=d.data||[];XE=e.data||[];
 }
 
 // NAV
