@@ -310,62 +310,130 @@ async function pgNV(c){
   const{data}=await db.from('users').select('*').order('vai_tro');
   const rMap={nhan_vien:'Nhân viên',quan_ly:'Quản lý',ke_toan:'Kế toán',ceo:'CEO'};
   c.innerHTML=`
-  <div class="toolbar"><button class="btn btn-primary" onclick="openAddNV()"><i class="ti ti-plus"></i> Thêm nhân viên</button></div>
+  <div class="toolbar">
+    <button class="btn btn-primary" onclick="openAddNV()"><i class="ti ti-plus"></i> Thêm tài khoản</button>
+    <span style="font-size:12px;color:var(--text-muted);align-self:center">Chỉ CEO tạo và quản lý tài khoản đăng nhập</span>
+  </div>
   <div class="tbl-wrap"><table class="tbl">
-    <colgroup><col style="width:180px"><col style="width:150px"><col style="width:100px"><col style="width:100px"><col style="width:80px"></colgroup>
-    <thead><tr><th>Email</th><th>Họ tên</th><th>Vai trò</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+    <colgroup><col style="width:140px"><col style="width:170px"><col style="width:110px"><col style="width:110px"><col style="width:110px"><col style="width:110px"></colgroup>
+    <thead><tr><th>Tên đăng nhập</th><th>Họ tên</th><th>Vai trò</th><th>Trạng thái</th><th>Mật khẩu</th><th>Thao tác</th></tr></thead>
     <tbody>${(data||[]).map(u=>`<tr>
-      <td>${u.email}</td><td class="fw6">${u.ho_ten}</td>
+      <td class="fw6" style="color:var(--teal)">${u.username||'—'}</td>
+      <td class="fw6">${u.ho_ten}</td>
       <td><span class="tag tag-new">${rMap[u.vai_tro]||u.vai_tro}</span></td>
       <td><span class="tag ${u.active?'tag-dathu':'tag-huy'}">${u.active?'Đang làm':'Đã nghỉ'}</span></td>
+      <td><button class="btn btn-xs" onclick="openDoiMK('${u.id}','${u.ho_ten.replace(/'/g,"\\'")}')"><i class="ti ti-key"></i> Đổi MK</button></td>
       <td><div style="display:flex;gap:4px">
         <button class="btn btn-xs btn-teal" onclick="editNV('${u.id}')"><i class="ti ti-edit"></i></button>
-        <button class="btn btn-xs btn-danger" onclick="toggleNV('${u.id}',${u.active},'${u.ho_ten}')"><i class="ti ti-${u.active?'user-off':'user-check'}"></i></button>
+        <button class="btn btn-xs btn-danger" title="${u.active?'Vô hiệu hóa':'Kích hoạt lại'}" onclick="toggleNV('${u.id}',${u.active},'${u.ho_ten.replace(/'/g,"\\'")}')"><i class="ti ti-${u.active?'user-off':'user-check'}"></i></button>
       </div></td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
+
 function openAddNV(existing={}){
   const isEdit=!!existing.id;
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  bg.innerHTML=`<div class="modal" style="width:380px">
-  <div class="modal-head"><h3>${isEdit?'Sửa':'Thêm'} nhân viên</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  bg.innerHTML=`<div class="modal" style="width:420px">
+  <div class="modal-head">
+    <h3><i class="ti ti-user-plus" style="color:var(--teal)"></i> ${isEdit?'Sửa thông tin':'Tạo tài khoản mới'}</h3>
+    <button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
+  </div>
   <div class="modal-body"><div class="form-grid">
-    <div class="form-group"><label>Email *</label><input id="nv-email" type="email" value="${existing.email||''}" ${isEdit?'disabled':''}></div>
-    <div class="form-group"><label>Họ tên *</label><input id="nv-ten" value="${existing.ho_ten||''}"></div>
+    <div class="form-group">
+      <label>Tên đăng nhập *</label>
+      <input id="nv-user" value="${existing.username||''}" placeholder="vd: nguyen.van.a" ${isEdit?'disabled':''} autocomplete="off">
+      ${!isEdit?'<div style="font-size:11px;color:var(--text-muted);margin-top:3px">Không dấu, không khoảng trắng. Không thể đổi sau khi tạo.</div>':''}
+    </div>
+    <div class="form-group">
+      <label>Họ tên *</label>
+      <input id="nv-ten" value="${existing.ho_ten||''}" placeholder="Nguyễn Văn A">
+    </div>
+    ${!isEdit?`<div class="form-group full">
+      <label>Mật khẩu *</label>
+      <input id="nv-pass" type="password" placeholder="Tối thiểu 6 ký tự" autocomplete="new-password">
+    </div>`:''}
     <div class="form-group full"><label>Vai trò</label>
       <select id="nv-role">
-        <option value="nhan_vien" ${existing.vai_tro==='nhan_vien'?'selected':''}>Nhân viên</option>
-        <option value="quan_ly" ${existing.vai_tro==='quan_ly'?'selected':''}>Quản lý</option>
-        <option value="ke_toan" ${existing.vai_tro==='ke_toan'?'selected':''}>Kế toán</option>
-        <option value="ceo" ${existing.vai_tro==='ceo'?'selected':''}>CEO</option>
-      </select></div>
+        <option value="nhan_vien" ${existing.vai_tro==='nhan_vien'?'selected':''}>Nhân viên — Vận hành cơ bản</option>
+        <option value="quan_ly" ${existing.vai_tro==='quan_ly'?'selected':''}>Quản lý — Mở khóa đơn, danh mục</option>
+        <option value="ke_toan" ${existing.vai_tro==='ke_toan'?'selected':''}>Kế toán — Nhập cước, bảng kê</option>
+        <option value="ceo" ${existing.vai_tro==='ceo'?'selected':''}>CEO — Toàn quyền</option>
+      </select>
+    </div>
   </div></div>
-  <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button>
-    <button class="btn btn-primary" onclick="saveNV('${existing.id||''}')"><i class="ti ti-device-floppy"></i> Lưu</button>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">Hủy</button>
+    <button class="btn btn-primary" onclick="saveNV('${existing.id||''}')"><i class="ti ti-device-floppy"></i> ${isEdit?'Cập nhật':'Tạo tài khoản'}</button>
   </div></div>`;
   document.body.appendChild(bg);
 }
+
+function openDoiMK(id, ten){
+  const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
+  bg.innerHTML=`<div class="modal" style="width:360px">
+  <div class="modal-head">
+    <h3><i class="ti ti-key" style="color:var(--warning)"></i> Đổi mật khẩu — ${ten}</h3>
+    <button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
+  </div>
+  <div class="modal-body">
+    <div class="form-group"><label>Mật khẩu mới *</label><input id="mk-new" type="password" placeholder="Tối thiểu 6 ký tự" autocomplete="new-password"></div>
+    <div class="form-group"><label>Xác nhận lại *</label><input id="mk-confirm" type="password" placeholder="Nhập lại mật khẩu mới" autocomplete="new-password"></div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">Hủy</button>
+    <button class="btn btn-primary" onclick="saveDoiMK('${id}')"><i class="ti ti-check"></i> Xác nhận đổi</button>
+  </div></div>`;
+  document.body.appendChild(bg);
+}
+
+async function saveDoiMK(id){
+  const np=document.getElementById('mk-new').value;
+  const cp=document.getElementById('mk-confirm').value;
+  if(!np||np.length<6){toast('Mật khẩu tối thiểu 6 ký tự','error');return;}
+  if(np!==cp){toast('Mật khẩu xác nhận không khớp','error');return;}
+  const{error}=await db.from('users').update({password:np}).eq('id',id);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast('Đã đổi mật khẩu thành công');closeModal();
+}
+
 async function editNV(id){
   const{data}=await db.from('users').select('*').eq('id',id).single();
   if(data)openAddNV(data);
 }
+
 async function saveNV(id=''){
   if(!canSee(['ceo'])){toast('Không có quyền thực hiện','error');return;}
-  const d={ho_ten:document.getElementById('nv-ten').value,vai_tro:document.getElementById('nv-role').value};
+  const d={ho_ten:document.getElementById('nv-ten').value.trim(),vai_tro:document.getElementById('nv-role').value};
   if(!d.ho_ten){toast('Nhập họ tên','error');return;}
   let error;
-  if(id){({error}=await db.from('users').update(d).eq('id',id));}
-  else{d.email=document.getElementById('nv-email').value;if(!d.email){toast('Nhập email','error');return;}({error}=await db.from('users').insert(d));}
+  if(id){
+    ({error}=await db.from('users').update(d).eq('id',id));
+  } else {
+    const uname=document.getElementById('nv-user').value.trim().toLowerCase().replace(/\s+/g,'');
+    const pass=document.getElementById('nv-pass').value;
+    if(!uname){toast('Nhập tên đăng nhập','error');return;}
+    if(pass.length<6){toast('Mật khẩu tối thiểu 6 ký tự','error');return;}
+    // Kiểm tra trùng username
+    const{data:dup}=await db.from('users').select('id').eq('username',uname);
+    if(dup&&dup.length>0){toast('Tên đăng nhập đã tồn tại, chọn tên khác','error');return;}
+    d.username=uname;
+    d.password=pass;
+    d.active=true;
+    ({error}=await db.from('users').insert(d));
+  }
   if(error){toast('Lỗi: '+error.message,'error');return;}
-  toast(id?'Đã cập nhật':'Đã thêm nhân viên');closeModal();await loadMaster();pgNV(document.getElementById('content'));
+  toast(id?'Đã cập nhật':'Tài khoản đã được tạo');closeModal();await loadMaster();pgNV(document.getElementById('content'));
 }
+
 async function toggleNV(id,active,ten){
   if(!canSee(['ceo'])){toast('Không có quyền thực hiện','error');return;}
+  // Không cho tự vô hiệu hóa chính mình
+  if(id===CU?.id&&active){toast('Không thể vô hiệu hóa tài khoản đang đăng nhập','error');return;}
   if(!confirm(`${active?'Vô hiệu hóa':'Kích hoạt lại'} tài khoản "${ten}"?`))return;
   const{error}=await db.from('users').update({active:!active}).eq('id',id);
   if(error){toast('Lỗi: '+error.message,'error');return;}
-  toast(active?'Đã vô hiệu hóa':'Đã kích hoạt lại');pgNV(document.getElementById('content'));
+  toast(active?'Đã vô hiệu hóa tài khoản':'Đã kích hoạt lại');pgNV(document.getElementById('content'));
 }
 
 // ============ ĐỊA ĐIỂM ============
