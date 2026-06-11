@@ -283,9 +283,10 @@ function renderTabXe(o,editable){
         <span style="font-size:10px;color:var(--text-muted)" id="cont-len">${o.so_cont?o.so_cont.length+'/11 ký tự':''}</span>
       </div>
       <div class="form-group"><label>Loại xe / cont</label>
-        <input type="text" id="fx-loaixe" value="${_lxVal}" placeholder="Gõ để tìm loại cont..." ${dis}
-          list="loaixe-dl" autocomplete="off">
-        <datalist id="loaixe-dl">${loaiXeOpts}</datalist>
+        <select id="fx-loaixe" ${dis}>
+          <option value="">-- Chọn loại --</option>
+          ${loaiXeList.map(v=>`<option value="${v}" ${_lxVal===v?'selected':''}>${v}</option>`).join('')}
+        </select>
       </div>
       <div class="form-group full"><label>Ghi chú xe / chuyến</label>
         <textarea id="fx-ghichuXe" ${dis}>${o.ghi_chu_xe||''}</textarea>
@@ -526,6 +527,7 @@ function onBienInput(el){
   window._bienT=setTimeout(()=>onBienChange(el.value),400);
 }
 function pickBien(bien){
+  clearTimeout(window._bienT); // hủy debounce đang chờ, tránh double-call
   const el=document.getElementById('fx-bien');
   if(el){el.value=bien;}
   const drop=document.getElementById('fx-bien-drop');
@@ -701,6 +703,16 @@ async function onBienChange(bien){
   if(lxGroup){
     const show=xe.loai_phan_loai!=='thau_tu_lai';
     lxGroup.style.display=show?'':'none';
+  }
+  // Xe nội bộ: lái xe cố định theo danh mục, không cho tự ý sửa
+  if(lxEl){
+    if(xe.loai_phan_loai==='noi_bo'){
+      lxEl.setAttribute('disabled','');
+      lxEl.title='Xe nội bộ — lái xe cố định theo danh mục xe';
+    } else {
+      lxEl.removeAttribute('disabled');
+      lxEl.title='';
+    }
   }
   if(nbEl)nbEl.value=xe.loai_phan_loai==='noi_bo'?'true':'false';
   // Bắt buộc chọn lại loại chuyến khi đổi xe
