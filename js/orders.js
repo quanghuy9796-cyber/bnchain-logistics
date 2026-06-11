@@ -581,17 +581,14 @@ function onKhachInput(el,dropId){
   if(!q){drop.style.display='none';return;}
   const matches=(KH||[]).filter(k=>removeAccents(k.ten_cong_ty).includes(q)).slice(0,8);
   if(!matches.length){drop.style.display='none';return;}
-  drop.innerHTML=matches.map((k,i)=>{
-    const safe=k.ten_cong_ty.replace(/\/g,'\\').replace(/'/g,"\'");
-    return '<div onclick="pickKhach(\''+dropId+'\',\''+safe+'\')"'
-      +' data-idx="'+i+'"'
-      +' style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px"'
-      +' onmouseover="this.style.background=\'var(--teal-light)\'"'
-      +' onmouseout="this.style.background=\'\'">'
-      +'<i class="ti ti-building" style="color:var(--teal);margin-right:6px;font-size:12px"></i>'
-      +'<span style="font-weight:600;color:var(--sidebar-bg)">'+k.ten_cong_ty+'</span>'
-      +'</div>';
-  }).join('');
+  drop.innerHTML=matches.map((k,i)=>`
+    <div onclick="pickKhach('${dropId}',this.dataset.ten)" data-ten="${k.ten_cong_ty.replace(/"/g,'&quot;')}" data-idx="${i}"
+      style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px"
+      onmouseover="this.style.background='var(--teal-light)'"
+      onmouseout="this.style.background=''">
+      <i class="ti ti-building" style="color:var(--teal);margin-right:6px;font-size:12px"></i>
+      <span style="font-weight:600;color:var(--sidebar-bg)">${k.ten_cong_ty}</span>
+    </div>`).join('');
   drop.dataset.focused='-1';
   drop.style.display='block';
 }
@@ -599,7 +596,9 @@ function pickKhach(dropId,tenKhach){
   const drop=document.getElementById(dropId);
   const inputId=drop?.dataset.inputId;
   const input=inputId?document.getElementById(inputId):null;
-  if(input)input.value=tenKhach;
+  // tenKhach có thể từ dataset.ten (đã decode &quot;) hoặc truyền thẳng
+  const val=tenKhach||'';
+  if(input)input.value=val.replace(/&quot;/g,'"');
   setTimeout(()=>{if(drop)drop.style.display='none';},80);
 }
 function closeKhachDrop(dropId,inputId){
