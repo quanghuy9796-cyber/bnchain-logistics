@@ -10,7 +10,7 @@ let CU=null; // current user
 let PAGE='orders';
 let SEL=null; // selected id
 let ORDERS=[];
-let KH=[],LX=[],TP=[],NV=[],XE=[];
+let KH=[],LX=[],TP=[],NV=[],XE=[],DD=[];
 let DP_TAB='info'; // detail panel tab
 let ORDER_FILTER='all';
 let ORDER_SEARCH='';
@@ -37,6 +37,11 @@ document.addEventListener('compositionend',e=>{
 // Safe fmtInput cho oninput: bỏ qua khi IME đang compose, format bình thường khi không
 function fmtOnInput(el){if(!window._ime)el.value=fmtInput(el.value);}
 function fmtOnInputCalc(el){if(!window._ime){el.value=fmtInput(el.value);calcTong();}}
+
+// Bỏ dấu tiếng Việt — dùng cho tất cả custom dropdown full-text
+function removeAccents(s){
+  return(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').toLowerCase();
+}
 
 // Validate biển số: 99H-06375 hoặc 99A-123.45
 
@@ -100,14 +105,15 @@ async function doLogin(){
 function doLogout(){CU=null;document.getElementById('app-page').style.display='none';document.getElementById('login-page').style.display='flex';}
 
 async function loadMaster(){
-  const[a,b,c,d,e]=await Promise.all([
+  const[a,b,c,d,e,f]=await Promise.all([
     db.from('khach_hang').select('*').eq('active',true).order('ten_cong_ty'),
     db.from('lai_xe').select('*').eq('active',true).order('ho_ten'),
     db.from('thau_phu').select('*').eq('active',true).order('ten_cong_ty'),
     db.from('users').select('*').eq('active',true).order('ho_ten'),
     db.from('xe').select('id,bien_so,loai_phan_loai,ma_thau_phu,ten_lai_xe_mac_dinh,loai_xe').eq('active',true).order('bien_so'),
+    db.from('dia_diem').select('id,ten_chuan,viet_tat,loai,dia_phuong').eq('active',true).order('ten_chuan'),
   ]);
-  KH=a.data||[];LX=b.data||[];TP=c.data||[];NV=d.data||[];XE=e.data||[];
+  KH=a.data||[];LX=b.data||[];TP=c.data||[];NV=d.data||[];XE=e.data||[];DD=f.data||[];
 }
 
 // NAV
@@ -115,13 +121,13 @@ function nav(p,el){
   document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
   el.classList.add('active');PAGE=p;SEL=null;
   document.getElementById('dp').style.display='none';
-  const T={orders:'Quản lý vận đơn',dieuvan:'Bảng điều vận',chiho:'Chi hộ / Phát sinh',hoadon:'Upload & Xử lý Hóa Đơn',congno:'Công nợ',bangke:'Bảng kê thu khách',traphau:'Trả thầu phụ',baocao:'Báo cáo tháng',kh:'Khách hàng',laixe:'Lái xe',thauphu:'Thầu phụ',xe:'Quản lý xe',nv:'Nhân viên'};
+  const T={orders:'Quản lý vận đơn',dieuvan:'Bảng điều vận',chiho:'Chi hộ / Phát sinh',hoadon:'Upload & Xử lý Hóa Đơn',congno:'Công nợ',bangke:'Bảng kê thu khách',traphau:'Trả thầu phụ',baocao:'Báo cáo tháng',kh:'Khách hàng',laixe:'Lái xe',thauphu:'Thầu phụ',xe:'Quản lý xe',nv:'Nhân viên',diadiem:'Điểm & Cung đường'};
   document.getElementById('page-title').textContent=T[p]||p;
   renderPage();
 }
 function renderPage(){
   const c=document.getElementById('content');
-  const P={orders:pgOrders,dieuvan:pgDieuVan,chiho:pgChiHo,hoadon:pgHoaDon,congno:pgCongNo,bangke:pgBangKe,traphau:pgTraThau,baocao:pgBaoCao,kh:pgKH,laixe:pgLaiXe,thauphu:pgThauPhu,xe:pgXe,nv:pgNV};
+  const P={orders:pgOrders,dieuvan:pgDieuVan,chiho:pgChiHo,hoadon:pgHoaDon,congno:pgCongNo,bangke:pgBangKe,traphau:pgTraThau,baocao:pgBaoCao,kh:pgKH,laixe:pgLaiXe,thauphu:pgThauPhu,xe:pgXe,nv:pgNV,diadiem:pgDiaDiem};
   if(P[PAGE])P[PAGE](c); else c.innerHTML='<div class="empty"><i class="ti ti-tools"></i>Đang xây dựng...</div>';
 }
 
