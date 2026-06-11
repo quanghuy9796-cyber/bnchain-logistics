@@ -261,7 +261,7 @@ Trả về JSON ARRAY với đúng 1 phần tử (chỉ array thuần, không ma
 [{
   "so_hd": "số hóa đơn hoặc số biên lai",
   "ngay_hd": "ngày trên HĐ format YYYY-MM-DD",
-  "loai_dv": "Chỉ được chọn 1 trong: Nâng, hạ cont / Phí CSHT / Lưu ca / Phí cảng, bãi / Phí local charge / Chi phí khác. Quy tắc quan trọng: (1) Nâng hàng / Hạ vỏ / Nâng vỏ / Hạ hàng / nâng hạ container → LUÔN là Nâng, hạ cont, kể cả khi HĐ có thêm các dòng phí khác. (2) CSHT / cơ sở hạ tầng → Phí CSHT. (3) Vệ sinh cont / sửa cont / rửa cont / lưu bãi / lưu cont / phí cảng lẻ → Phí cảng, bãi. (4) Local charge / phụ phí → Phí local charge. (5) Còn lại → Chi phí khác.",
+  "loai_dv": "Chỉ được chọn 1 trong: Nâng hàng / Nâng vỏ / Hạ hàng / Hạ vỏ / Phí CSHT / Lưu ca / Phí cảng, bãi / Phí local charge / Chi phí khác. Quy tắc: (1) Nâng hàng = nâng container hàng đầy lên xe/tàu. Nâng vỏ = nâng container rỗng. Hạ hàng = hạ container hàng đầy xuống. Hạ vỏ = hạ container rỗng. Nếu HĐ ghi rõ nâng hay hạ thì phân biệt chính xác. Nếu HĐ gộp cả nâng lẫn hạ trong cùng 1 dòng → chọn Nâng hàng. (2) CSHT / cơ sở hạ tầng → Phí CSHT. (3) Vệ sinh/sửa/rửa cont / lưu bãi / lưu cont → Phí cảng, bãi. (4) Local charge / phụ phí → Phí local charge. (5) Còn lại → Chi phí khác.",
   "tong_tien": số tiền VNĐ cuối cùng (số nguyên không dấu phẩy),
   "so_cont_list": ["POLU4510295"],
   "loai_cont": "20DC hoặc 40HC v.v",
@@ -344,15 +344,18 @@ function buildDisplayName(loaiDv, conts, ngayHd){
 }
 
 // Map loai_dv từ AI → loai_chi chuẩn của hệ thống
-// Ưu tiên: nếu HĐ có nâng/hạ (dù kèm chi phí khác) → Nâng, hạ cont
 function mapLoaiDv(loaiDv){
   if(!loaiDv) return 'Chi phí khác';
   const v=loaiDv.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  // Nâng/hạ được ưu tiên cao nhất — kể cả khi HĐ có thêm dòng phí khác
-  if(/nang|ha cont|ha hang|ha vo|nang hang|nang vo|nang ha/.test(v)) return 'Nâng, hạ cont';
+  // Phân biệt rõ từng loại nâng/hạ để bảng kê map đúng cột
+  if(/ha vo|ha rang|ha container rong|ha vỏ/.test(v)) return 'Hạ vỏ';
+  if(/ha hang|ha container hang|ha day|ha đầy/.test(v)) return 'Hạ hàng';
+  if(/nang vo|nang rang|nang container rong|nâng vỏ/.test(v)) return 'Nâng vỏ';
+  if(/nang hang|nang container hang|nang day|nâng hàng/.test(v)) return 'Nâng hàng';
+  // Gộp nâng+hạ cùng 1 HĐ → Nâng hàng (fallback)
+  if(/nang|ha cont|nang ha/.test(v)) return 'Nâng hàng';
   if(/csht|co so ha tang/.test(v)) return 'Phí CSHT';
   if(/luu ca/.test(v)) return 'Lưu ca';
-  // Phí cảng bãi: vệ sinh, sửa/rửa cont, phí lưu bãi lẻ
   if(/ve sinh|sua cont|rua cont|luu bai|luu cont|phi cang|cang bai/.test(v)) return 'Phí cảng, bãi';
   if(/local|phu phi/.test(v)) return 'Phí local charge';
   return 'Chi phí khác';
