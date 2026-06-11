@@ -864,15 +864,17 @@ async function lockOrder(id){
   const soChiHo=list.length;
   // Kiểm tra có lưu ca hoặc bốc xếp chưa
   const coLuuCa=list.some(c=>c.loai_chi?.includes('Lưu ca')||c.loai_chi?.includes('Công nhân bốc xếp'));
-  showLockConfirm(id, coChiHo, soChiHo, o, coLuuCa);
+  const coLachHuyen=list.some(c=>c.loai_chi?.includes('Lạch Huyện'));
+  showLockConfirm(id, coChiHo, soChiHo, o, coLuuCa, coLachHuyen);
 }
 
-function showLockConfirm(id, coChiHo, soChiHo, o, coLuuCa=false){
+function showLockConfirm(id, coChiHo, soChiHo, o, coLuuCa=false, coLachHuyen=false){
   document.getElementById('lock-confirm-modal')?.remove();
 
   const chuaDL=!o?.co_doi_lenh;
-  const chuaLuuCa=!coLuuCa; // chưa có lưu ca / bốc xếp trong chi hộ
-  const coWarnDV=chuaDL||chuaLuuCa;
+  const chuaLuuCa=!coLuuCa;
+  const chuaLachHuyen=!coLachHuyen;
+  const coWarnDV=chuaDL||chuaLuuCa||chuaLachHuyen;
 
   const wrap=document.createElement('div');
   wrap.id='lock-confirm-modal';
@@ -895,6 +897,10 @@ function showLockConfirm(id, coChiHo, soChiHo, o, coLuuCa=false){
         ${chuaLuuCa?`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:8px">
           <input type="checkbox" id="lc-luuca" style="width:16px;height:16px;cursor:pointer">
           <span>Không phát sinh <strong>Lưu ca / Công nhân bốc xếp</strong></span>
+        </label>`:''}
+        ${chuaLachHuyen?`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:8px">
+          <input type="checkbox" id="lc-lach" style="width:16px;height:16px;cursor:pointer">
+          <span>Không phát sinh <strong>Đi cảng xa (Lạch Huyện)</strong></span>
         </label>`:''}
       </div>
     </div>`:''}
@@ -926,7 +932,7 @@ function showLockConfirm(id, coChiHo, soChiHo, o, coLuuCa=false){
         style="padding:8px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:500;cursor:pointer;color:#374151">
         ${coWarnDV?'Quay lại':'Hủy'}
       </button>
-      <button onclick="_confirmLock('${id}',${chuaDL},${chuaLuuCa})"
+      <button onclick="_confirmLock('${id}',${chuaDL},${chuaLuuCa},${chuaLachHuyen})"
         style="padding:8px 18px;border-radius:8px;border:none;background:${coChiHo?'#059669':'#d97706'};color:#fff;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px">
         <i class="ti ti-lock"></i> ${coWarnDV?'Xác nhận & Khóa':'Xác nhận khóa'}
       </button>
@@ -936,7 +942,7 @@ function showLockConfirm(id, coChiHo, soChiHo, o, coLuuCa=false){
   document.body.appendChild(wrap);
 }
 
-function _confirmLock(id, chuaDL, chuaLuuCa){
+function _confirmLock(id, chuaDL, chuaLuuCa, chuaLachHuyen){
   if(chuaDL&&document.getElementById('lc-dl')&&!document.getElementById('lc-dl').checked){
     document.getElementById('lc-dl').closest('label').style.borderColor='var(--danger)';
     toast('Xác nhận không có Đổi lệnh trước khi khóa','error');return;
@@ -944,6 +950,10 @@ function _confirmLock(id, chuaDL, chuaLuuCa){
   if(chuaLuuCa&&document.getElementById('lc-luuca')&&!document.getElementById('lc-luuca').checked){
     document.getElementById('lc-luuca').closest('label').style.borderColor='var(--danger)';
     toast('Xác nhận không có lưu ca / bốc xếp trước khi khóa','error');return;
+  }
+  if(chuaLachHuyen&&document.getElementById('lc-lach')&&!document.getElementById('lc-lach').checked){
+    document.getElementById('lc-lach').closest('label').style.borderColor='var(--danger)';
+    toast('Xác nhận không có phí Lạch Huyện trước khi khóa','error');return;
   }
   doLockOrder(id);
 }
@@ -1112,6 +1122,7 @@ function openAddChiHo(vdId,maDon){
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;background:var(--bg);padding:7px 10px;border-radius:var(--r)">Vận đơn: <strong>${maDon}</strong></div>
     <div class="form-grid">
       <div class="form-group full"><label>Loại chi *</label><select id="ch-loai">
+        <option>Đi cảng xa (Lạch Huyện)</option>
         <option>Lưu ca</option>
         <option>Công nhân bốc xếp</option>
         <option>Cao tốc / Vé đường</option>
@@ -1197,6 +1208,7 @@ async function editChiHo(chiHoId, vdId, maDon){
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;background:var(--bg);padding:7px 10px;border-radius:var(--r)">Vận đơn: <strong>${maDon}</strong></div>
     <div class="form-grid">
       <div class="form-group full"><label>Loại chi *</label><select id="ch-loai">
+        <option ${data.loai_chi==='Đi cảng xa (Lạch Huyện)'?'selected':''}>Đi cảng xa (Lạch Huyện)</option>
         <option ${data.loai_chi==='Lưu ca'?'selected':''}>Lưu ca</option>
         <option ${data.loai_chi==='Công nhân bốc xếp'?'selected':''}>Công nhân bốc xếp</option>
         <option ${data.loai_chi==='Cao tốc / Vé đường'?'selected':''}>Cao tốc / Vé đường</option>
@@ -1207,7 +1219,7 @@ async function editChiHo(chiHoId, vdId, maDon){
         <option ${data.loai_chi==='Phí CSHT'||data.loai_chi==='CSHT'||data.loai_chi?.startsWith('CSHT')?'selected':''}>Phí CSHT</option>
         <option ${['Phí cảng, bãi','Phí cảng','Lưu bãi / Lưu cont'].includes(data.loai_chi)||data.loai_chi?.startsWith('Phí cảng')?'selected':''}>Phí cảng, bãi</option>
         <option ${data.loai_chi==='Phí local charge'||data.loai_chi?.startsWith('Phí local')?'selected':''}>Phí local charge</option>
-        <option ${['Chi phí khác','Giám sát hải quan','Chi hải quan'].includes(data.loai_chi)||(!['Lưu ca','Công nhân bốc xếp','Cao tốc / Vé đường','Nâng hàng','Nâng vỏ','Hạ hàng','Hạ vỏ','Phí CSHT','Phí cảng, bãi','Phí local charge'].some(x=>data.loai_chi?.startsWith(x)))?'selected':''}>Chi phí khác</option>
+        <option ${['Chi phí khác','Giám sát hải quan','Chi hải quan'].includes(data.loai_chi)||(!['Đi cảng xa (Lạch Huyện)','Lưu ca','Công nhân bốc xếp','Cao tốc / Vé đường','Nâng hàng','Nâng vỏ','Hạ hàng','Hạ vỏ','Phí CSHT','Phí cảng, bãi','Phí local charge'].some(x=>data.loai_chi?.startsWith(x)))?'selected':''}>Chi phí khác</option>
       </select></div>
       <div style="grid-column:1/-1;background:var(--bg);border-radius:var(--r);padding:10px 12px;border:1px solid var(--border)">
         <div style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px"><i class="ti ti-coins"></i> Số tiền</div>
