@@ -770,15 +770,26 @@ async function saveXe(id){
     const o=ORDERS.find(x=>x.id===id);
     if(CU?.vai_tro==='nhan_vien'&&o?.created_by!==CU?.id){toast('Chỉ được sửa đơn do mình tạo','error');return;}
     const bien=document.getElementById('fx-bien')?.value.trim().toUpperCase()||'';
+    const loaiChuyen=document.getElementById('fx-lchuyen')?.value||'';
+    const loaiCont=document.getElementById('fx-loaixe')?.value||'';
+    // Validate bắt buộc
+    if(!loaiChuyen){
+      document.getElementById('fx-lchuyen').style.borderColor='var(--danger)';
+      toast('Vui lòng chọn Loại chuyến (Thường / Kết hợp / Kẹp ghép)','error');return;
+    }
+    if(!loaiCont){
+      document.getElementById('fx-loaixe').style.borderColor='var(--danger)';
+      toast('Vui lòng chọn Loại xe / Cont','error');return;
+    }
     const plVal=document.getElementById('fx-phanloai')?.value||'';
     const data={
       bien_kiem_soat:bien,
       ten_lai_xe:document.getElementById('fx-laixe')?.value||'',
       ma_thau_phu:document.getElementById('fx-thauphu')?.value||'',
-      loai_chuyen:document.getElementById('fx-lchuyen')?.value||'',
+      loai_chuyen:loaiChuyen,
       so_cont:document.getElementById('fx-cont')?.value||'',
-      loai_cont:document.getElementById('fx-loaixe')?.value||'',
-      loai_xe_hang:document.getElementById('fx-loaixe')?.value||'',
+      loai_cont:loaiCont,
+      loai_xe_hang:loaiCont,
       ghi_chu_xe:document.getElementById('fx-ghichuXe')?.value||'',
       trang_thai:document.getElementById('fx-tt')?.value||'Đang vận chuyển',
       loai_phan_loai_xe:plVal,
