@@ -61,6 +61,7 @@ async function pgDieuVan(c){
 
 // ==================== CHI HO ====================
 async function pgChiHo(c){
+  if(!canSee(['quan_ly','ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền xem</div>';return;}
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   const{data}=await db.from('chi_ho').select('*').eq('la_tham_chieu',false).order('ngay_chi',{ascending:false}).limit(300);
   const list=data||[];
@@ -93,6 +94,7 @@ async function pgChiHo(c){
 
 // ==================== CÔNG NỢ ====================
 async function pgCongNo(c){
+  if(!canSee(['ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Chỉ Kế toán và CEO có quyền xem</div>';return;}
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   const{data}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_hang,so_cont,so_bill,so_booking,gia_cuoc_khach,trang_thai,locked,hanh_trinh').eq('locked',true).order('ngay',{ascending:false}).limit(1000);
   const list=data||[];
