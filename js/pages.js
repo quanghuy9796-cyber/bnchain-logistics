@@ -304,10 +304,13 @@ async function loadBangKe(){
   const tongDV=list.reduce((s,o)=>s+(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0),0);
   const tongP1=chiHoP1.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
   const tongP2=chiHoP2.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
-  const VAT_RATE=0.08; // VAT 8% — chỉ tính trên Phần 1 (cước + phát sinh không HĐ)
+  const VAT_RATE=0.08;
   const tongTruocVAT=tongCuoc+tongDV+tongP1;
   const vatP1=Math.round(tongTruocVAT*VAT_RATE);
   const tongPhaiThu=tongTruocVAT+vatP1+tongP2;
+  // Flags ẩn/hiện cột động
+  const coTK=list.some(o=>+o.phi_to_khai>0);
+  const coLachHuyenCH=chiHoP1.some(c=>c.loai_chi?.includes('Lạch Huyện'));
 
   // Gom theo bill/booking
   const groups={};
@@ -346,7 +349,7 @@ async function loadBangKe(){
         <td style="font-size:11px">${o.bien_kiem_soat||'—'}</td>
         <td class="text-blue fw6">${fmt(o.gia_cuoc_khach)}</td>
         <td style="font-size:11px">${o.phi_doi_lenh>0?fmt(o.phi_doi_lenh):'—'}</td>
-        <td style="font-size:11px">${o.phi_to_khai>0?fmt(o.phi_to_khai):'—'}</td>
+        ${coTK?`<td style="font-size:11px">${o.phi_to_khai>0?fmt(o.phi_to_khai):'—'}</td>`:''}
         ${chiHoTypes.map(type=>{
           const v=chP1.filter(c=>c.loai_chi===type).reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
           return`<td style="font-size:11px">${v>0?fmt(v):'—'}</td>`;
@@ -430,10 +433,10 @@ async function loadBangKe(){
   }
 
   // Lưu data vào window để xuất Excel
-  window.BK_DATA={list,chiHoAll:chiHoAll||[],groups,chiHoTypes,chiHoP1,chiHoP2,chuyenChuyenKy,khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongTruocVAT,vatP1,tongPhaiThu};
+  window.BK_DATA={list,chiHoAll:chiHoAll||[],groups,chiHoTypes,chiHoP1,chiHoP2,chuyenChuyenKy,khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongTruocVAT,vatP1,tongPhaiThu,coTK,coLachHuyenCH};
 
   // Build HTML
-  const colP1=`<col style="width:28px"><col style="width:76px"><col style="width:100px"><col style="width:48px"><col style="width:90px"><col style="width:52px"><col style="width:140px"><col style="width:68px"><col style="width:78px"><col style="width:68px"><col style="width:68px">${chiHoTypes.map(()=>'<col style="width:72px">').join('')}<col style="width:80px"><col style="width:100px">`;
+  const colP1=`<col style="width:28px"><col style="width:76px"><col style="width:100px"><col style="width:48px"><col style="width:90px"><col style="width:52px"><col style="width:140px"><col style="width:68px"><col style="width:78px"><col style="width:68px">${coTK?'<col style="width:68px">':''}${chiHoTypes.map(()=>'<col style="width:72px">').join('')}<col style="width:80px"><col style="width:100px">`;
 
   const html=`
   <div id="print-area">
@@ -459,7 +462,7 @@ async function loadBangKe(){
         <tr>
           <th>STT</th><th>Ngày</th><th>Mã đơn</th><th>Loại</th>
           <th>Số cont</th><th>Loại cont</th><th>Tuyến đường</th><th>BKS</th>
-          <th>Cước</th><th>Đổi lệnh</th><th>Tờ khai</th>
+          <th>Cước</th><th>Đổi lệnh</th>${coTK?'<th>Tờ khai</th>':''}
           ${chiHoTypes.map(t=>`<th style="font-size:10px">${t}</th>`).join('')}
           <th style="background:#f0f9f0">Tổng</th><th>Ghi chú</th>
         </tr>
@@ -469,7 +472,7 @@ async function loadBangKe(){
           <td colspan="8">CỘNG PHẦN 1</td>
           <td class="text-blue">${fmt(tongCuoc)}</td>
           <td>${fmt(list.reduce((s,o)=>s+(+o.phi_doi_lenh||0),0))}</td>
-          <td>${fmt(list.reduce((s,o)=>s+(+o.phi_to_khai||0),0))}</td>
+          ${coTK?`<td>${fmt(list.reduce((s,o)=>s+(+o.phi_to_khai||0),0))}</td>`:''}
           ${chiHoTypes.map(type=>{
             const s=chiHoP1.filter(c=>c.loai_chi===type).reduce((a,c)=>a+(+(c.tien_thu_khach||c.so_tien)||0),0);
             return`<td>${fmt(s)}</td>`;
@@ -591,7 +594,7 @@ async function xuatExcelBangKe(){
   }
 
   const{list,chiHoAll,chiHoTypes,chiHoP1,chiHoP2,groups,chuyenChuyenKy,
-        khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongTruocVAT,vatP1,tongPhaiThu}=window.BK_DATA;
+        khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongTruocVAT,vatP1,tongPhaiThu,coTK}=window.BK_DATA;
 
   const chiHoMapLocal={};
   (chiHoAll||[]).forEach(c=>{
@@ -646,8 +649,8 @@ async function xuatExcelBangKe(){
   const push=(row,styles)=>{R.push(row);S.push(styles||[]);};
   const pushEmpty=()=>push([],[]);
 
-  // Số cột cố định trước chi hộ types: STT,Ngày,Mã đơn,Loại,Cont,LoạiCont,Tuyến,BKS,Cước,ĐổiLệnh,TờKhai = 11
-  const COL_FIXED=11;
+  // Số cột cố định: STT,Ngày,Mã đơn,Loại,Cont,LoạiCont,Tuyến,BKS,Cước,ĐổiLệnh,[TờKhai nếu có] = 10 hoặc 11
+  const COL_FIXED=coTK?11:10;
   const COL_CHITYPES=chiHoTypes.length;
   const COL_TONG=COL_FIXED+COL_CHITYPES;     // cột Tổng P1
   const COL_NOTE=COL_TONG+1;                 // cột Ghi chú
@@ -690,7 +693,7 @@ async function xuatExcelBangKe(){
   // Dòng header xanh đậm — hàng 1
   const hStyle=cs({bold:true,sz:9,color:C_WHITE,bg:C_HEADER_BG,align:'center',borderBold:true});
   const hRow1=['STT','NGÀY','MÃ ĐƠN','LOẠI','SỐ CONT','LOẠI CONT','TUYẾN ĐƯỜNG','BKS',
-    'CƯỚC','ĐỔI LỆNH','TỜ KHAI',
+    'CƯỚC','ĐỔI LỆNH',...(coTK?['TỜ KHAI']:[]),
     ...(chiHoTypes.length?['CHI HỘ KHÔNG HĐ']:chiHoTypes),
     'TỔNG','GHI CHÚ'];
   // Merge "CHI HỘ KHÔNG HĐ" nếu nhiều loại
@@ -706,7 +709,7 @@ async function xuatExcelBangKe(){
     const hRow2=[...Array(COL_FIXED).fill(''),...chiHoTypes,...Array(2).fill('')];
     push(hRow2,Array(TOTAL_COLS).fill(hStyle2));
     // Merge các cột fixed ở hàng 2 với hàng 1
-    ['STT','NGÀY','MÃ ĐƠN','LOẠI','SỐ CONT','LOẠI CONT','TUYẾN ĐƯỜNG','BKS','CƯỚC','ĐỔI LỆNH','TỜ KHAI','TỔNG','GHI CHÚ'].forEach((_,ci)=>{
+    [...['STT','NGÀY','MÃ ĐƠN','LOẠI','SỐ CONT','LOẠI CONT','TUYẾN ĐƯỜNG','BKS','CƯỚC','ĐỔI LỆNH'],...(coTK?['TỜ KHAI']:[]),'TỔNG','GHI CHÚ'].forEach((_,ci)=>{
       const col=ci<COL_FIXED?ci:(ci===COL_FIXED?COL_TONG:COL_NOTE);
       if(ci!==COL_FIXED) MERGES.push({s:{r:headerRowIdx,c:col},e:{r:headerRowIdx+1,c:col}});
     });
@@ -741,13 +744,13 @@ async function xuatExcelBangKe(){
         o.bien_kiem_soat||'',
         +o.gia_cuoc_khach||0,
         +o.phi_doi_lenh||0,
-        +o.phi_to_khai||0,
+        ...(coTK?[+o.phi_to_khai||0]:[]),
         ...chiHoTypes.map(type=>ch.filter(c=>c.loai_chi===type)
           .reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)),
         tongDong,
         o.ghi_chu||'',
       ],[ctrStyle,ctrStyle,dStyle,ctrStyle,monoStyle,ctrStyle,dStyle,ctrStyle,
-        numStyle,numStyle,numStyle,
+        numStyle,numStyle,...(coTK?[numStyle]:[]),
         ...chiHoTypes.map(()=>numStyle),
         cs({sz:9,bg:bgRow,align:'right',fmt:fmtNum,bold:true,color:'1F4E79'}),
         cs({sz:9,bg:bgRow,italic:true,color:'595959'}),
@@ -767,9 +770,9 @@ async function xuatExcelBangKe(){
       const subTK=items.reduce((s,o)=>s+(+o.phi_to_khai||0),0);
       push([
         `Cộng ${items[0].loai_hang==='Nhập'?'Bill':'Booking'}: ${bill}`,
-        '',' ','','','','','',subCuoc,subDL,subTK,
+        '',' ','','','','','',subCuoc,subDL,...(coTK?[subTK]:[]),
         ...chiHoTypes.map(()=>0),subTotal,''
-      ],[subStyle,...Array(7).fill(subStyle),subNum,subNum,subNum,
+      ],[subStyle,...Array(7).fill(subStyle),subNum,subNum,...(coTK?[subNum]:[]),
         ...chiHoTypes.map(()=>subNum),subNum,subStyle]);
       MERGES.push({s:{r:R.length-1,c:0},e:{r:R.length-1,c:7}});
     }
@@ -782,12 +785,12 @@ async function xuatExcelBangKe(){
   const tongTK=list.reduce((s,o)=>s+(+o.phi_to_khai||0),0);
   push([
     'CỘNG PHẦN 1','','','','','','','',
-    tongCuoc,tongDL,tongTK,
+    tongCuoc,tongDL,...(coTK?[tongTK]:[]),
     ...chiHoTypes.map(type=>chiHoP1.filter(c=>c.loai_chi===type)
       .reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)),
     tongTruocVAT,'',
   ],[totLblStyle,...Array(7).fill(totLblStyle),
-    totStyle,totStyle,totStyle,
+    totStyle,totStyle,...(coTK?[totStyle]:[]),
     ...chiHoTypes.map(()=>totStyle),
     cs({bold:true,sz:10,bg:C_TOTAL_BG,align:'right',fmt:fmtNum,color:C_HEADER_BG,borderBold:true}),
     totLblStyle]);
