@@ -256,7 +256,7 @@ function renderTabXe(o,editable){
         <span id="fx-bien-err" style="font-size:10px;color:var(--danger);display:none">Định dạng: 99H-06375</span>
         <span style="font-size:10px;color:var(--text-muted)">Thầu phụ tự động theo biển số</span>
       </div>
-      <div class="form-group" id="fx-laixe-group">
+      <div class="form-group" id="fx-laixe-group" style="${o.loai_phan_loai_xe==='__never__'?'display:none':''}">
         <label>Lái xe <span style="font-size:10px;color:var(--teal)">(điền tự do)</span></label>
         <input type="text" id="fx-laixe" value="${o.ten_lai_xe||''}" placeholder="Nhập tên lái xe..." list="laixe-dl" ${dis}>
         <datalist id="laixe-dl">${lxOpts}</datalist>
@@ -266,7 +266,8 @@ function renderTabXe(o,editable){
       </div>
       <input type="hidden" id="fx-phanloai" value="${o.loai_phan_loai_xe||''}">
       <input type="hidden" id="fx-noibo" value="${o.la_xe_noi_bo?'true':'false'}">
-      <div class="form-group" id="fx-thauphu-group"><label>Thầu phụ <span style="font-size:10px;color:var(--teal)">(tự động / tự điền)</span></label>
+      <div class="form-group" id="fx-thauphu-group" style="${o.loai_phan_loai_xe==='noi_bo'?'display:none':''}">
+        <label>Thầu phụ <span style="font-size:10px;color:var(--teal)">(tự động / tự điền)</span></label>
         <input type="text" id="fx-thauphu" value="${o.ma_thau_phu||''}" placeholder="Tự điền nếu chưa có..." list="tp-dl" ${dis}>
         <datalist id="tp-dl">${tpOpts}</datalist>
       </div>
@@ -750,11 +751,8 @@ async function onBienChange(bien){
   } else {
     if(tpGroup)tpGroup.style.display='';
     if(lxEl){lxEl.removeAttribute('disabled');lxEl.title='';}
-    // Ẩn/hiện ô lái xe theo loại phân loại
-    if(lxGroup){
-      const show=xe.loai_phan_loai!=='thau_tu_lai';
-      lxGroup.style.display=show?'':'none';
-    }
+    // Ẩn/hiện ô lái xe theo loại phân loại — luôn hiện
+    if(lxGroup) lxGroup.style.display='';
   }
   if(nbEl)nbEl.value=xe.loai_phan_loai==='noi_bo'?'true':'false';
   // Bắt buộc chọn lại loại chuyến khi đổi xe
