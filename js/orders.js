@@ -407,15 +407,40 @@ function renderTabCuoc(o,chiHoList,editable,loi){
         </select></div>
     </div>
   </div>
+  ${(o.co_doi_lenh||o.co_to_khai)?`
   <div class="form-section">
-    <div class="form-section-title"><i class="ti ti-receipt"></i>Dịch vụ cộng thêm (tự động từ Tab Thông tin)</div>
-    <div style="background:var(--bg);border-radius:var(--r);padding:10px 12px;font-size:12px">
-      ${phiDL>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span>Phí đổi lệnh</span><span class="text-orange fw6">${fmtM(phiDL)}</span></div>`:''}
-      ${phiTK>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span>Phí mở tờ khai</span><span class="text-orange fw6">${fmtM(phiTK)}</span></div>`:''}
-      ${totalCH>0?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Chi hộ phát sinh (${chiHoList.length} khoản)</span><span class="text-orange fw6">${fmtM(totalCH)}</span></div>`:''}
-      ${!phiDL&&!phiTK&&!totalCH?'<div style="color:var(--text-muted)">Chưa có dịch vụ cộng thêm</div>':''}
+    <div class="form-section-title"><i class="ti ti-plus"></i>Dịch vụ cộng thêm
+      <span style="font-size:10px;color:var(--text-muted);font-weight:400;margin-left:4px">(điền phí nếu chưa có)</span>
     </div>
-  </div>
+    <div class="form-grid">
+      ${o.co_doi_lenh?`<div class="form-group">
+        <label>Phí đổi lệnh (VNĐ) <span style="color:var(--danger)">*</span></label>
+        <input type="text" id="fc-phidl" value="${o.phi_doi_lenh>0?fmtInput(o.phi_doi_lenh):''}"
+          placeholder="Bắt buộc điền" ${!editable?'disabled':''}
+          oninput="fmtOnInputCalc(this)"
+          style="${o.phi_doi_lenh>0?'':'border-color:var(--warning)'}">
+        ${o.phi_doi_lenh>0?'':`<span style="font-size:10px;color:var(--warning)">⚠️ Chưa có phí — cần điền trước khi lưu</span>`}
+      </div>`:`<input type="hidden" id="fc-phidl" value="${fmtInput(o.phi_doi_lenh||0)}">`}
+      ${o.co_to_khai?`<div class="form-group">
+        <label>Phí mở tờ khai (VNĐ) <span style="color:var(--danger)">*</span></label>
+        <input type="text" id="fc-phitk" value="${o.phi_to_khai>0?fmtInput(o.phi_to_khai):''}"
+          placeholder="Bắt buộc điền" ${!editable?'disabled':''}
+          oninput="fmtOnInputCalc(this)"
+          style="${o.phi_to_khai>0?'':'border-color:var(--warning)'}">
+        ${o.phi_to_khai>0?'':`<span style="font-size:10px;color:var(--warning)">⚠️ Chưa có phí — cần điền trước khi lưu</span>`}
+      </div>`:`<input type="hidden" id="fc-phitk" value="${fmtInput(o.phi_to_khai||0)}">`}
+    </div>
+  </div>`:`<input type="hidden" id="fc-phidl" value="0"><input type="hidden" id="fc-phitk" value="0">`}
+  ${totalCH>0?`
+  <div class="form-section">
+    <div class="form-section-title"><i class="ti ti-receipt"></i>Chi hộ phát sinh</div>
+    <div style="background:var(--bg);border-radius:var(--r);padding:10px 12px;font-size:12px">
+      <div style="display:flex;justify-content:space-between;padding:3px 0">
+        <span>Chi hộ (${chiHoList.filter(c=>!c.la_tham_chieu).length} khoản)</span>
+        <span class="text-orange fw6">${fmtM(totalCH)}</span>
+      </div>
+    </div>
+  </div>`:''}
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-arrow-left"></i>Trả thầu phụ</div>
     ${coThau?`
@@ -453,7 +478,7 @@ function renderTabCuoc(o,chiHoList,editable,loi){
     </div>
   </div>
   ${editable?`
-  <button class="btn btn-teal" style="width:100%;justify-content:center;margin-bottom:8px" onclick="saveCuoc('`+o.id+`')">
+  <button class="btn btn-teal" style="width:100%;justify-content:center;margin-bottom:8px" onclick="saveCuoc('`+o.id+`','`+o.co_doi_lenh+`','`+o.co_to_khai+`')">
     <i class="ti ti-device-floppy"></i> Lưu cước & thanh toán
   </button>
   `:''}
@@ -768,7 +793,18 @@ async function saveXe(id){
   }catch(e){console.error('[saveXe]',e);toast('Lỗi: '+e.message,'error');}
 }
 
-async function saveCuoc(id){
+async function saveCuoc(id, coDL, coTK){
+  // Validate phí dịch vụ bắt buộc
+  const phiDL=parseNum(document.getElementById('fc-phidl')?.value||'0');
+  const phiTK=parseNum(document.getElementById('fc-phitk')?.value||'0');
+  if(coDL==='true'&&phiDL<=0){
+    document.getElementById('fc-phidl').style.borderColor='var(--danger)';
+    toast('Phí đổi lệnh bắt buộc phải điền','error');return;
+  }
+  if(coTK==='true'&&phiTK<=0){
+    document.getElementById('fc-phitk').style.borderColor='var(--danger)';
+    toast('Phí mở tờ khai bắt buộc phải điền','error');return;
+  }
   const data={
     gia_cuoc_khach:parseNum(document.getElementById('fc-cuockh').value),
     gia_cuoc_thau:parseNum(document.getElementById('fc-cuocthau')?.value||'0'),
@@ -776,6 +812,9 @@ async function saveCuoc(id){
     thanh_toan_thau:document.getElementById('fc-trathau')?.value||'Chưa trả',
     updated_at:new Date().toISOString(),
   };
+  // Lưu lại phí dịch vụ nếu kế toán đã điền
+  if(coDL==='true') data.phi_doi_lenh=phiDL;
+  if(coTK==='true') data.phi_to_khai=phiTK;
   const{error,data:saved}=await db.from('van_don').update(data).eq('id',id).select();
   if(error){toast('Lỗi DB: '+error.message,'error');return;}
   if(!saved||saved.length===0){toast('Không lưu được — kiểm tra quyền Supabase (RLS)','error');return;}
@@ -811,74 +850,93 @@ async function unlockOrder(id){
 }
 
 async function lockOrder(id){
-  // Kiểm tra chi hộ trước khi cho khóa
+  const o=ORDERS.find(x=>x.id===id);
   const{data:chiHo}=await db.from('chi_ho').select('id').eq('van_don_id',id).eq('la_tham_chieu',false);
   const coChiHo=(chiHo||[]).length>0;
   const soChiHo=(chiHo||[]).length;
-  // Hiện custom modal thay vì confirm() native
-  showLockConfirm(id, coChiHo, soChiHo);
+  showLockConfirm(id, coChiHo, soChiHo, o);
 }
 
-function showLockConfirm(id, coChiHo, soChiHo){
-  // Xóa modal cũ nếu còn
+function showLockConfirm(id, coChiHo, soChiHo, o){
   document.getElementById('lock-confirm-modal')?.remove();
+
+  // Chỉ cảnh báo khi CHƯA tick dịch vụ (không block — cho khóa sau khi xác nhận)
+  const chuaDL=!o?.co_doi_lenh;
+  const chuaTK=!o?.co_to_khai;
+  const coWarnDV=chuaDL||chuaTK;
+
   const wrap=document.createElement('div');
   wrap.id='lock-confirm-modal';
   wrap.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.45)';
   wrap.innerHTML=`
-  <div style="background:#fff;border-radius:12px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;animation:fadeInUp .18s ease">
-    ${coChiHo ? `
-    <!-- CÓ CHI HỘ: xác nhận bình thường -->
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;animation:fadeInUp .18s ease">
+
+    ${coWarnDV?`
+    <div style="background:#fffbeb;padding:14px 20px;border-bottom:1px solid #fde68a;display:flex;align-items:center;gap:10px">
+      <i class="ti ti-alert-triangle" style="color:#d97706;font-size:20px;flex-shrink:0"></i>
+      <div style="font-weight:700;font-size:13px;color:#92400e">Kiểm tra dịch vụ trước khi khóa</div>
+    </div>
+    <div style="padding:14px 20px 0">
+      <p style="font-size:12px;color:#6b7280;margin:0 0 10px">Chuyến này chưa tick các dịch vụ sau — xác nhận thực sự không có:</p>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px">
+        ${chuaDL?`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:8px">
+          <input type="checkbox" id="lc-dl" style="width:16px;height:16px;cursor:pointer">
+          <span>Không có <strong>Đổi lệnh</strong> trong chuyến này</span>
+        </label>`:''}
+        ${chuaTK?`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:8px">
+          <input type="checkbox" id="lc-tk" style="width:16px;height:16px;cursor:pointer">
+          <span>Không có <strong>Mở tờ khai</strong> trong chuyến này</span>
+        </label>`:''}
+      </div>
+    </div>`:''}
+
+    ${!coWarnDV?`
     <div style="padding:20px 20px 0;display:flex;align-items:flex-start;gap:12px">
       <div style="width:40px;height:40px;border-radius:10px;background:#d1fae5;display:flex;align-items:center;justify-content:center;flex-shrink:0">
         <i class="ti ti-lock" style="color:#059669;font-size:20px"></i>
       </div>
       <div>
         <div style="font-weight:700;font-size:15px;color:#111;margin-bottom:4px">Hoàn thành & Khóa vận đơn</div>
-        <div style="font-size:13px;color:#6b7280;line-height:1.5">Đã ghi nhận <strong style="color:#059669">${soChiHo} chi phí</strong> phát sinh.<br>Sau khi khóa, chỉ kế toán mới mở lại được.</div>
+        <div style="font-size:13px;color:#6b7280;line-height:1.5">
+          ${coChiHo?`Đã ghi nhận <strong style="color:#059669">${soChiHo} chi phí</strong> phát sinh.`:'⚠️ Chưa có chi phí phát sinh nào.'}
+          <br>Kế toán sẽ nhập cước sau khi khóa.
+        </div>
       </div>
-    </div>
-    <div style="padding:16px 20px 20px;display:flex;gap:8px;justify-content:flex-end">
-      <button onclick="document.getElementById('lock-confirm-modal').remove()"
-        style="padding:8px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:500;cursor:pointer;color:#374151">
-        Hủy
-      </button>
-      <button onclick="doLockOrder('${id}')"
-        style="padding:8px 18px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px">
-        <i class="ti ti-lock"></i> Xác nhận khóa
-      </button>
-    </div>
-    ` : `
-    <!-- CHƯA CÓ CHI HỘ: cảnh báo -->
-    <div style="background:#fffbeb;padding:16px 20px;border-bottom:1px solid #fde68a;display:flex;align-items:center;gap:10px">
-      <i class="ti ti-alert-triangle" style="color:#d97706;font-size:22px;flex-shrink:0"></i>
-      <div style="font-weight:700;font-size:14px;color:#92400e">Chưa có chi phí phát sinh nào!</div>
-    </div>
-    <div style="padding:16px 20px">
-      <p style="font-size:13px;color:#374151;line-height:1.6;margin:0 0 12px">
-        📋 Chưa ghi nhận chi phí nào cho chuyến này.<br>
-        <span style="color:#6b7280">Cao tốc, lưu ca, bốc xếp, Lạch Huyện...</span><br>
-        — kiểm tra kỹ trước khi bấm hoàn thành.
-      </p>
+    </div>`:''}
+
+    ${!coChiHo&&!coWarnDV?`
+    <div style="padding:10px 20px 0">
       <div style="background:#fef3c7;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e">
         ⚠️ Bỏ sót chi phí → kế toán phải mở lại → mất thời gian 2 bên.
       </div>
-    </div>
-    <div style="padding:0 20px 20px;display:flex;gap:8px;justify-content:flex-end">
+    </div>`:''}
+
+    <div style="padding:16px 20px;display:flex;gap:8px;justify-content:flex-end">
       <button onclick="document.getElementById('lock-confirm-modal').remove()"
         style="padding:8px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:500;cursor:pointer;color:#374151">
-        Quay lại kiểm tra
+        ${coWarnDV?'Quay lại':'Hủy'}
       </button>
-      <button onclick="doLockOrder('${id}')"
-        style="padding:8px 16px;border-radius:8px;border:none;background:#d97706;color:#fff;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px">
-        <i class="ti ti-lock"></i> Vẫn khóa
+      <button onclick="_confirmLock('${id}',${chuaDL},${chuaTK})"
+        style="padding:8px 18px;border-radius:8px;border:none;background:${coChiHo?'#059669':'#d97706'};color:#fff;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px">
+        <i class="ti ti-lock"></i> ${coWarnDV?'Xác nhận & Khóa':'Xác nhận khóa'}
       </button>
     </div>
-    `}
   </div>`;
-  // Click nền để đóng
   wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
   document.body.appendChild(wrap);
+}
+
+function _confirmLock(id, chuaDL, chuaTK){
+  // Bắt buộc check xác nhận từng dịch vụ chưa tick
+  if(chuaDL&&document.getElementById('lc-dl')&&!document.getElementById('lc-dl').checked){
+    document.getElementById('lc-dl').closest('label').style.borderColor='var(--danger)';
+    toast('Xác nhận không có Đổi lệnh trước khi khóa','error');return;
+  }
+  if(chuaTK&&document.getElementById('lc-tk')&&!document.getElementById('lc-tk').checked){
+    document.getElementById('lc-tk').closest('label').style.borderColor='var(--danger)';
+    toast('Xác nhận không có Mở tờ khai trước khi khóa','error');return;
+  }
+  doLockOrder(id);
 }
 
 async function doLockOrder(id){
