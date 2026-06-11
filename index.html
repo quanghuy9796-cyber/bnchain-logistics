@@ -8,16 +8,11 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    /* Logo ảnh — login: mix-blend-mode multiply loại bỏ nền trắng */
-    .login-brand img.logo-img {
-      width: 210px; height: auto; display: block; margin: 0 auto 4px;
-      mix-blend-mode: multiply;
-    }
-    /* Sidebar dùng text logo gốc — sạch hơn */
-    .logo { padding: 16px 14px; border-bottom: 1px solid rgba(255,255,255,.08); cursor: pointer; }
-    .logo-brand { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: .5px; }
-    .logo-brand span { color: #E8820C; }
-    .logo-sub { font-size: 9px; color: rgba(168,192,200,.5); letter-spacing: 1.2px; text-transform: uppercase; margin-top: 3px; }
+    /* Logo PNG nền trong suốt — dùng chung login + sidebar */
+    .login-brand img.logo-img { width: 200px; height: auto; display: block; margin: 0 auto 6px; }
+    .logo { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.08); cursor: pointer; text-align: center; }
+    .logo img.logo-sidebar { width: 130px; height: auto; display: block; margin: 0 auto;
+      filter: brightness(0) invert(1); }
   </style>
 </head>
 <body>
@@ -27,7 +22,7 @@
   <div class="login-wrap">
     <div class="login-card">
       <div class="login-brand">
-        <img src="logo.jpg" alt="BN CHAIN" class="logo-img">
+        <img src="logo.png" alt="BN CHAIN" class="logo-img">
         <div class="s" style="font-size:10px;color:var(--text-muted);letter-spacing:1px;text-align:center">HỆ THỐNG QUẢN TRỊ VẬN TẢI</div>
       </div>
       <div class="form-group"><label>Tên đăng nhập</label><input type="text" id="li-user" placeholder="Nhập tên đăng nhập" onkeydown="if(event.key==='Enter')doLogin()" autocomplete="username"></div>
@@ -42,8 +37,7 @@
   <!-- SIDEBAR -->
   <div class="sidebar">
     <div class="logo" onclick="nav('orders',document.querySelector('.nav-item'))">
-      <div class="logo-brand"><span>BN</span> CHAIN</div>
-      <div class="logo-sub">LOGISTICS & SOLUTIONS</div>
+      <img src="logo.png" alt="BN CHAIN" class="logo-sidebar">
     </div>
     <div class="nav-sec">
       <div class="nav-lbl">VẬN HÀNH</div>
