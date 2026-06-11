@@ -499,8 +499,7 @@ async function onBienChange(bien){
   // Auto fill lai xe
   const lxEl=document.getElementById('fx-laixe');
   if(lxEl&&!lxEl.value){
-    if(xe.loai_phan_loai==='thau_tu_lai')lxEl.value=xe.ten_thau_phu||xe.ten_lai_xe_mac_dinh||'';
-    else if(xe.ten_lai_xe_mac_dinh)lxEl.value=xe.ten_lai_xe_mac_dinh;
+    if(xe.ten_lai_xe_mac_dinh)lxEl.value=xe.ten_lai_xe_mac_dinh;
   }
   // Store loai phan loai on hidden field
   const plEl=document.getElementById('fx-phanloai');
