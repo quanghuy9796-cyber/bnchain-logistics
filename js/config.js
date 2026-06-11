@@ -25,6 +25,17 @@ const genMa=()=>{const d=new Date();return`BNC-${String(d.getFullYear()).slice(-
 const fmtInput = v => v.toString().replace(/\D/g,'').replace(/\B(?=(\d{3})+(?!\d))/g,',');
 const parseNum = v => parseInt(v.toString().replace(/,/g,''))||0;
 
+// IME guard — ngăn fmtInput chạy khi bộ gõ tiếng Việt đang compose (VIE/Telex/VNI)
+// Dùng: oninput="if(!window._ime)this.value=fmtInput(this.value)"
+window._ime=false;
+document.addEventListener('compositionstart',()=>window._ime=true);
+document.addEventListener('compositionend',e=>{
+  window._ime=false;
+  // Sau khi IME commit xong, format lại ô đang focus nếu là ô tiền
+  const el=document.activeElement;
+  if(el&&el.dataset&&el.dataset.money==='1')el.value=fmtInput(el.value);
+});
+
 // Validate biển số: 99H-06375 hoặc 99A-123.45
 
 function validateBienSo(v){
