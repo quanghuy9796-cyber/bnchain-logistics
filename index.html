@@ -6,8 +6,14 @@
   <title>BN CHAIN - Quản Trị Vận Tải</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
   <link rel="stylesheet" href="style.css">
-  <!-- Supabase SDK — chỉ 1 lần duy nhất -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    /* Logo ảnh — login */
+    .login-brand img.logo-img { width: 200px; height: auto; display: block; margin: 0 auto 8px; }
+    /* Logo ảnh — sidebar */
+    .sidebar-logo-img { width: 140px; height: auto; display: block; margin: 0 auto; filter: brightness(0) invert(1); }
+    .logo { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.08); text-align: center; cursor: pointer; }
+  </style>
 </head>
 <body>
 
@@ -15,9 +21,12 @@
 <div id="login-page">
   <div class="login-wrap">
     <div class="login-card">
-      <div class="login-brand"><div class="b"><span>BN</span> CHAIN</div><div class="s">LOGISTICS & SOLUTIONS</div></div>
-      <div class="form-group"><label>Email</label><input type="email" id="li-email" placeholder="email@bnchain.vn" onkeydown="if(event.key==='Enter')doLogin()"></div>
-      <div class="form-group"><label>Mật khẩu</label><input type="password" id="li-pass" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <div class="login-brand">
+        <img src="logo.jpg" alt="BN CHAIN" class="logo-img">
+        <div class="s" style="font-size:10px;color:var(--text-muted);letter-spacing:1px;text-align:center">HỆ THỐNG QUẢN TRỊ VẬN TẢI</div>
+      </div>
+      <div class="form-group"><label>Tên đăng nhập</label><input type="text" id="li-user" placeholder="Nhập tên đăng nhập" onkeydown="if(event.key==='Enter')doLogin()" autocomplete="username"></div>
+      <div class="form-group"><label>Mật khẩu</label><input type="password" id="li-pass" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()" autocomplete="current-password"></div>
       <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="doLogin()"><i class="ti ti-login"></i> Đăng nhập</button>
     </div>
   </div>
@@ -28,8 +37,7 @@
   <!-- SIDEBAR -->
   <div class="sidebar">
     <div class="logo" onclick="nav('orders',document.querySelector('.nav-item'))">
-      <div class="logo-brand"><span>BN</span> CHAIN</div>
-      <div class="logo-sub">LOGISTICS & SOLUTIONS</div>
+      <img src="logo.jpg" alt="BN CHAIN" class="sidebar-logo-img">
     </div>
     <div class="nav-sec">
       <div class="nav-lbl">VẬN HÀNH</div>
@@ -50,7 +58,7 @@
       <div class="nav-item" onclick="nav('kh',this)"><i class="ti ti-building"></i>Khách hàng</div>
       <div class="nav-item" onclick="nav('xe',this)"><i class="ti ti-truck"></i>Phương tiện & Lái xe</div>
       <div class="nav-item" onclick="nav('diadiem',this)"><i class="ti ti-route"></i>Điểm & Cung đường</div>
-      <div class="nav-item" onclick="nav('nv',this)"><i class="ti ti-user-circle"></i>Nhân viên</div>
+      <div class="nav-item" onclick="nav('nv',this)"><i class="ti ti-user-circle"></i>Nhân viên & Tài khoản</div>
     </div>
     <div class="nav-bottom">
       <div class="nav-user-name" id="u-name">—</div>
