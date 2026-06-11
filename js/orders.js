@@ -886,7 +886,7 @@ function openAddChiHo(vdId,maDon){
           <div class="form-group">
             <label>Thu khách (VNĐ) *</label>
             <input type="text" id="ch-thukh" placeholder="0"
-              oninput="fmtOnInput(this);autoFillTraThau()"
+              oninput="fmtOnInput(this)"
               style="border-color:var(--teal)">
             <span style="font-size:10px;color:var(--teal)">Vào bảng kê thu khách</span>
           </div>
@@ -931,14 +931,8 @@ function openAddChiHo(vdId,maDon){
   document.body.appendChild(bg);
 }
 
-function autoFillTraThau(){
-  // Khi nhập thu khách, tự gợi ý trả thầu = cùng số tiền
-  const thuEl=document.getElementById('ch-thukh');
-  const thauEl=document.getElementById('ch-trathau');
-  if(thuEl&&thauEl&&!thauEl.value){
-    thauEl.value=thuEl.value;
-  }
-}
+
+
 
 
 async function editChiHo(chiHoId, vdId, maDon){
