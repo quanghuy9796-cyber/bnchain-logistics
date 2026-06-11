@@ -636,13 +636,75 @@ async function lockOrder(id){
   // Kiểm tra chi hộ trước khi cho khóa
   const{data:chiHo}=await db.from('chi_ho').select('id').eq('van_don_id',id).eq('la_tham_chieu',false);
   const coChiHo=(chiHo||[]).length>0;
-  let msg;
-  if(!coChiHo){
-    msg='📋 Chưa ghi nhận chi phí nào cho chuyến này. Cao tốc, lưu ca, bốc xếp, Lạch Huyện... — kiểm tra kỹ trước khi bấm hoàn thành.\n\nVẫn tiếp tục khóa?';
-  } else {
-    msg=`Xác nhận HOÀN THÀNH và KHÓA vận đơn này?\nĐang có ${chiHo.length} chi phí phát sinh đã ghi nhận.\nSau khi khóa sẽ không thể chỉnh sửa!`;
-  }
-  if(!confirm(msg))return;
+  const soChiHo=(chiHo||[]).length;
+  // Hiện custom modal thay vì confirm() native
+  showLockConfirm(id, coChiHo, soChiHo);
+}
+
+function showLockConfirm(id, coChiHo, soChiHo){
+  // Xóa modal cũ nếu còn
+  document.getElementById('lock-confirm-modal')?.remove();
+  const wrap=document.createElement('div');
+  wrap.id='lock-confirm-modal';
+  wrap.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.45)';
+  wrap.innerHTML=`
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;animation:fadeInUp .18s ease">
+    ${coChiHo ? `
+    <!-- CÓ CHI HỘ: xác nhận bình thường -->
+    <div style="padding:20px 20px 0;display:flex;align-items:flex-start;gap:12px">
+      <div style="width:40px;height:40px;border-radius:10px;background:#d1fae5;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i class="ti ti-lock" style="color:#059669;font-size:20px"></i>
+      </div>
+      <div>
+        <div style="font-weight:700;font-size:15px;color:#111;margin-bottom:4px">Hoàn thành & Khóa vận đơn</div>
+        <div style="font-size:13px;color:#6b7280;line-height:1.5">Đã ghi nhận <strong style="color:#059669">${soChiHo} chi phí</strong> phát sinh.<br>Sau khi khóa, chỉ kế toán mới mở lại được.</div>
+      </div>
+    </div>
+    <div style="padding:16px 20px 20px;display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="document.getElementById('lock-confirm-modal').remove()"
+        style="padding:8px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:500;cursor:pointer;color:#374151">
+        Hủy
+      </button>
+      <button onclick="doLockOrder('${id}')"
+        style="padding:8px 18px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px">
+        <i class="ti ti-lock"></i> Xác nhận khóa
+      </button>
+    </div>
+    ` : `
+    <!-- CHƯA CÓ CHI HỘ: cảnh báo -->
+    <div style="background:#fffbeb;padding:16px 20px;border-bottom:1px solid #fde68a;display:flex;align-items:center;gap:10px">
+      <i class="ti ti-alert-triangle" style="color:#d97706;font-size:22px;flex-shrink:0"></i>
+      <div style="font-weight:700;font-size:14px;color:#92400e">Chưa có chi phí phát sinh nào!</div>
+    </div>
+    <div style="padding:16px 20px">
+      <p style="font-size:13px;color:#374151;line-height:1.6;margin:0 0 12px">
+        📋 Chưa ghi nhận chi phí nào cho chuyến này.<br>
+        <span style="color:#6b7280">Cao tốc, lưu ca, bốc xếp, Lạch Huyện...</span><br>
+        — kiểm tra kỹ trước khi bấm hoàn thành.
+      </p>
+      <div style="background:#fef3c7;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e">
+        ⚠️ Bỏ sót chi phí → kế toán phải mở lại → mất thời gian 2 bên.
+      </div>
+    </div>
+    <div style="padding:0 20px 20px;display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="document.getElementById('lock-confirm-modal').remove()"
+        style="padding:8px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:500;cursor:pointer;color:#374151">
+        Quay lại kiểm tra
+      </button>
+      <button onclick="doLockOrder('${id}')"
+        style="padding:8px 16px;border-radius:8px;border:none;background:#d97706;color:#fff;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px">
+        <i class="ti ti-lock"></i> Vẫn khóa
+      </button>
+    </div>
+    `}
+  </div>`;
+  // Click nền để đóng
+  wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
+  document.body.appendChild(wrap);
+}
+
+async function doLockOrder(id){
+  document.getElementById('lock-confirm-modal')?.remove();
   const{error}=await db.from('van_don').update({trang_thai:'Hoàn thành',locked:true,locked_at:new Date().toISOString(),locked_by:CU.id,updated_at:new Date().toISOString()}).eq('id',id);
   if(error){toast('Lỗi: '+error.message,'error');return;}
   toast('Đã hoàn thành và khóa vận đơn');
