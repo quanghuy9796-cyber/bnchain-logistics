@@ -635,6 +635,15 @@ function openForm(){
           oninput="this.value=formatCont(this.value)">
         <span style="font-size:10px;color:var(--text-muted)" id="nf-cont-len"></span>
       </div>
+      <div class="form-group"><label>Loại xe / Cont <span style="font-size:10px;color:var(--teal)">(tự sang Tab Xe & Cont)</span></label>
+        <input type="text" id="nf-loaixe" placeholder="Gõ để tìm loại cont..." list="nf-loaixe-dl" autocomplete="off">
+        <datalist id="nf-loaixe-dl">
+          <option value="20 nhẹ"><option value="20 nặng"><option value="Cont 40"><option value="Cont 45">
+          <option value="Xe tải 1.25T"><option value="Xe tải 2.5T"><option value="Xe tải 3.5T">
+          <option value="Xe tải 5T"><option value="Xe tải 8T"><option value="Xe tải 10T">
+          <option value="Mooc sàn"><option value="Mooc rào"><option value="Fooc">
+        </datalist>
+      </div>
       <div class="form-group"><label>Điểm lấy hàng *</label><input type="text" id="nf-lay" placeholder="Kho / KCN / Cảng..."></div>
       <div class="form-group"><label>Điểm trả hàng *</label><input type="text" id="nf-tra" placeholder="Kho / KCN / Cảng..."></div>
       <div class="form-group full"><label>Ghi chú</label><textarea id="nf-ghichu" rows="2"></textarea></div>
@@ -686,6 +695,7 @@ async function saveNew(){
   const loai=document.getElementById('nf-loai').value;
   const billVal=document.getElementById('nf-bill')?.value||null;
   const contVal=document.getElementById('nf-cont')?.value||null;
+  const loaiXeVal=document.getElementById('nf-loaixe')?.value||null;
   const data={
     ma_don:genMa(),
     ngay:document.getElementById('nf-ngay').value,
@@ -694,6 +704,8 @@ async function saveNew(){
     so_bill:loai==='Nhập'?billVal:null,
     so_booking:loai!=='Nhập'?billVal:null,
     so_cont:contVal,
+    loai_cont:loaiXeVal,
+    loai_xe_hang:loaiXeVal,
     diem_lay:document.getElementById('nf-lay').value,
     diem_tra:document.getElementById('nf-tra').value,
     hanh_trinh:(document.getElementById('nf-lay').value||'')+(document.getElementById('nf-tra').value?' - '+document.getElementById('nf-tra').value:''),
