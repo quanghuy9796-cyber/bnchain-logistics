@@ -261,7 +261,7 @@ Trả về JSON ARRAY với đúng 1 phần tử (chỉ array thuần, không ma
 [{
   "so_hd": "số hóa đơn hoặc số biên lai",
   "ngay_hd": "ngày trên HĐ format YYYY-MM-DD",
-  "loai_dv": "Nâng hàng / Hạ vỏ / Nâng vỏ / Hạ hàng / CSHT / Lưu cont / Phí cảng / Giám sát HQ",
+  "loai_dv": "Chỉ được chọn 1 trong các giá trị sau: Nâng, hạ cont / CSHT / Lưu ca / Phí cảng, bãi / Phí local charge / Chi phí khác. Quy tắc: Nâng hàng/Hạ vỏ/Nâng vỏ/Hạ hàng/nâng hạ container → Nâng, hạ cont. CSHT/cơ sở hạ tầng → CSHT. Phí lưu container/lưu bãi/lưu cont → Phí cảng, bãi. Local charge/phụ phí → Phí local charge. Giám sát HQ/hải quan/CFS → Chi phí khác.",
   "tong_tien": số tiền VNĐ cuối cùng (số nguyên không dấu phẩy),
   "so_cont_list": ["POLU4510295"],
   "loai_cont": "20DC hoặc 40HC v.v",
@@ -343,6 +343,19 @@ function buildDisplayName(loaiDv, conts, ngayHd){
   }catch(e){return null;}
 }
 
+// Map loai_dv từ AI → loai_chi chuẩn của hệ thống
+// Đảm bảo dù AI trả về gì cũng khớp đúng danh mục
+function mapLoaiDv(loaiDv){
+  if(!loaiDv) return 'Chi phí khác';
+  const v=loaiDv.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  if(/nang|ha |ha cont|nang ha|nâng|hạ/.test(v)) return 'Nâng, hạ cont';
+  if(/csht|co so ha tang/.test(v)) return 'CSHT';
+  if(/luu ca/.test(v)) return 'Lưu ca';
+  if(/luu bai|luu cont|phi cang|cang bai/.test(v)) return 'Phí cảng, bãi';
+  if(/local|phu phi/.test(v)) return 'Phí local charge';
+  return 'Chi phí khác';
+}
+
 async function saveHoaDon(hd,fileName,storagePath=null){
   // Khớp cont → da_duyet ngay, không qua bước chờ
   const trangThai=hd.trang_thai==='da_khop'?'da_duyet':hd.trang_thai;
@@ -370,7 +383,7 @@ async function saveHoaDon(hd,fileName,storagePath=null){
   if(hd.trang_thai==='da_khop'&&hd.van_don_matches?.length){
     const allConts=hd.van_don_matches.map(v=>v.so_cont);
     const allContsStr=allConts.join(', ');
-    const loaiChi=`${hd.loai_dv||'Chi hộ HĐ'} + ${allContsStr}`;
+    const loaiChi=`${mapLoaiDv(hd.loai_dv)} + ${allContsStr}`;
     for(let i=0;i<hd.van_don_matches.length;i++){
       const vd=hd.van_don_matches[i];
       const laChinh=i===0;
@@ -543,7 +556,7 @@ async function saveXuLyHD(hdId){
 
   // Tên chi hộ
   const contStr=conts.join(', ');
-  const loaiChi=`${hd.loai_dv||'Chi hộ HĐ'} + ${contStr}`;
+  const loaiChi=`${mapLoaiDv(hd.loai_dv)} + ${contStr}`;
 
   await db.from('hoa_don').update({
     trang_thai:'da_duyet',ly_do_cho:null,ai_ghi_chu:gc,
