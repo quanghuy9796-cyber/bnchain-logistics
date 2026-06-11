@@ -43,7 +43,6 @@ async function pgOrders(c){
     <div class="status-btn ${ORDER_FILTER==='all'?'active':''}" onclick="ORDER_FILTER='all';ORDER_PAGE=1;pgOrders(document.getElementById('content'))"><i class="ti ti-list"></i>Tất cả <span class="cnt">${counts.all}</span></div>
     <div class="status-btn s-cho ${ORDER_FILTER==='Chờ xếp xe'?'active':''}" onclick="ORDER_FILTER='Chờ xếp xe';ORDER_PAGE=1;pgOrders(document.getElementById('content'))"><i class="ti ti-clock"></i>Chờ xếp xe <span class="cnt">${counts['Chờ xếp xe']||0}</span></div>
     <div class="status-btn s-chay ${ORDER_FILTER==='Đang vận chuyển'?'active':''}" onclick="ORDER_FILTER='Đang vận chuyển';ORDER_PAGE=1;pgOrders(document.getElementById('content'))"><i class="ti ti-truck"></i>Đang chạy <span class="cnt">${counts['Đang vận chuyển']||0}</span></div>
-    <div class="status-btn s-xn ${ORDER_FILTER==='Chờ xác nhận'?'active':''}" onclick="ORDER_FILTER='Chờ xác nhận';ORDER_PAGE=1;pgOrders(document.getElementById('content'))"><i class="ti ti-check"></i>Chờ xác nhận <span class="cnt">${counts['Chờ xác nhận']||0}</span></div>
     <div class="status-btn s-xong ${ORDER_FILTER==='Hoàn thành'?'active':''}" onclick="ORDER_FILTER='Hoàn thành';ORDER_PAGE=1;pgOrders(document.getElementById('content'))"><i class="ti ti-lock"></i>Hoàn thành <span class="cnt">${counts['Hoàn thành']||0}</span></div>
   </div>
   <div class="toolbar">
@@ -107,13 +106,13 @@ function _goPage(){
 }
 
 // ==================== DETAIL PANEL ====================
-async function openDetail(id){
+async function openDetail(id, tab='info'){
   SEL=id;
   const o=ORDERS.find(x=>x.id===id);
   if(!o)return;
   const dp=document.getElementById('dp');
   dp.style.display='flex';dp.style.flexDirection='column';
-  DP_TAB='info';
+  DP_TAB=tab;
   await renderDP(o);
   document.querySelectorAll('.tbl tr').forEach(tr=>{
     if(tr.getAttribute('onclick')?.includes(id))tr.classList.add('selected');
@@ -243,7 +242,7 @@ function renderTabXe(o,editable){
   const loaiXeList=['20 nhẹ','20 nặng','Cont 40','Cont 45','Xe tải 1.25T','Xe tải 2.5T','Xe tải 3.5T','Xe tải 5T','Xe tải 8T','Xe tải 10T','Mooc sàn','Mooc rào','Fooc'];
   const loaiXeOpts=loaiXeList.map(v=>`<option value="${v}">`).join('');
   const loaiChuyenOpts='<option value="" disabled '+(o.loai_chuyen?'':'selected')+'>-- Chọn loại chuyến --</option>'+['Thường','Kết hợp','Kẹp ghép'].map(s=>`<option ${o.loai_chuyen===s?'selected':''}>${s}</option>`).join('');
-  const ttOpts=['Chờ xếp xe','Đang vận chuyển','Chờ xác nhận'].map(s=>`<option ${o.trang_thai===s?'selected':''}>${s}</option>`).join('');
+  const ttOpts=['Chờ xếp xe','Đang vận chuyển'].map(s=>`<option ${o.trang_thai===s?'selected':''}>${s}</option>`).join('')+(o.trang_thai==='Chờ xác nhận'?'<option selected>Chờ xác nhận</option>':'');
   return`${lockBar}
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-truck"></i>Phân công xe & lái xe</div>
@@ -457,12 +456,6 @@ function renderTabCuoc(o,chiHoList,editable,loi){
   <button class="btn btn-teal" style="width:100%;justify-content:center;margin-bottom:8px" onclick="saveCuoc('`+o.id+`')">
     <i class="ti ti-device-floppy"></i> Lưu cước & thanh toán
   </button>
-  ${!o.locked?`
-  <button class="btn btn-success" style="width:100%;justify-content:center" onclick="lockOrder('`+o.id+`')">
-    <i class="ti ti-lock"></i> Hoàn thành & Khóa vận đơn
-  </button>
-  <p style="font-size:10.5px;color:var(--text-muted);text-align:center;margin-top:5px">⚠️ Sau khi khóa sẽ không thể chỉnh sửa</p>
-  `:''}
   `:''}
   ${o.locked&&canSee(['quan_ly','ceo'])?`
   <button class="btn btn-danger btn-sm" style="width:100%;justify-content:center;margin-top:6px" onclick="unlockOrder('`+o.id+`')">
@@ -762,7 +755,7 @@ async function saveXe(id){
       loai_cont:document.getElementById('fx-loaixe')?.value||'',
       loai_xe_hang:document.getElementById('fx-loaixe')?.value||'',
       ghi_chu_xe:document.getElementById('fx-ghichuXe')?.value||'',
-      trang_thai:document.getElementById('fx-tt')?.value||'Chờ xác nhận',
+      trang_thai:document.getElementById('fx-tt')?.value||'Đang vận chuyển',
       loai_phan_loai_xe:plVal,
       la_xe_noi_bo:plVal==='noi_bo',
       updated_at:new Date().toISOString(),
@@ -806,10 +799,10 @@ async function deleteOrder(id){
 
 async function unlockOrder(id){
   if(!canSee(['quan_ly','ceo'])){toast('Không có quyền','error');return;}
-  if(!confirm('Mở khóa vận đơn này để chỉnh sửa?\nTrạng thái sẽ chuyển về "Chờ xác nhận"'))return;
+  if(!confirm('Mở khóa vận đơn này để chỉnh sửa?\nTrạng thái sẽ chuyển về "Đang vận chuyển"'))return;
   const{error}=await db.from('van_don').update({
     locked:false, locked_at:null, locked_by:null,
-    trang_thai:'Chờ xác nhận',
+    trang_thai:'Đang vận chuyển',
     updated_at:new Date().toISOString()
   }).eq('id',id);
   if(error){toast('Lỗi: '+error.message,'error');return;}
