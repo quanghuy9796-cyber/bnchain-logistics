@@ -542,7 +542,7 @@ function onBienInput(el){
   if(!matches.length){drop.style.display='none';}
   else{
     drop.innerHTML=matches.map(x=>`
-      <div onclick="pickBien('${x.bien_so}')"
+      <div onmousedown="event.preventDefault();pickBien('${x.bien_so}')"
         style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px"
         onmouseover="this.style.background='var(--teal-light)'"
         onmouseout="this.style.background=''">
@@ -740,28 +740,26 @@ async function onBienChange(bien){
   if(tpEl)tpEl.value=xe.ma_thau_phu||'';
   if(lxEl)lxEl.value=xe.ten_lai_xe_mac_dinh||'';
   if(plEl)plEl.value=xe.loai_phan_loai||'thau_tu_lai';
-  // Không auto-fill loại cont khi đổi biển — loại cont gắn với cont, không với xe
-  if(lxGroup){
-    const show=xe.loai_phan_loai!=='thau_tu_lai';
-    lxGroup.style.display=show?'':'none';
-  }
-  // Xe nội bộ: lái xe + thầu phụ cố định, không cho sửa
+  // Xe nội bộ: ẩn thầu phụ, disable lái xe
   const tpGroup=document.getElementById('fx-thauphu-group');
   if(xe.loai_phan_loai==='noi_bo'){
-    // Ẩn thầu phụ — xe nội bộ không có thầu phụ
     if(tpGroup)tpGroup.style.display='none';
     if(tpEl)tpEl.value='';
-    // Disable lái xe — cố định theo danh mục
     if(lxEl){lxEl.setAttribute('disabled','');lxEl.title='Xe nội bộ — lái xe cố định theo danh mục xe';}
+    if(lxGroup)lxGroup.style.display=''; // nội bộ có lái xe
   } else {
     if(tpGroup)tpGroup.style.display='';
     if(lxEl){lxEl.removeAttribute('disabled');lxEl.title='';}
+    // Ẩn/hiện ô lái xe theo loại phân loại
+    if(lxGroup){
+      const show=xe.loai_phan_loai!=='thau_tu_lai';
+      lxGroup.style.display=show?'':'none';
+    }
   }
   if(nbEl)nbEl.value=xe.loai_phan_loai==='noi_bo'?'true':'false';
   // Bắt buộc chọn lại loại chuyến khi đổi xe
   if(lchuyenEl){lchuyenEl.value='';if(!lchuyenEl.querySelector('option[value=""]'))lchuyenEl.insertAdjacentHTML('afterbegin','<option value="" disabled>-- Chọn loại chuyến --</option>');lchuyenEl.options[0].selected=true;}
 }
-
 
 async function saveXe(id){
   try{
