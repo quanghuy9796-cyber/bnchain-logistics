@@ -226,7 +226,9 @@ function renderTabXe(o,editable){
   const lockBar=o.locked&&canSee(['quan_ly','ceo'])?`<div class="lock-notice" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span><button class="btn btn-xs btn-danger" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa để sửa</button></div>`:(o.locked?'<div class="lock-notice" style="margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>':'');
   const lxOpts=LX.map(l=>`<option value="${l.ho_ten}">`).join('');
   const tpOpts=TP.map(t=>`<option value="${t.ma_thau}">${t.ten_cong_ty}</option>`).join('');
-  const loaiXeOpts=['20 nhẹ','20 nặng','Cont 40','Cont 45','Xe tải 1.25T','Xe tải 2.5T','Xe tải 3.5T','Xe tải 5T','Xe tải 8T','Xe tải 10T','Mooc sàn','Mooc rào','Fooc'].map(v=>`<option ${_lxVal===v?'selected':''}>${v}</option>`).join('');
+  const bienOpts=(XE||[]).map(x=>`<option value="${x.bien_so}">${x.bien_so}${x.ma_thau_phu?' — '+x.ma_thau_phu:''}</option>`).join('');
+  const loaiXeList=['20 nhẹ','20 nặng','Cont 40','Cont 45','Xe tải 1.25T','Xe tải 2.5T','Xe tải 3.5T','Xe tải 5T','Xe tải 8T','Xe tải 10T','Mooc sàn','Mooc rào','Fooc'];
+  const loaiXeOpts=loaiXeList.map(v=>`<option value="${v}">`).join('');
   const loaiChuyenOpts=['Thường','Kết hợp','Kẹp ghép'].map(s=>`<option ${o.loai_chuyen===s?'selected':''}>${s}</option>`).join('');
   const ttOpts=['Chờ xếp xe','Đang vận chuyển','Chờ xác nhận'].map(s=>`<option ${o.trang_thai===s?'selected':''}>${s}</option>`).join('');
   return`${lockBar}
@@ -236,7 +238,9 @@ function renderTabXe(o,editable){
       <div class="form-group"><label>Biển kiểm soát</label>
         <input type="text" id="fx-bien" value="${o.bien_kiem_soat||''}" placeholder="99H-06375"
           ${dis} oninput="onBienInput(this)"
-          onblur="validateBienInput(this)">
+          onblur="validateBienInput(this)"
+          list="bien-dl" autocomplete="off">
+        <datalist id="bien-dl">${bienOpts}</datalist>
         <span id="fx-bien-err" style="font-size:10px;color:var(--danger);display:none">Định dạng: 99H-06375</span>
         <span style="font-size:10px;color:var(--text-muted)">Thầu phụ tự động theo biển số</span>
       </div>
@@ -271,9 +275,9 @@ function renderTabXe(o,editable){
         <span style="font-size:10px;color:var(--text-muted)" id="cont-len">${o.so_cont?o.so_cont.length+'/11 ký tự':''}</span>
       </div>
       <div class="form-group"><label>Loại xe / cont</label>
-        <select id="fx-loaixe" ${dis}>
-          <option value="">-- Chọn --</option>${loaiXeOpts}
-        </select>
+        <input type="text" id="fx-loaixe" value="${_lxVal}" placeholder="Gõ để tìm loại cont..." ${dis}
+          list="loaixe-dl" autocomplete="off">
+        <datalist id="loaixe-dl">${loaiXeOpts}</datalist>
       </div>
       <div class="form-group full"><label>Ghi chú xe / chuyến</label>
         <textarea id="fx-ghichuXe" ${dis}>${o.ghi_chu_xe||''}</textarea>
@@ -611,18 +615,26 @@ async function refreshOrder(id){
 // OPEN FORM (thêm mới)
 function openForm(){
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  const khopts=KH.map(k=>`<option>${k.ten_cong_ty}</option>`).join('');
+  const khopts=KH.map(k=>`<option value="${k.ten_cong_ty}">${k.ten_cong_ty}</option>`).join('');
   bg.innerHTML=`<div class="modal">
   <div class="modal-head"><h3><i class="ti ti-plus" style="color:var(--primary)"></i>Thêm vận đơn mới</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body">
     <div class="form-section-title" style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px"><i class="ti ti-file-description"></i> Thông tin cơ bản</div>
     <div class="form-grid">
       <div class="form-group"><label>Ngày *</label><input type="date" id="nf-ngay" value="${today()}"></div>
-      <div class="form-group"><label>Khách hàng *</label><select id="nf-khach"><option value="">-- Chọn --</option>${khopts}</select></div>
+      <div class="form-group"><label>Khách hàng *</label>
+        <input type="text" id="nf-khach" placeholder="Gõ tên để tìm khách..." list="nf-kh-dl" autocomplete="off">
+        <datalist id="nf-kh-dl">${khopts}</datalist>
+      </div>
       <div class="form-group"><label>Loại hàng *</label><select id="nf-loai" onchange="toggleNFBill()">
         <option>Nhập</option><option>Xuất</option><option>Chuyển kho</option>
       </select></div>
-      <div class="form-group" id="nfgrp-bill"><label>Số Bill / Booking</label><input type="text" id="nf-bill" placeholder="Nhập số bill hoặc booking..."></div>
+      <div class="form-group" id="nfgrp-bill"><label>Số Bill / Booking</label><input type="text" id="nf-bill" placeholder="Số bill hàng nhập..."></div>
+      <div class="form-group" id="nfgrp-cont"><label>Số Cont <span style="font-size:10px;color:var(--teal)">(tự sang Tab Xe & Cont)</span></label>
+        <input type="text" id="nf-cont" placeholder="AAAU1234567 (11 ký tự)" maxlength="11"
+          oninput="this.value=formatCont(this.value)">
+        <span style="font-size:10px;color:var(--text-muted)" id="nf-cont-len"></span>
+      </div>
       <div class="form-group"><label>Điểm lấy hàng *</label><input type="text" id="nf-lay" placeholder="Kho / KCN / Cảng..."></div>
       <div class="form-group"><label>Điểm trả hàng *</label><input type="text" id="nf-tra" placeholder="Kho / KCN / Cảng..."></div>
       <div class="form-group full"><label>Ghi chú</label><textarea id="nf-ghichu" rows="2"></textarea></div>
@@ -644,28 +656,36 @@ function openForm(){
   <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="saveNew()"><i class="ti ti-device-floppy"></i> Tạo vận đơn</button></div>
   </div>`;
   document.body.appendChild(bg);
+  // Gắn sự kiện đếm ký tự cont sau khi DOM được tạo
+  const contEl=document.getElementById('nf-cont');
+  if(contEl)contEl.addEventListener('input',function(){
+    const lenEl=document.getElementById('nf-cont-len');
+    if(lenEl)lenEl.textContent=this.value?this.value.length+'/11 ký tự':'';
+  });
 }
 
 function toggleNFBill(){
-  // Single field for both bill/booking - just update placeholder
   const loai=document.getElementById('nf-loai')?.value;
   const billEl=document.getElementById('nf-bill');
+  const contGrp=document.getElementById('nfgrp-cont');
   if(billEl){
-    if(loai==='Nhập') billEl.placeholder='Số bill hàng nhập...';
-    else if(loai==='Xuất') billEl.placeholder='Số booking hàng xuất...';
-    else billEl.placeholder='Số bill / booking...';
+    if(loai==='Nhập'){billEl.placeholder='Số bill hàng nhập...';}
+    else if(loai==='Xuất'){billEl.placeholder='Số booking hàng xuất...';}
+    else{billEl.placeholder='Số bill / booking...';}
   }
+  // Ô số cont luôn hiện — cả Nhập lẫn Xuất đều có thể biết cont trước
 }
 
 async function saveNew(){
-  const khach=document.getElementById('nf-khach').value;
+  const khach=document.getElementById('nf-khach').value.trim();
   const lay=document.getElementById('nf-lay').value;
   const tra=document.getElementById('nf-tra').value;
-  if(!khach){toast('Vui lòng chọn khách hàng','error');return;}
+  if(!khach){toast('Vui lòng nhập khách hàng','error');return;}
   if(!lay){toast('Vui lòng nhập điểm lấy hàng','error');return;}
   if(!tra){toast('Vui lòng nhập điểm trả hàng','error');return;}
   const loai=document.getElementById('nf-loai').value;
   const billVal=document.getElementById('nf-bill')?.value||null;
+  const contVal=document.getElementById('nf-cont')?.value||null;
   const data={
     ma_don:genMa(),
     ngay:document.getElementById('nf-ngay').value,
@@ -673,6 +693,7 @@ async function saveNew(){
     loai_hang:loai,
     so_bill:loai==='Nhập'?billVal:null,
     so_booking:loai!=='Nhập'?billVal:null,
+    so_cont:contVal,
     diem_lay:document.getElementById('nf-lay').value,
     diem_tra:document.getElementById('nf-tra').value,
     hanh_trinh:(document.getElementById('nf-lay').value||'')+(document.getElementById('nf-tra').value?' - '+document.getElementById('nf-tra').value:''),
