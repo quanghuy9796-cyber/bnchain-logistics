@@ -237,7 +237,7 @@ function renderTabXe(o,editable){
   const bienOpts=(XE||[]).map(x=>`<option value="${x.bien_so}">${x.bien_so}${x.ma_thau_phu?' — '+x.ma_thau_phu:''}</option>`).join('');
   const loaiXeList=['20 nhẹ','20 nặng','Cont 40','Cont 45','Xe tải 1.25T','Xe tải 2.5T','Xe tải 3.5T','Xe tải 5T','Xe tải 8T','Xe tải 10T','Mooc sàn','Mooc rào','Fooc'];
   const loaiXeOpts=loaiXeList.map(v=>`<option value="${v}">`).join('');
-  const loaiChuyenOpts=['Thường','Kết hợp','Kẹp ghép'].map(s=>`<option ${o.loai_chuyen===s?'selected':''}>${s}</option>`).join('');
+  const loaiChuyenOpts='<option value="" disabled '+(o.loai_chuyen?'':'selected')+'>-- Chọn loại chuyến --</option>'+['Thường','Kết hợp','Kẹp ghép'].map(s=>`<option ${o.loai_chuyen===s?'selected':''}>${s}</option>`).join('');
   const ttOpts=['Chờ xếp xe','Đang vận chuyển','Chờ xác nhận'].map(s=>`<option ${o.trang_thai===s?'selected':''}>${s}</option>`).join('');
   return`${lockBar}
   <div class="form-section">
@@ -278,7 +278,7 @@ function renderTabXe(o,editable){
         <input type="text" id="fx-cont" value="${o.so_cont||''}"
           placeholder="${o.loai_hang==='Xuất'?'Điền khi lấy cont rỗng...':'AAAU1234567 (11 ký tự)'}"
           maxlength="11" ${dis}
-          oninput="this.value=formatCont(this.value)"
+          oninput="this.value=formatCont(this.value);onContInput(this)"
           onblur="if(this.value&&this.value.length!==11)this.style.borderColor='var(--danger)';else this.style.borderColor=''">
         <span style="font-size:10px;color:var(--text-muted)" id="cont-len">${o.so_cont?o.so_cont.length+'/11 ký tự':''}</span>
       </div>
@@ -573,6 +573,86 @@ function pickDiem(dropId,tenChuan){
 function closeDiemDrop(dropId){
   setTimeout(()=>{const d=document.getElementById(dropId);if(d)d.style.display='none';},200);
 }
+// DROPDOWN KHACH HANG
+function onKhachInput(el,dropId){
+  const q=removeAccents(el.value.trim());
+  const drop=document.getElementById(dropId);
+  if(!drop)return;
+  if(!q){drop.style.display='none';return;}
+  const matches=(KH||[]).filter(k=>removeAccents(k.ten_cong_ty).includes(q)).slice(0,8);
+  if(!matches.length){drop.style.display='none';return;}
+  drop.innerHTML=matches.map((k,i)=>{
+    const safe=k.ten_cong_ty.replace(/\/g,'\\').replace(/'/g,"\'");
+    return '<div onclick="pickKhach(\''+dropId+'\',\''+safe+'\')"'
+      +' data-idx="'+i+'"'
+      +' style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px"'
+      +' onmouseover="this.style.background=\'var(--teal-light)\'"'
+      +' onmouseout="this.style.background=\'\'">'
+      +'<i class="ti ti-building" style="color:var(--teal);margin-right:6px;font-size:12px"></i>'
+      +'<span style="font-weight:600;color:var(--sidebar-bg)">'+k.ten_cong_ty+'</span>'
+      +'</div>';
+  }).join('');
+  drop.dataset.focused='-1';
+  drop.style.display='block';
+}
+function pickKhach(dropId,tenKhach){
+  const drop=document.getElementById(dropId);
+  const inputId=drop?.dataset.inputId;
+  const input=inputId?document.getElementById(inputId):null;
+  if(input)input.value=tenKhach;
+  setTimeout(()=>{if(drop)drop.style.display='none';},80);
+}
+function closeKhachDrop(dropId,inputId){
+  setTimeout(()=>{
+    const drop=document.getElementById(dropId);
+    if(drop)drop.style.display='none';
+    const input=document.getElementById(inputId||'nf-khach');
+    if(!input)return;
+    const val=input.value.trim();
+    if(!val)return;
+    const ok=(KH||[]).some(k=>k.ten_cong_ty===val);
+    if(!ok){
+      input.value='';
+      input.style.borderColor='var(--danger)';
+      setTimeout(()=>{if(input)input.style.borderColor='';},1500);
+      toast('Khách hàng không có trong danh mục — vui lòng chọn từ gợi ý','error');
+    }
+  },220);
+}
+function onKhachKeydown(e,dropId,inputId){
+  const drop=document.getElementById(dropId);
+  if(!drop||drop.style.display==='none')return;
+  const items=[...drop.querySelectorAll('div[data-idx]')];
+  let idx=parseInt(drop.dataset.focused||'-1');
+  if(e.key==='ArrowDown'){
+    e.preventDefault();
+    idx=Math.min(idx+1,items.length-1);
+    drop.dataset.focused=String(idx);
+    items.forEach((el,i)=>el.style.background=i===idx?'var(--teal-light)':'');
+    items[idx]?.scrollIntoView({block:'nearest'});
+  } else if(e.key==='ArrowUp'){
+    e.preventDefault();
+    idx=Math.max(idx-1,0);
+    drop.dataset.focused=String(idx);
+    items.forEach((el,i)=>el.style.background=i===idx?'var(--teal-light)':'');
+    items[idx]?.scrollIntoView({block:'nearest'});
+  } else if(e.key==='Enter'){
+    e.preventDefault();
+    const target=idx>=0?items[idx]:(items.length===1?items[0]:null);
+    if(target)target.click();
+  } else if(e.key==='Escape'){
+    drop.style.display='none';
+  }
+}
+
+// Số cont thay đổi → xóa loại cont để điều vận chọn lại
+function onContInput(el){
+  const loaixeEl=document.getElementById('fx-loaixe');
+  if(loaixeEl)loaixeEl.value='';
+  const lenEl=document.getElementById('cont-len');
+  if(lenEl)lenEl.textContent=el.value?el.value.length+'/11 ký tự':'';
+}
+
 function validateBienInput(el){
   // Đóng dropdown khi rời ô (dùng setTimeout để pickBien kịp chạy trước)
   setTimeout(()=>{
@@ -592,35 +672,40 @@ function validateBienInput(el){
 }
 async function onBienChange(bien){
   if(!bien||bien.length<4)return;
-  // Set trang thai
   const ttEl=document.getElementById('fx-tt');
   if(ttEl)ttEl.value='Đang vận chuyển';
-  // Lookup xe table
   const{data:xe}=await db.from('xe').select('*').ilike('bien_so',bien.trim()).maybeSingle();
-  if(!xe)return;
-  // Auto fill thau phu
+  // Xe không có trong danh mục: xóa trắng thầu phụ, lái xe, loại chuyến để điều vận tự nhập
   const tpEl=document.getElementById('fx-thauphu');
-  if(tpEl&&!tpEl.value&&xe.ma_thau_phu)tpEl.value=xe.ma_thau_phu;
-  // Auto fill lai xe
   const lxEl=document.getElementById('fx-laixe');
-  if(lxEl&&!lxEl.value){
-    if(xe.ten_lai_xe_mac_dinh)lxEl.value=xe.ten_lai_xe_mac_dinh;
-  }
-  // Store loai phan loai on hidden field
   const plEl=document.getElementById('fx-phanloai');
-  if(plEl)plEl.value=xe.loai_phan_loai||'thau_tu_lai';
-  // Auto fill loai xe hang
   const lxhEl=document.getElementById('fx-loaixe');
-  if(lxhEl&&!lxhEl.value&&xe.loai_xe)lxhEl.value=xe.loai_xe;
-  // Show/hide lai xe field based on type
   const lxGroup=document.getElementById('fx-laixe-group');
+  const nbEl=document.getElementById('fx-noibo');
+  const lchuyenEl=document.getElementById('fx-lchuyen');
+  if(!xe){
+    // Xe mới tinh chưa có trong danh mục
+    if(tpEl)tpEl.value='';
+    if(lxEl)lxEl.value='';
+    if(plEl)plEl.value='thau_tu_lai';
+    if(lxGroup)lxGroup.style.display='none';
+    if(nbEl)nbEl.value='false';
+    // Bắt buộc chọn lại loại chuyến
+    if(lchuyenEl){lchuyenEl.value='';if(!lchuyenEl.querySelector('option[value=""]'))lchuyenEl.insertAdjacentHTML('afterbegin','<option value="" disabled>-- Chọn loại chuyến --</option>');lchuyenEl.options[0].selected=true;}
+    return;
+  }
+  // Xe có trong danh mục: luôn ghi đè toàn bộ (không giữ giá trị cũ)
+  if(tpEl)tpEl.value=xe.ma_thau_phu||'';
+  if(lxEl)lxEl.value=xe.ten_lai_xe_mac_dinh||'';
+  if(plEl)plEl.value=xe.loai_phan_loai||'thau_tu_lai';
+  if(lxhEl&&xe.loai_xe)lxhEl.value=xe.loai_xe;
   if(lxGroup){
     const show=xe.loai_phan_loai!=='thau_tu_lai';
     lxGroup.style.display=show?'':'none';
   }
-  // Set la_xe_noi_bo
-  const nbEl=document.getElementById('fx-noibo');
   if(nbEl)nbEl.value=xe.loai_phan_loai==='noi_bo'?'true':'false';
+  // Bắt buộc chọn lại loại chuyến khi đổi xe
+  if(lchuyenEl){lchuyenEl.value='';if(!lchuyenEl.querySelector('option[value=""]'))lchuyenEl.insertAdjacentHTML('afterbegin','<option value="" disabled>-- Chọn loại chuyến --</option>');lchuyenEl.options[0].selected=true;}
 }
 
 
@@ -794,9 +879,13 @@ function openForm(){
     <div class="form-section-title" style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px"><i class="ti ti-file-description"></i> Thông tin cơ bản</div>
     <div class="form-grid">
       <div class="form-group"><label>Ngày *</label><input type="date" id="nf-ngay" value="${today()}"></div>
-      <div class="form-group"><label>Khách hàng *</label>
-        <input type="text" id="nf-khach" placeholder="Gõ tên để tìm khách..." list="nf-kh-dl" autocomplete="off">
-        <datalist id="nf-kh-dl">${khopts}</datalist>
+      <div class="form-group" style="position:relative"><label>Khách hàng *</label>
+        <input type="text" id="nf-khach" placeholder="Gõ tên để tìm khách..." autocomplete="off"
+          oninput="onKhachInput(this,'nf-kh-drop')"
+          onblur="closeKhachDrop('nf-kh-drop','nf-khach')"
+          onkeydown="onKhachKeydown(event,'nf-kh-drop','nf-khach')">
+        <div id="nf-kh-drop" data-input-id="nf-khach" style="display:none;position:absolute;z-index:999;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:240px;overflow-y:auto"></div>
+        <span style="font-size:10px;color:var(--text-muted)">Chỉ chọn khách trong danh mục</span>
       </div>
       <div class="form-group"><label>Loại hàng *</label><select id="nf-loai" onchange="toggleNFBill()">
         <option>Nhập</option><option>Xuất</option><option>Chuyển kho</option>
