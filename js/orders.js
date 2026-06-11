@@ -16,8 +16,10 @@ let _canM=false;
 
 async function pgOrders(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
-  const COLS='id,ma_don,ngay,trang_thai,ten_khach,so_bill,so_booking,loai_hang,so_cont,loai_cont,loai_xe_hang,loai_chuyen,bien_kiem_soat,ten_lai_xe,hanh_trinh,diem_lay,diem_tra,locked,ky_thanh_toan,trang_thai_bang_ke,gia_cuoc_khach,gia_cuoc_thau,thanh_toan_khach,thanh_toan_thau,phi_doi_lenh,phi_to_khai,co_doi_lenh,co_to_khai,ngay_yeu_cau,created_at,ma_thau_phu,loai_phan_loai_xe,la_xe_noi_bo,ghi_chu,ghi_chu_xe,diem_tra_phat_sinh';
+  const COLS='id,ma_don,ngay,trang_thai,ten_khach,so_bill,so_booking,loai_hang,so_cont,loai_cont,loai_xe_hang,loai_chuyen,bien_kiem_soat,ten_lai_xe,hanh_trinh,diem_lay,diem_tra,locked,ky_thanh_toan,trang_thai_bang_ke,gia_cuoc_khach,gia_cuoc_thau,thanh_toan_khach,thanh_toan_thau,phi_doi_lenh,phi_to_khai,co_doi_lenh,co_to_khai,ngay_yeu_cau,created_at,ma_thau_phu,loai_phan_loai_xe,la_xe_noi_bo,ghi_chu,ghi_chu_xe,diem_tra_phat_sinh,created_by';
   let q=db.from('van_don').select(COLS).order('ngay',{ascending:false}).order('created_at',{ascending:false});
+  // nhan_vien chỉ xem đơn do mình tạo
+  if(CU?.vai_tro==='nhan_vien') q=q.eq('created_by',CU.id);
   if(ORDER_THANG){const[y,m]=ORDER_THANG.split('-');q=q.gte('ngay',`${y}-${m}-01`).lte('ngay',`${y}-${m}-31`);}
   else{const d3m=new Date();d3m.setMonth(d3m.getMonth()-3);const cutoff=`${d3m.getFullYear()}-${String(d3m.getMonth()+1).padStart(2,'0')}-01`;q=q.gte('ngay',cutoff);}
   const{data}=await q.limit(500);
@@ -45,7 +47,7 @@ async function pgOrders(c){
     <div class="status-btn s-xong ${ORDER_FILTER==='Hoàn thành'?'active':''}" onclick="ORDER_FILTER='Hoàn thành';ORDER_PAGE=1;pgOrders(document.getElementById('content'))"><i class="ti ti-lock"></i>Hoàn thành <span class="cnt">${counts['Hoàn thành']||0}</span></div>
   </div>
   <div class="toolbar">
-    <button class="btn btn-primary" onclick="openForm()"><i class="ti ti-plus"></i> Thêm vận đơn</button>
+    ${canSee(['nhan_vien','quan_ly','ke_toan','ceo'])?`<button class="btn btn-primary" onclick="openForm()"><i class="ti ti-plus"></i> Thêm vận đơn</button>`:''}
     <input class="search-inp" placeholder="Tìm mã đơn, bill, booking, cont, biển số..." value="${ORDER_SEARCH}" oninput="clearTimeout(window._searchT);window._searchT=setTimeout(()=>{ORDER_SEARCH=this.value;ORDER_PAGE=1;pgOrders(document.getElementById('content'))},400)">
     <select class="filter-sel" onchange="ORDER_LOAI=this.value;ORDER_PAGE=1;pgOrders(document.getElementById('content'))">
       <option value="">Tất cả loại</option>
@@ -122,7 +124,10 @@ async function openDetail(id){
 async function renderDP(o){
   const dp=document.getElementById('dp');
   const canM=canSee(['ke_toan','ceo']);
-  const editable=canEdit(o);
+  const isOpsHP=CU?.vai_tro==='ops_hp';
+  // nhan_vien chỉ edit đơn do mình tạo và chưa khóa
+  // ops_hp: xem hết nhưng không edit gì (trừ upload HĐ)
+  const editable=isOpsHP?false:canEdit(o)&&(CU?.vai_tro!=='nhan_vien'||o.created_by===CU?.id);
   // ke_toan/ceo luôn nhập được cước dù đơn đã locked — không cần mở khóa
   const editableCuoc=canM&&!editable?true:editable;
   const{data:chiHoList}=await db.from('chi_ho').select('*').eq('van_don_id',o.id).order('ngay_chi');
@@ -146,7 +151,7 @@ async function renderDP(o){
   <div class="tab-content" id="tab-body">
   ${DP_TAB==='info'?renderTabInfo(o,editable):''}
   ${DP_TAB==='xe'?renderTabXe(o,editable):''}
-  ${DP_TAB==='chiho'?renderTabChiHo(o,chiHoList||[],editable):''}
+  ${DP_TAB==='chiho'?renderTabChiHo(o,chiHoList||[],editable,isOpsHP):''}
   ${DP_TAB==='cuoc'&&canM?renderTabCuoc(o,chiHoList||[],editableCuoc,loi):''}
   </div>`;
 }
@@ -310,12 +315,14 @@ function renderTabXe(o,editable){
   `:''}`;
 }
 
-function renderTabChiHo(o,list,editable){
+function renderTabChiHo(o,list,editable,isOpsHP=false){
   const listThat=list.filter(c=>!c.la_tham_chieu);
   const listThamChieu=list.filter(c=>c.la_tham_chieu);
   const total=listThat.reduce((s,c)=>s+(+c.so_tien||0),0);
   const coHD=list.some(c=>c.hoa_don_id);
   const lockBar=o.locked&&canSee(['quan_ly','ceo'])?`<div class="lock-notice" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span><button class="btn btn-xs btn-danger" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa để sửa</button></div>`:(o.locked?'<div class="lock-notice" style="margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>':'');
+  // ops_hp chỉ xem, không thêm/sửa/xóa chi hộ
+  const canEditCH=editable&&!isOpsHP;
   return`${lockBar}
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
     <div><div style="font-size:11px;color:var(--text-muted)">Tổng chi hộ</div>
@@ -338,14 +345,14 @@ function renderTabChiHo(o,list,editable){
     </div>
     <div class="chi-ho-right">
       <div class="chi-ho-amount">${fmtM(c.tien_thu_khach||c.so_tien)}</div>
-      ${editable?`<div style="display:flex;gap:4px;justify-content:flex-end;margin-top:4px">
+      ${canEditCH?`<div style="display:flex;gap:4px;justify-content:flex-end;margin-top:4px">
         <button class="btn btn-xs btn-teal" onclick="editChiHo('${c.id}','`+`${c.van_don_id}','${c.ma_don}')"><i class="ti ti-edit"></i></button>
         <button class="btn btn-xs btn-danger" onclick="deleteChiHo('${c.id}','${c.van_don_id}')"><i class="ti ti-trash"></i></button>
       </div>`:''}
     </div>
   </div>`).join('')}
   ${listThat.length===0?'<div class="empty" style="padding:20px 0"><i class="ti ti-inbox"></i>Chưa có chi phí phát sinh</div>':''}
-  ${editable?`<button class="add-chi-ho-btn" onclick="openAddChiHo('`+o.id+`','`+o.ma_don+`')"><i class="ti ti-plus"></i> Thêm chi phí phát sinh</button>`:''}
+  ${canEditCH?`<button class="add-chi-ho-btn" onclick="openAddChiHo('`+o.id+`','`+o.ma_don+`')"><i class="ti ti-plus"></i> Thêm chi phí phát sinh</button>`:''}
   ${listThamChieu.length?`
   <div style="margin-top:12px;border-top:1px dashed var(--border);padding-top:10px">
     <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">
@@ -476,6 +483,10 @@ function closeDp(){SEL=null;document.getElementById('dp').style.display='none';}
 
 // SAVE FUNCTIONS
 async function saveInfo(id){
+  // Guard phân quyền server-side
+  if(CU?.vai_tro==='ops_hp'){toast('Không có quyền sửa vận đơn','error');return;}
+  const o=ORDERS.find(x=>x.id===id);
+  if(CU?.vai_tro==='nhan_vien'&&o?.created_by!==CU?.id){toast('Chỉ được sửa đơn do mình tạo','error');return;}
   const loai=document.getElementById('fi-loai').value;
   const data={
     ngay:document.getElementById('fi-ngay').value,
@@ -736,6 +747,10 @@ async function onBienChange(bien){
 
 async function saveXe(id){
   try{
+    // Guard phân quyền
+    if(CU?.vai_tro==='ops_hp'){toast('Không có quyền sửa vận đơn','error');return;}
+    const o=ORDERS.find(x=>x.id===id);
+    if(CU?.vai_tro==='nhan_vien'&&o?.created_by!==CU?.id){toast('Chỉ được sửa đơn do mình tạo','error');return;}
     const bien=document.getElementById('fx-bien')?.value.trim().toUpperCase()||'';
     const plVal=document.getElementById('fx-phanloai')?.value||'';
     const data={
@@ -1178,6 +1193,7 @@ async function editChiHo(chiHoId, vdId, maDon){
 }
 
 async function updateChiHo(chiHoId, vdId){
+  if(CU?.vai_tro==='ops_hp'){toast('Không có quyền sửa chi phí','error');return;}
   const thuKH=parseNum(document.getElementById('ch-thukh').value);
   const traThau=parseNum(document.getElementById('ch-trathau')?.value||'0');
   const traLX=parseNum(document.getElementById('ch-tralaixe')?.value||'0');
@@ -1202,6 +1218,7 @@ async function updateChiHo(chiHoId, vdId){
 }
 
 async function deleteChiHo(chiHoId,vdId){
+  if(CU?.vai_tro==='ops_hp'){toast('Không có quyền xóa chi phí','error');return;}
   if(!confirm('Xóa khoản chi phí này?'))return;
 
   // Lấy thông tin chi_ho trước khi xóa (cần hoa_don_id)
@@ -1231,6 +1248,7 @@ async function deleteChiHo(chiHoId,vdId){
 
 
 async function saveChiHo(vdId,maDon){
+  if(CU?.vai_tro==='ops_hp'){toast('Không có quyền thêm chi phí','error');return;}
   const thuKH=parseNum(document.getElementById('ch-thukh').value);
   const traThau=parseNum(document.getElementById('ch-trathau').value);
   const traLX=parseNum(document.getElementById('ch-tralaixe').value);
