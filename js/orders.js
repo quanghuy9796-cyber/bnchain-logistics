@@ -867,13 +867,13 @@ function openAddChiHo(vdId,maDon){
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;background:var(--bg);padding:7px 10px;border-radius:var(--r)">Vận đơn: <strong>${maDon}</strong></div>
     <div class="form-grid">
       <div class="form-group full"><label>Loại chi *</label><select id="ch-loai">
-        <option>Cao tốc / Vé đường</option>
-        <option>Công nhân bốc xếp</option>
         <option>Lưu ca</option>
-        <option>Lưu bãi / Lưu cont</option>
-        <option>Phí cảng</option>
-        <option>Nâng hạ cont</option>
-        <option>Giám sát hải quan</option>
+        <option>Công nhân bốc xếp</option>
+        <option>Cao tốc / Vé đường</option>
+        <option>Nâng, hạ cont</option>
+        <option>Phí CSHT</option>
+        <option>Phí cảng, bãi</option>
+        <option>Phí local charge</option>
         <option>Chi phí khác</option>
       </select></div>
 
@@ -949,14 +949,14 @@ async function editChiHo(chiHoId, vdId, maDon){
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;background:var(--bg);padding:7px 10px;border-radius:var(--r)">Vận đơn: <strong>${maDon}</strong></div>
     <div class="form-grid">
       <div class="form-group full"><label>Loại chi *</label><select id="ch-loai">
-        <option ${data.loai_chi==='Cao tốc / Vé đường'?'selected':''}>Cao tốc / Vé đường</option>
-        <option ${data.loai_chi==='Công nhân bốc xếp'?'selected':''}>Công nhân bốc xếp</option>
         <option ${data.loai_chi==='Lưu ca'?'selected':''}>Lưu ca</option>
-        <option ${data.loai_chi==='Lưu bãi / Lưu cont'?'selected':''}>Lưu bãi / Lưu cont</option>
-        <option ${data.loai_chi==='Phí cảng'?'selected':''}>Phí cảng</option>
-        <option ${data.loai_chi==='Nâng hạ cont'?'selected':''}>Nâng hạ cont</option>
-        <option ${data.loai_chi==='Giám sát hải quan'?'selected':''}>Giám sát hải quan</option>
-        <option ${data.loai_chi==='Chi phí khác'?'selected':''}>Chi phí khác</option>
+        <option ${data.loai_chi==='Công nhân bốc xếp'?'selected':''}>Công nhân bốc xếp</option>
+        <option ${data.loai_chi==='Cao tốc / Vé đường'?'selected':''}>Cao tốc / Vé đường</option>
+        <option ${['Nâng, hạ cont','Nâng hạ cont','Nâng hàng','Hạ vỏ','Nâng vỏ','Hạ hàng'].includes(data.loai_chi)||data.loai_chi?.startsWith('Nâng, hạ cont')?'selected':''}>Nâng, hạ cont</option>
+        <option ${data.loai_chi==='Phí CSHT'||data.loai_chi==='CSHT'||data.loai_chi?.startsWith('CSHT')?'selected':''}>Phí CSHT</option>
+        <option ${['Phí cảng, bãi','Phí cảng','Lưu bãi / Lưu cont','Phí cảng bãi'].includes(data.loai_chi)||data.loai_chi?.startsWith('Phí cảng')?'selected':''}>Phí cảng, bãi</option>
+        <option ${data.loai_chi==='Phí local charge'||data.loai_chi?.startsWith('Phí local')?'selected':''}>Phí local charge</option>
+        <option ${['Chi phí khác','Giám sát hải quan','Chi hải quan'].includes(data.loai_chi)||(data.loai_chi&&!['Lưu ca','Công nhân bốc xếp','Cao tốc / Vé đường','Nâng, hạ cont','Phí CSHT','Phí cảng, bãi','Phí local charge'].some(x=>data.loai_chi?.startsWith(x)))?'selected':''}>Chi phí khác</option>
       </select></div>
       <div style="grid-column:1/-1;background:var(--bg);border-radius:var(--r);padding:10px 12px;border:1px solid var(--border)">
         <div style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px"><i class="ti ti-coins"></i> Số tiền</div>
