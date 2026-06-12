@@ -26,12 +26,42 @@ async function splitPdfPages(file){
 }
 
 // ── 2. UPLOAD LÊN SUPABASE STORAGE ──────────────────────────────────────────
-async function uploadHDToStorage(file){
+// tenKhach: tên khách hàng (nếu đã biết) — dùng làm thư mục
+// soContList: mảng số cont (nếu đã biết) — dùng làm sub-thư mục
+// Nếu chưa biết → lưu vào pending/ để move sau khi duyệt
+function buildStoragePath(file, tenKhach, soContList){
+  const now=new Date();
+  const yyyy=now.getFullYear();
+  const mm=String(now.getMonth()+1).padStart(2,'0');
+  const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+  const ts=Date.now();
+
+  // Helper làm sạch string thành folder-safe
+  function toSafe(str,maxLen){
+    return (str||'')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-zA-Z0-9]/g,'_')
+      .replace(/_+/g,'_').replace(/^_|_$/g,'')
+      .toUpperCase().slice(0,maxLen||30);
+  }
+
+  if(tenKhach){
+    const safeKh=toSafe(tenKhach,20);
+    if(soContList&&soContList.length>0){
+      // Path đầy đủ: hoadon/YYYY/MM/KH/CONT/file
+      const safeCont=toSafe(soContList[0],15); // lấy cont đầu tiên làm thư mục
+      return `hoadon/${yyyy}/${mm}/${safeKh}/${safeCont}/${ts}_${safeName}`;
+    }
+    // Biết khách nhưng chưa có cont (vd CSHT)
+    return `hoadon/${yyyy}/${mm}/${safeKh}/no_cont/${ts}_${safeName}`;
+  }
+  // Chưa biết khách → pending, sẽ move sau khi duyệt tay
+  return `hoadon/pending/${yyyy}/${mm}/${ts}_${safeName}`;
+}
+
+async function uploadHDToStorage(file, tenKhach, soContList){
   try{
-    const now=new Date();
-    const ym=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}`;
-    const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-    const path=`hoadon/${ym}/${Date.now()}_${safeName}`;
+    const path=buildStoragePath(file, tenKhach, soContList);
     const{error}=await db.storage.from('hoa-don').upload(path,file,{contentType:file.type,upsert:false});
     if(error){console.warn('Storage upload (non-fatal):',error.message);return null;}
     return path;
@@ -206,13 +236,15 @@ async function handleHDFiles(files){
       </div>`).join('');
 
     try{
-      // AI đọc + upload Storage song song — mỗi file đã là 1 trang riêng
-      const[hdList,storagePath]=await Promise.all([
-        processOneHD(file),
-        uploadHDToStorage(file),
-      ]);
+      // AI đọc trước — cần biết tên khách + cont để build đúng path Storage
+      const hdList=await processOneHD(file);
       for(const hdData of hdList){
         try{
+          // Lấy tên khách + cont từ kết quả AI (nếu đã khớp VĐ)
+          const tenKhach=hdData.van_don_matches?.[0]?.ten_khach||null;
+          const soContList=hdData.so_cont_list||[];
+          // Upload với path đúng thư mục (hoặc pending/ nếu chưa biết khách)
+          const storagePath=await uploadHDToStorage(file, tenKhach, soContList);
           const saved=await saveHoaDon(hdData,file.name,storagePath);
           if(hdData.trang_thai==='da_khop') results.matched.push({...hdData,id:saved.id,file:file.name});
           else results.pending.push({...hdData,id:saved.id,file:file.name,ly_do:hdData.ly_do_cho});
@@ -569,6 +601,27 @@ async function saveXuLyHD(hdId){
     so_cont_list:conts,
     file_name:displayName||hd.file_name,
   }).eq('id',hdId);
+
+  // Move file khỏi pending/ nếu đang nằm ở đó
+  if(hd.storage_path&&hd.storage_path.startsWith('hoadon/pending/')){
+    try{
+      // Lấy tên khách từ vận đơn đầu tiên
+      const tenKhach=vdList[0]?.ten_khach||null;
+      // Build path mới đúng thư mục
+      const fakeFile={name:hd.storage_path.split('/').pop(),type:'application/pdf'};
+      const newPath=buildStoragePath(fakeFile, tenKhach, conts);
+      const{error:moveErr}=await db.storage.from('hoa-don').move(hd.storage_path, newPath);
+      if(!moveErr){
+        // Cập nhật storage_path mới vào DB
+        await db.from('hoa_don').update({storage_path:newPath}).eq('id',hdId);
+      } else {
+        console.warn('Move file non-fatal:', moveErr.message);
+        // Không block — chi hộ vẫn tạo bình thường, file vẫn xem được
+      }
+    }catch(moveEx){
+      console.warn('Move exception non-fatal:', moveEx);
+    }
+  }
 
   for(let i=0;i<vdList.length;i++){
     const vd=vdList[i];
