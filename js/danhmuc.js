@@ -5,12 +5,13 @@ async function pgKH(c){
   if(!canSee(['quan_ly','ke_toan','ceo'])){toast('Không có quyền thực hiện','error');return;}
   const{data}=await db.from('khach_hang').select('*').eq('active',true).order('ten_cong_ty');
   const list=data||[];
-  c.innerHTML=`
-  <div class="toolbar"><button class="btn btn-primary" onclick="openAddKH()"><i class="ti ti-plus"></i> Thêm khách hàng</button></div>
-  <div class="tbl-wrap"><table class="tbl">
-    <colgroup><col style="width:80px"><col style="width:180px"><col style="width:130px"><col style="width:110px"><col style="width:150px"><col style="width:100px"><col style="width:80px"></colgroup>
-    <thead><tr><th>Mã KH</th><th>Tên công ty</th><th>Người LH</th><th>Điện thoại</th><th>Email</th><th>MST</th><th>Thao tác</th></tr></thead>
-    <tbody>${list.map(k=>`<tr>
+  // Lưu list vào biến global để search lọc client-side
+  window._khList=list;
+
+  function renderKHTable(arr){
+    const tbody=document.getElementById('kh-tbody');
+    if(!tbody)return;
+    tbody.innerHTML=arr.length?arr.map(k=>`<tr>
       <td class="text-blue fw6">${k.ma_kh}</td><td style="font-weight:500">${k.ten_cong_ty}</td>
       <td>${k.nguoi_lien_he||'—'}</td><td>${k.so_dien_thoai||'—'}</td>
       <td>${k.email||'—'}</td><td>${k.ma_so_thue||'—'}</td>
@@ -18,8 +19,35 @@ async function pgKH(c){
         <button class="btn btn-xs btn-teal" onclick="editKH('${k.id}')"><i class="ti ti-edit"></i></button>
         <button class="btn btn-xs btn-danger" onclick="deleteKH('${k.id}','${k.ten_cong_ty}')"><i class="ti ti-trash"></i></button>
       </div>`:'—'}</td>
-    </tr>`).join('')}</tbody>
+    </tr>`).join(''):`<tr><td colspan="7"><div class="empty"><i class="ti ti-search-off"></i>Không tìm thấy khách hàng nào</div></td></tr>`;
+    document.getElementById('kh-count').textContent=arr.length+' khách hàng';
+  }
+
+  window.filterKH=function(){
+    const q=(document.getElementById('kh-search').value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(!q){renderKHTable(window._khList);return;}
+    renderKHTable(window._khList.filter(k=>{
+      const hay=[k.ma_kh,k.ten_cong_ty,k.nguoi_lien_he,k.so_dien_thoai,k.ma_so_thue].join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      return hay.includes(q);
+    }));
+  };
+
+  c.innerHTML=`
+  <div class="toolbar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    ${canEdit?`<button class="btn btn-primary" onclick="openAddKH()"><i class="ti ti-plus"></i> Thêm khách hàng</button>`:''}
+    <div style="position:relative;flex:1;max-width:320px">
+      <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:14px;pointer-events:none"></i>
+      <input id="kh-search" type="text" placeholder="Tìm theo mã, tên, MST, SĐT..." oninput="filterKH()"
+        style="width:100%;padding:7px 10px 7px 32px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;background:var(--card)">
+    </div>
+    <span id="kh-count" style="font-size:12px;color:var(--text-muted)">${list.length} khách hàng</span>
+  </div>
+  <div class="tbl-wrap"><table class="tbl">
+    <colgroup><col style="width:80px"><col style="width:180px"><col style="width:130px"><col style="width:110px"><col style="width:150px"><col style="width:100px"><col style="width:80px"></colgroup>
+    <thead><tr><th>Mã KH</th><th>Tên công ty</th><th>Người LH</th><th>Điện thoại</th><th>Email</th><th>MST</th><th>Thao tác</th></tr></thead>
+    <tbody id="kh-tbody"></tbody>
   </table></div>`;
+  renderKHTable(list);
 }
 
 function openAddKH(existing={}){
@@ -445,15 +473,13 @@ async function pgDiaDiem(c){
   const{data}=await db.from('dia_diem').select('*').eq('active',true).order('loai').order('ten_chuan');
   const list=data||[];
   const loaiIcon={'Cảng':'🚢','KCN':'🏭','Kho':'📦','Depot':'🔲','Cửa khẩu':'🛃','Khác':'📍'};
-  c.innerHTML=`
-  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-    <button class="btn btn-primary" onclick="openAddDD()"><i class="ti ti-plus"></i> Thêm địa điểm</button>
-    <span style="font-size:12px;color:var(--text-muted);align-self:center">${list.length} địa điểm</span>
-  </div>
-  <div class="tbl-wrap"><table class="tbl">
-    <colgroup><col style="width:220px"><col style="width:90px"><col style="width:120px"><col style="width:180px"><col style="width:90px"></colgroup>
-    <thead><tr><th>Tên chuẩn</th><th>Loại</th><th>Địa phương</th><th>Viết tắt / gợi ý tìm</th><th>Thao tác</th></tr></thead>
-    <tbody>${list.length?list.map(d=>`<tr>
+  // Lưu list để search client-side
+  window._ddList=list;
+
+  function renderDDTable(arr){
+    const tbody=document.getElementById('dd-tbody');
+    if(!tbody)return;
+    tbody.innerHTML=arr.length?arr.map(d=>`<tr>
       <td style="font-weight:600">${loaiIcon[d.loai]||'📍'} ${d.ten_chuan}</td>
       <td><span class="tag">${d.loai||'—'}</span></td>
       <td style="font-size:12px;color:var(--text-muted)">${d.dia_phuong||'—'}</td>
@@ -462,9 +488,35 @@ async function pgDiaDiem(c){
         <button class="btn btn-xs btn-teal" onclick="editDD('${d.id}')"><i class="ti ti-edit"></i></button>
         <button class="btn btn-xs btn-danger" onclick="deleteDD('${d.id}','${d.ten_chuan.replace(/'/g,"\\'")}')"><i class="ti ti-trash"></i></button>
       </div></td>
-    </tr>`).join(''):'<tr><td colspan="5"><div class="empty"><i class="ti ti-map-pin-off"></i>Chưa có địa điểm nào. Bấm "Thêm địa điểm" để bắt đầu.</div></td></tr>'}
-    </tbody>
+    </tr>`).join(''):`<tr><td colspan="5"><div class="empty"><i class="ti ti-search-off"></i>Không tìm thấy địa điểm nào</div></td></tr>`;
+    document.getElementById('dd-count').textContent=arr.length+' địa điểm';
+  }
+
+  window.filterDD=function(){
+    const q=(document.getElementById('dd-search').value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(!q){renderDDTable(window._ddList);return;}
+    renderDDTable(window._ddList.filter(d=>{
+      const hay=[d.ten_chuan,d.loai,d.dia_phuong,d.viet_tat].join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      return hay.includes(q);
+    }));
+  };
+
+  c.innerHTML=`
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+    <button class="btn btn-primary" onclick="openAddDD()"><i class="ti ti-plus"></i> Thêm địa điểm</button>
+    <div style="position:relative;flex:1;max-width:320px">
+      <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:14px;pointer-events:none"></i>
+      <input id="dd-search" type="text" placeholder="Tìm tên, loại, địa phương, viết tắt..." oninput="filterDD()"
+        style="width:100%;padding:7px 10px 7px 32px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;background:var(--card)">
+    </div>
+    <span id="dd-count" style="font-size:12px;color:var(--text-muted)">${list.length} địa điểm</span>
+  </div>
+  <div class="tbl-wrap"><table class="tbl">
+    <colgroup><col style="width:220px"><col style="width:90px"><col style="width:120px"><col style="width:180px"><col style="width:90px"></colgroup>
+    <thead><tr><th>Tên chuẩn</th><th>Loại</th><th>Địa phương</th><th>Viết tắt / gợi ý tìm</th><th>Thao tác</th></tr></thead>
+    <tbody id="dd-tbody"></tbody>
   </table></div>`;
+  renderDDTable(list);
 }
 
 function openAddDD(existing={}){
