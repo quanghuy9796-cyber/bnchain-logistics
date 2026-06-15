@@ -500,10 +500,6 @@ function renderTabCuoc(o,chiHoList,editable,loi){
   </button>`:''}`;
 }
 
-function calcTong(){
-  // live update tổng khi nhập cước
-}
-
 async function switchTab(tab,id){
   DP_TAB=tab;
   const o=ORDERS.find(x=>x.id===id);
