@@ -114,7 +114,7 @@ async function pgDieuVan(c){
       <td style="font-weight:600">${o.bien_kiem_soat||'—'}</td>
       <td>${o.ten_lai_xe||'—'}</td>
       <td style="font-size:11px;color:var(--text-muted)" title="${o.hanh_trinh||''}">${o.hanh_trinh||'—'}</td>
-      <td>${o.diem_tra==='KHÔNG TRUCKING'||o.co_doi_lenh||o.co_to_khai?'<span style="font-size:11px;color:var(--text-muted);font-style:italic">Chỉ dịch vụ</span>':`<button class="btn btn-sm btn-primary" onclick="openDetail('${o.id}','cuoc')"><i class="ti ti-coins"></i> Nhập cước</button>`}</td>
+      <td>${o.diem_tra==='KHÔNG TRUCKING'?'<span style="font-size:11px;color:var(--text-muted);font-style:italic">Chỉ dịch vụ</span>':`<button class="btn btn-sm btn-primary" onclick="openDetail('${o.id}','cuoc')"><i class="ti ti-coins"></i> Nhập cước</button>`}</td>
     </tr>`).join('')}</tbody>
   </table></div>`:''}
 
