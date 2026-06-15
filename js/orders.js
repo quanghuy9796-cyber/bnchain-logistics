@@ -16,7 +16,7 @@ let _canM=false;
 
 async function pgOrders(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
-  const COLS='id,ma_don,ngay,trang_thai,ten_khach,so_bill,so_booking,loai_hang,so_cont,loai_cont,loai_xe_hang,loai_chuyen,bien_kiem_soat,ten_lai_xe,hanh_trinh,diem_lay,diem_tra,locked,ky_thanh_toan,trang_thai_bang_ke,gia_cuoc_khach,gia_cuoc_thau,thanh_toan_khach,thanh_toan_thau,phi_doi_lenh,phi_to_khai,co_doi_lenh,co_to_khai,ngay_yeu_cau,created_at,ma_thau_phu,loai_phan_loai_xe,la_xe_noi_bo,ghi_chu,ghi_chu_xe,diem_tra_phat_sinh,created_by';
+  const COLS='id,ma_don,ngay,trang_thai,ten_khach,so_bill,so_booking,loai_hang,so_cont,loai_cont,loai_xe_hang,loai_chuyen,bien_kiem_soat,ten_lai_xe,hanh_trinh,diem_lay,diem_tra,locked,ky_thanh_toan,trang_thai_bang_ke,gia_cuoc_khach,gia_cuoc_thau,thanh_toan_khach,thanh_toan_thau,phi_doi_lenh,phi_to_khai,co_doi_lenh,co_to_khai,ngay_yeu_cau,created_at,ma_thau_phu,loai_phan_loai_xe,la_xe_noi_bo,ghi_chu,ghi_chu_xe,diem_tra_phat_sinh,created_by,tra_thau_doi_lenh,don_vi_doi_lenh';
   let q=db.from('van_don').select(COLS).order('ngay',{ascending:false}).order('created_at',{ascending:false});
   // nhan_vien chỉ xem đơn do mình tạo
   if(CU?.vai_tro==='nhan_vien') q=q.eq('created_by',CU.id);
@@ -239,10 +239,10 @@ function renderTabXe(o,editable){
   const lxOpts=LX.map(l=>`<option value="${l.ho_ten}">`).join('');
   const tpOpts=TP.map(t=>`<option value="${t.ma_thau}">${t.ten_cong_ty}</option>`).join('');
   const bienOpts=(XE||[]).map(x=>`<option value="${x.bien_so}">${x.bien_so}${x.ma_thau_phu?' — '+x.ma_thau_phu:''}</option>`).join('');
-  const loaiXeList=['20 nhẹ','20 nặng','Cont 40','Cont 45','Xe tải 1.25T','Xe tải 2.5T','Xe tải 3.5T','Xe tải 5T','Xe tải 8T','Xe tải 10T','Mooc sàn','Mooc rào','Fooc','LCL'];
+  const loaiXeList=['20 nhẹ','20 nặng','Cont 40','Cont 45','Xe tải 1.25T','Xe tải 2.5T','Xe tải 3.5T','Xe tải 5T','Xe tải 8T','Xe tải 10T','Mooc sàn','Mooc rào','Fooc'];
   const loaiXeOpts=loaiXeList.map(v=>`<option value="${v}">`).join('');
   const loaiChuyenOpts='<option value="" disabled '+(o.loai_chuyen?'':'selected')+'>-- Chọn loại chuyến --</option>'+['Thường','Kết hợp','Kẹp ghép'].map(s=>`<option ${o.loai_chuyen===s?'selected':''}>${s}</option>`).join('');
-  const ttOpts=['Chờ xếp xe','Đang vận chuyển'].map(s=>`<option ${o.trang_thai===s?'selected':''}>${s}</option>`).join('')+(o.trang_thai==='Chờ xác nhận'?'<option selected>Chờ xác nhận</option>':'')+(o.trang_thai==='Hoàn thành'?'<option selected>Hoàn thành</option>':'');
+  const ttOpts=['Chờ xếp xe','Đang vận chuyển'].map(s=>`<option ${o.trang_thai===s?'selected':''}>${s}</option>`).join('')+(o.trang_thai==='Chờ xác nhận'?'<option selected>Chờ xác nhận</option>':'');
   return`${lockBar}
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-truck"></i>Phân công xe & lái xe</div>
@@ -393,7 +393,8 @@ function renderTabCuoc(o,chiHoList,editable,loi){
   const phiTK=o.co_to_khai?(+o.phi_to_khai||0):0;
   const tongThuKH=(+o.gia_cuoc_khach||0)+phiDL+phiTK+totalCH;
   const isThauThueLai=o.loai_phan_loai_xe==='thau_thue_lai';
-  const thucTraThau=(+o.gia_cuoc_thau||0)+totalTraThau-(isThauThueLai?totalTraLX:0);
+  const traThauDL=(+o.tra_thau_doi_lenh||0);
+  const thucTraThau=(+o.gia_cuoc_thau||0)+totalTraThau+traThauDL-(isThauThueLai?totalTraLX:0);
   const coThau=!!o.ma_thau_phu;
   return`${lockBar}
   <div class="form-section">
@@ -453,6 +454,16 @@ function renderTabCuoc(o,chiHoList,editable,loi){
         <select id="fc-trathau" ${!editable?'disabled':''}>
           ${['Chưa trả','Đã trả một phần','Đã trả'].map(s=>`<option ${o.thanh_toan_thau===s?'selected':''}>${s}</option>`).join('')}
         </select></div>
+    </div>
+    <div class="form-grid" style="margin-top:6px">
+      <div class="form-group"><label>Trả thầu đổi lệnh (VNĐ)</label>
+        <input type="text" id="fc-tradl" value="${o.tra_thau_doi_lenh>0?fmtInput(o.tra_thau_doi_lenh):''}"
+          placeholder="0 — để trống nếu không có"
+          ${!editable?'disabled':''} oninput="fmtOnInputCalc(this)"></div>
+      <div class="form-group"><label>Đơn vị đổi lệnh</label>
+        <input type="text" id="fc-dvdl" value="${o.don_vi_doi_lenh||''}"
+          placeholder="Tên đơn vị làm đổi lệnh"
+          ${!editable?'disabled':''}></div>
     </div>`:`
     <div style="background:var(--teal-light);border-radius:var(--r);padding:8px 12px;font-size:12px;color:var(--teal)">
       <i class="ti ti-info-circle"></i> 
@@ -469,7 +480,7 @@ function renderTabCuoc(o,chiHoList,editable,loi){
       ${coThau?`<div>
         <div style="opacity:.6">Thực trả thầu</div>
         <div style="font-size:13px;font-weight:700;color:#fca5a5">${fmtM(thucTraThau)}</div>
-        ${totalTraThau>0?`<div style="font-size:10px;opacity:.6">Cước ${fmtM(o.gia_cuoc_thau||0)} + Chi hộ ${fmtM(totalTraThau)}</div>`:''}
+        ${(totalTraThau>0||traThauDL>0)?`<div style="font-size:10px;opacity:.6">Cước ${fmtM(o.gia_cuoc_thau||0)}${totalTraThau>0?' + Chi hộ '+fmtM(totalTraThau):''}${traThauDL>0?' + Đổi lệnh '+fmtM(traThauDL):''}</div>`:''}
         ${totalTraLX>0?`<div style="font-size:10px;color:#c4b5fd;margin-top:2px">${isThauThueLai?'− Lương LX (trừ vào thầu)':'Trả lái xe'}: ${fmtM(totalTraLX)}</div>`:''}
       </div>`:''}
     </div>
@@ -817,6 +828,8 @@ async function saveCuoc(id, coDL, coTK){
     gia_cuoc_thau:parseNum(document.getElementById('fc-cuocthau')?.value||'0'),
     thanh_toan_khach:document.getElementById('fc-thukh').value,
     thanh_toan_thau:document.getElementById('fc-trathau')?.value||'Chưa trả',
+    tra_thau_doi_lenh:parseNum(document.getElementById('fc-tradl')?.value||'0')||null,
+    don_vi_doi_lenh:document.getElementById('fc-dvdl')?.value?.trim()||null,
     updated_at:new Date().toISOString(),
   };
   // Lưu lại phí dịch vụ nếu kế toán đã điền
