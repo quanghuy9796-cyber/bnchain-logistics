@@ -17,10 +17,8 @@ async function pgDieuVan(c){
   // Query 2: đơn đã khóa nhưng chưa nhập cước (chỉ KT/CEO)
   let q2Promise=null;
   if(canM){
-    q2Promise=db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_hang,so_cont,bien_kiem_soat,ten_lai_xe,hanh_trinh,gia_cuoc_khach')
+    q2Promise=db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_hang,so_cont,bien_kiem_soat,ten_lai_xe,hanh_trinh,gia_cuoc_khach,co_doi_lenh,co_to_khai,diem_tra')
       .eq('locked',true).eq('gia_cuoc_khach',0)
-      .eq('co_doi_lenh',false).eq('co_to_khai',false)
-      .neq('diem_tra','KHÔNG TRUCKING')
       .order('ngay',{ascending:false}).limit(100);
   }
 
@@ -116,7 +114,7 @@ async function pgDieuVan(c){
       <td style="font-weight:600">${o.bien_kiem_soat||'—'}</td>
       <td>${o.ten_lai_xe||'—'}</td>
       <td style="font-size:11px;color:var(--text-muted)" title="${o.hanh_trinh||''}">${o.hanh_trinh||'—'}</td>
-      <td><button class="btn btn-sm btn-primary" onclick="openDetail('${o.id}','cuoc')"><i class="ti ti-coins"></i> Nhập cước</button></td>
+      <td>${o.diem_tra==='KHÔNG TRUCKING'||o.co_doi_lenh||o.co_to_khai?'<span style="font-size:11px;color:var(--text-muted);font-style:italic">Chỉ dịch vụ</span>':`<button class="btn btn-sm btn-primary" onclick="openDetail('${o.id}','cuoc')"><i class="ti ti-coins"></i> Nhập cước</button>`}</td>
     </tr>`).join('')}</tbody>
   </table></div>`:''}
 
