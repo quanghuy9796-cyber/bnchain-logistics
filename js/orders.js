@@ -239,7 +239,7 @@ function renderTabXe(o,editable){
   const lxOpts=LX.map(l=>`<option value="${l.ho_ten}">`).join('');
   const tpOpts=TP.map(t=>`<option value="${t.ma_thau}">${t.ten_cong_ty}</option>`).join('');
   const bienOpts=(XE||[]).map(x=>`<option value="${x.bien_so}">${x.bien_so}${x.ma_thau_phu?' — '+x.ma_thau_phu:''}</option>`).join('');
-  const loaiXeList=['20 nhẹ','20 nặng','Cont 40','Cont 45','Xe tải 1.25T','Xe tải 2.5T','Xe tải 3.5T','Xe tải 5T','Xe tải 8T','Xe tải 10T','Mooc sàn','Mooc rào','Fooc'];
+  const loaiXeList=['20 nhẹ','20 nặng','Cont 40','Cont 45','Xe tải 1.25T','Xe tải 2.5T','Xe tải 3.5T','Xe tải 5T','Xe tải 8T','Xe tải 10T','Mooc sàn','Mooc rào','Fooc','LCL'];
   const loaiXeOpts=loaiXeList.map(v=>`<option value="${v}">`).join('');
   const loaiChuyenOpts='<option value="" disabled '+(o.loai_chuyen?'':'selected')+'>-- Chọn loại chuyến --</option>'+['Thường','Kết hợp','Kẹp ghép'].map(s=>`<option ${o.loai_chuyen===s?'selected':''}>${s}</option>`).join('');
   const ttOpts=['Chờ xếp xe','Đang vận chuyển'].map(s=>`<option ${o.trang_thai===s?'selected':''}>${s}</option>`).join('')+(o.trang_thai==='Chờ xác nhận'?'<option selected>Chờ xác nhận</option>':'');
