@@ -237,29 +237,12 @@ async function loadBangKe(){
   res.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   canhbao.innerHTML='';
 
-  // Load đơn: ưu tiên theo ky_thanh_toan, fallback theo ngày
-  let {data:orders}=await db.from('van_don').select('*')
+  // Load đơn: tất cả đơn locked=true của khách trong tháng theo ngày chạy
+  const{data:orders}=await db.from('van_don').select('*')
     .eq('ten_khach',khName).eq('locked',true)
-    .eq('ky_thanh_toan',thang)
+    .gte('ngay',`${y}-${m.padStart(2,'0')}-01`)
+    .lte('ngay',`${y}-${m.padStart(2,'0')}-31`)
     .order('ngay').order('so_bill');
-
-  // Fallback: đơn chưa có ky_thanh_toan thì lấy theo ngày
-  if(!orders?.length){
-    const{data:ord2}=await db.from('van_don').select('*')
-      .eq('ten_khach',khName).eq('locked',true)
-      .is('ky_thanh_toan',null)
-      .gte('ngay',`${y}-${m}-01`).lte('ngay',`${y}-${m}-31`)
-      .order('ngay').order('so_bill');
-    orders=ord2||[];
-  } else {
-    // Gộp thêm đơn chưa có ky_thanh_toan trong tháng đó
-    const{data:ord2}=await db.from('van_don').select('*')
-      .eq('ten_khach',khName).eq('locked',true)
-      .is('ky_thanh_toan',null)
-      .gte('ngay',`${y}-${m}-01`).lte('ngay',`${y}-${m}-31`)
-      .order('ngay');
-    if(ord2?.length) orders=[...orders,...ord2];
-  }
 
   const list=orders||[];
   if(!list.length){
@@ -270,9 +253,8 @@ async function loadBangKe(){
   // Cảnh báo chuyến chưa chốt trong tháng
   const{data:chuaChot}=await db.from('van_don').select('id,ma_don,so_cont,ngay')
     .eq('ten_khach',khName).eq('locked',true)
-    .or(`ky_thanh_toan.is.null,ky_thanh_toan.eq.${thang}`)
     .eq('trang_thai_bang_ke','chua_chot')
-    .gte('ngay',`${y}-${m}-01`).lte('ngay',`${y}-${m}-31`);
+    .gte('ngay',`${y}-${m.padStart(2,'0')}-01`).lte('ngay',`${y}-${m.padStart(2,'0')}-31`);
   if(chuaChot?.length){
     canhbao.innerHTML=`<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:var(--r);padding:8px 14px;margin-bottom:10px;font-size:12px;display:flex;align-items:center;gap:8px">
       <i class="ti ti-alert-triangle" style="color:#d97706;font-size:16px"></i>
