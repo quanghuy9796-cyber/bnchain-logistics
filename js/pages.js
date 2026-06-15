@@ -19,6 +19,8 @@ async function pgDieuVan(c){
   if(canM){
     q2Promise=db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_hang,so_cont,bien_kiem_soat,ten_lai_xe,hanh_trinh,gia_cuoc_khach')
       .eq('locked',true).eq('gia_cuoc_khach',0)
+      .eq('co_doi_lenh',false).eq('co_to_khai',false)
+      .neq('diem_tra','KHÔNG TRUCKING')
       .order('ngay',{ascending:false}).limit(100);
   }
 
