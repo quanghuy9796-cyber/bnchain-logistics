@@ -10,7 +10,7 @@ async function pgDieuVan(c){
   // Query 1: đơn chưa hoàn thành (tất cả role)
   let q1=db.from('van_don').select('id,ma_don,ngay,trang_thai,ten_khach,loai_hang,so_bill,so_booking,so_cont,loai_cont,bien_kiem_soat,ten_lai_xe,hanh_trinh,ngay_yeu_cau,created_by,locked,gia_cuoc_khach')
     .in('trang_thai',['Chờ xếp xe','Đang vận chuyển','Chờ xác nhận'])
-    .order('ngay_yeu_cau',{ascending:true,nullsFirst:false})
+    .order('ngay_yeu_cau',{ascending:true})
     .order('ngay',{ascending:true});
   if(isNV) q1=q1.eq('created_by',CU.id);
 
@@ -238,20 +238,22 @@ async function loadBangKe(){
   res.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   canhbao.innerHTML='';
 
-  // DEBUG: thử không filter locked trước để xem có đơn nào không
+  const lastDay=new Date(parseInt(y),parseInt(m),0).getDate(); // ngày cuối tháng đúng
+  const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
+  const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+
+  // DEBUG
   const{data:debugOrders}=await db.from('van_don').select('id,ma_don,locked,trang_thai,ten_khach,ngay')
     .ilike('ten_khach',khName.trim())
-    .gte('ngay',`${y}-${m.padStart(2,'0')}-01`)
-    .lte('ngay',`${y}-${m.padStart(2,'0')}-31`);
+    .gte('ngay',dateFrom).lte('ngay',dateTo);
   console.log(`[BK DEBUG] Tổng đơn khách "${khName}" tháng ${thang} (chưa filter locked):`, debugOrders?.length||0);
   if(debugOrders?.length) console.log('[BK DEBUG] Sample locked values:', debugOrders.slice(0,3).map(o=>({ma_don:o.ma_don,locked:o.locked,type:typeof o.locked,trang_thai:o.trang_thai})));
 
   // Load đơn: tất cả đơn locked=true của khách trong tháng theo ngày chạy
   const{data:orders}=await db.from('van_don').select('*')
     .ilike('ten_khach',khName.trim()).eq('locked',true)
-    .gte('ngay',`${y}-${m.padStart(2,'0')}-01`)
-    .lte('ngay',`${y}-${m.padStart(2,'0')}-31`)
-    .order('ngay',{ascending:true}).order('so_bill',{ascending:true,nullsFirst:false});
+    .gte('ngay',dateFrom).lte('ngay',dateTo)
+    .order('ngay',{ascending:true}).order('so_bill',{ascending:true});
   console.log(`[BK DEBUG] Sau filter locked=true:`, orders?.length||0);
 
   const list=orders||[];
@@ -264,7 +266,7 @@ async function loadBangKe(){
   const{data:chuaChot}=await db.from('van_don').select('id,ma_don,so_cont,ngay')
     .eq('ten_khach',khName).eq('locked',true)
     .eq('trang_thai_bang_ke','chua_chot')
-    .gte('ngay',`${y}-${m.padStart(2,'0')}-01`).lte('ngay',`${y}-${m.padStart(2,'0')}-31`);
+    .gte('ngay',dateFrom).lte('ngay',dateTo);
   if(chuaChot?.length){
     canhbao.innerHTML=`<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:var(--r);padding:8px 14px;margin-bottom:10px;font-size:12px;display:flex;align-items:center;gap:8px">
       <i class="ti ti-alert-triangle" style="color:#d97706;font-size:16px"></i>
