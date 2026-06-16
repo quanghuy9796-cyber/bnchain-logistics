@@ -1346,23 +1346,22 @@ async function deleteChiHo(chiHoId,vdId){
 
   if(ch?.hoa_don_id){
     if(ch.la_tham_chieu){
-      // Xóa tham chiếu: chỉ gỡ liên kết hoa_don_van_don của vận đơn này, KHÔNG xóa hoa_don gốc
+      // Xóa tham chiếu: gỡ liên kết hoa_don_van_don của vận đơn này
       await db.from('hoa_don_van_don')
         .delete()
         .eq('hoa_don_id',ch.hoa_don_id)
         .eq('van_don_id',ch.van_don_id||vdId);
-    } else {
-      // Xóa chi hộ chính: kiểm tra còn chi_ho nào khác dùng HĐ đó không
-      const{data:conLai}=await db.from('chi_ho').select('id').eq('hoa_don_id',ch.hoa_don_id);
-      if(!conLai?.length){
-        // Không còn chi_ho nào → xóa file Storage + record hoa_don
-        const{data:hd}=await db.from('hoa_don').select('storage_path').eq('id',ch.hoa_don_id).single();
-        if(hd?.storage_path){
-          await db.storage.from('hoa-don').remove([hd.storage_path]);
-        }
-        await db.from('hoa_don_van_don').delete().eq('hoa_don_id',ch.hoa_don_id);
-        await db.from('hoa_don').delete().eq('id',ch.hoa_don_id);
+    }
+    // Dù là tham chiếu hay chính: sau khi xóa chi_ho, kiểm tra HĐ còn được dùng không
+    const{data:conLai}=await db.from('chi_ho').select('id').eq('hoa_don_id',ch.hoa_don_id);
+    if(!conLai?.length){
+      // Không còn chi_ho nào → dọn file Storage + hoa_don_van_don còn lại + record hoa_don
+      const{data:hd}=await db.from('hoa_don').select('storage_path').eq('id',ch.hoa_don_id).single();
+      if(hd?.storage_path){
+        await db.storage.from('hoa-don').remove([hd.storage_path]);
       }
+      await db.from('hoa_don_van_don').delete().eq('hoa_don_id',ch.hoa_don_id);
+      await db.from('hoa_don').delete().eq('id',ch.hoa_don_id);
     }
   }
 
