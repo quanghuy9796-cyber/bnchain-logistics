@@ -382,8 +382,11 @@ function renderTabChiHo(o,list,editable,isOpsHP=false){
           <span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:600;white-space:nowrap">Tham chiếu</span>
           <strong style="white-space:nowrap">${c.loai_chi}</strong>
         </div>
-        <div style="font-size:11px;color:var(--text-muted);white-space:nowrap">
-          Tổng HĐ: <strong class="text-orange">${fmtM(c.so_tien_hd_goc||0)}</strong>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="font-size:11px;color:var(--text-muted);white-space:nowrap">
+            Tổng HĐ: <strong class="text-orange">${fmtM(c.so_tien_hd_goc||0)}</strong>
+          </div>
+          ${canEditCH?`<button class="btn btn-xs btn-danger" onclick="deleteChiHo('${c.id}','${c.van_don_id}')" title="Gỡ tham chiếu này"><i class="ti ti-trash"></i></button>`:''}
         </div>
       </div>
       <div style="color:var(--text-muted);margin-top:4px;font-size:11px">
@@ -1167,6 +1170,10 @@ function openAddChiHo(vdId,maDon){
         <option>Công nhân bốc xếp</option>
         <option>Cao tốc / Vé đường</option>
         <option>Nâng/hạ cont</option>
+        <option>Nâng hàng</option>
+        <option>Nâng vỏ</option>
+        <option>Hạ hàng</option>
+        <option>Hạ vỏ</option>
         <option>Phí CSHT</option>
         <option>Phí cảng, bãi</option>
         <option>Phí local charge</option>
@@ -1250,10 +1257,14 @@ async function editChiHo(chiHoId, vdId, maDon){
         <option ${data.loai_chi==='Công nhân bốc xếp'?'selected':''}>Công nhân bốc xếp</option>
         <option ${data.loai_chi==='Cao tốc / Vé đường'?'selected':''}>Cao tốc / Vé đường</option>
         <option ${data.loai_chi?.startsWith('Nâng/hạ')||data.loai_chi==='Nâng/hạ cont'?'selected':''}>Nâng/hạ cont</option>
+        <option ${(data.loai_chi?.startsWith('Nâng hàng')||data.loai_chi==='Nâng hàng')&&!data.loai_chi?.startsWith('Nâng/hạ')?'selected':''}>Nâng hàng</option>
+        <option ${(data.loai_chi?.startsWith('Nâng vỏ')||data.loai_chi==='Nâng vỏ')&&!data.loai_chi?.startsWith('Nâng/hạ')?'selected':''}>Nâng vỏ</option>
+        <option ${(data.loai_chi?.startsWith('Hạ hàng')||data.loai_chi==='Hạ hàng')&&!data.loai_chi?.startsWith('Nâng/hạ')?'selected':''}>Hạ hàng</option>
+        <option ${(data.loai_chi?.startsWith('Hạ vỏ')||data.loai_chi==='Hạ vỏ')&&!data.loai_chi?.startsWith('Nâng/hạ')?'selected':''}>Hạ vỏ</option>
         <option ${data.loai_chi==='Phí CSHT'||data.loai_chi==='CSHT'||data.loai_chi?.startsWith('CSHT')?'selected':''}>Phí CSHT</option>
         <option ${['Phí cảng, bãi','Phí cảng','Lưu bãi / Lưu cont'].includes(data.loai_chi)||data.loai_chi?.startsWith('Phí cảng')?'selected':''}>Phí cảng, bãi</option>
         <option ${data.loai_chi==='Phí local charge'||data.loai_chi?.startsWith('Phí local')?'selected':''}>Phí local charge</option>
-        <option ${['Chi phí khác','Giám sát hải quan','Chi hải quan'].includes(data.loai_chi)||(!['Đi cảng xa (Lạch Huyện)','Lưu ca','Công nhân bốc xếp','Cao tốc / Vé đường','Nâng/hạ cont','Phí CSHT','Phí cảng, bãi','Phí local charge'].some(x=>data.loai_chi?.startsWith(x)))?'selected':''}>Chi phí khác</option>
+        <option ${['Chi phí khác','Giám sát hải quan','Chi hải quan'].includes(data.loai_chi)||(!['Đi cảng xa (Lạch Huyện)','Lưu ca','Công nhân bốc xếp','Cao tốc / Vé đường','Nâng/hạ cont','Nâng hàng','Nâng vỏ','Hạ hàng','Hạ vỏ','Phí CSHT','Phí cảng, bãi','Phí local charge'].some(x=>data.loai_chi?.startsWith(x)))?'selected':''}>Chi phí khác</option>
       </select></div>
       <div style="grid-column:1/-1;background:var(--bg);border-radius:var(--r);padding:10px 12px;border:1px solid var(--border)">
         <div style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px"><i class="ti ti-coins"></i> Số tiền</div>
@@ -1327,23 +1338,31 @@ async function deleteChiHo(chiHoId,vdId){
   if(CU?.vai_tro==='ops_hp'){toast('Không có quyền xóa chi phí','error');return;}
   if(!confirm('Xóa khoản chi phí này?'))return;
 
-  // Lấy thông tin chi_ho trước khi xóa (cần hoa_don_id)
-  const{data:ch}=await db.from('chi_ho').select('hoa_don_id,la_tham_chieu').eq('id',chiHoId).single();
+  // Lấy thông tin chi_ho trước khi xóa
+  const{data:ch}=await db.from('chi_ho').select('hoa_don_id,la_tham_chieu,van_don_id').eq('id',chiHoId).single();
 
   const{error}=await db.from('chi_ho').delete().eq('id',chiHoId);
   if(error){toast('Lỗi: '+error.message,'error');return;}
 
-  // Nếu có liên kết hoa_don → kiểm tra còn chi_ho nào khác dùng HĐ đó không
   if(ch?.hoa_don_id){
-    const{data:conLai}=await db.from('chi_ho').select('id').eq('hoa_don_id',ch.hoa_don_id);
-    if(!conLai?.length){
-      // Không còn chi_ho nào → xóa file Storage + record hoa_don
-      const{data:hd}=await db.from('hoa_don').select('storage_path').eq('id',ch.hoa_don_id).single();
-      if(hd?.storage_path){
-        await db.storage.from('hoa-don').remove([hd.storage_path]);
+    if(ch.la_tham_chieu){
+      // Xóa tham chiếu: chỉ gỡ liên kết hoa_don_van_don của vận đơn này, KHÔNG xóa hoa_don gốc
+      await db.from('hoa_don_van_don')
+        .delete()
+        .eq('hoa_don_id',ch.hoa_don_id)
+        .eq('van_don_id',ch.van_don_id||vdId);
+    } else {
+      // Xóa chi hộ chính: kiểm tra còn chi_ho nào khác dùng HĐ đó không
+      const{data:conLai}=await db.from('chi_ho').select('id').eq('hoa_don_id',ch.hoa_don_id);
+      if(!conLai?.length){
+        // Không còn chi_ho nào → xóa file Storage + record hoa_don
+        const{data:hd}=await db.from('hoa_don').select('storage_path').eq('id',ch.hoa_don_id).single();
+        if(hd?.storage_path){
+          await db.storage.from('hoa-don').remove([hd.storage_path]);
+        }
+        await db.from('hoa_don_van_don').delete().eq('hoa_don_id',ch.hoa_don_id);
+        await db.from('hoa_don').delete().eq('id',ch.hoa_don_id);
       }
-      await db.from('hoa_don_van_don').delete().eq('hoa_don_id',ch.hoa_don_id);
-      await db.from('hoa_don').delete().eq('id',ch.hoa_don_id);
     }
   }
 
