@@ -1166,10 +1166,7 @@ function openAddChiHo(vdId,maDon){
         <option>Lưu ca</option>
         <option>Công nhân bốc xếp</option>
         <option>Cao tốc / Vé đường</option>
-        <option>Nâng hàng</option>
-        <option>Nâng vỏ</option>
-        <option>Hạ hàng</option>
-        <option>Hạ vỏ</option>
+        <option>Nâng/hạ cont</option>
         <option>Phí CSHT</option>
         <option>Phí cảng, bãi</option>
         <option>Phí local charge</option>
@@ -1252,14 +1249,11 @@ async function editChiHo(chiHoId, vdId, maDon){
         <option ${data.loai_chi==='Lưu ca'?'selected':''}>Lưu ca</option>
         <option ${data.loai_chi==='Công nhân bốc xếp'?'selected':''}>Công nhân bốc xếp</option>
         <option ${data.loai_chi==='Cao tốc / Vé đường'?'selected':''}>Cao tốc / Vé đường</option>
-        <option ${data.loai_chi?.startsWith('Nâng hàng')||data.loai_chi==='Nâng hàng'?'selected':''}>Nâng hàng</option>
-        <option ${data.loai_chi?.startsWith('Nâng vỏ')||data.loai_chi==='Nâng vỏ'?'selected':''}>Nâng vỏ</option>
-        <option ${data.loai_chi?.startsWith('Hạ hàng')||data.loai_chi==='Hạ hàng'?'selected':''}>Hạ hàng</option>
-        <option ${data.loai_chi?.startsWith('Hạ vỏ')||data.loai_chi==='Hạ vỏ'?'selected':''}>Hạ vỏ</option>
+        <option ${data.loai_chi?.startsWith('Nâng/hạ')||data.loai_chi==='Nâng/hạ cont'?'selected':''}>Nâng/hạ cont</option>
         <option ${data.loai_chi==='Phí CSHT'||data.loai_chi==='CSHT'||data.loai_chi?.startsWith('CSHT')?'selected':''}>Phí CSHT</option>
         <option ${['Phí cảng, bãi','Phí cảng','Lưu bãi / Lưu cont'].includes(data.loai_chi)||data.loai_chi?.startsWith('Phí cảng')?'selected':''}>Phí cảng, bãi</option>
         <option ${data.loai_chi==='Phí local charge'||data.loai_chi?.startsWith('Phí local')?'selected':''}>Phí local charge</option>
-        <option ${['Chi phí khác','Giám sát hải quan','Chi hải quan'].includes(data.loai_chi)||(!['Đi cảng xa (Lạch Huyện)','Lưu ca','Công nhân bốc xếp','Cao tốc / Vé đường','Nâng hàng','Nâng vỏ','Hạ hàng','Hạ vỏ','Phí CSHT','Phí cảng, bãi','Phí local charge'].some(x=>data.loai_chi?.startsWith(x)))?'selected':''}>Chi phí khác</option>
+        <option ${['Chi phí khác','Giám sát hải quan','Chi hải quan'].includes(data.loai_chi)||(!['Đi cảng xa (Lạch Huyện)','Lưu ca','Công nhân bốc xếp','Cao tốc / Vé đường','Nâng/hạ cont','Phí CSHT','Phí cảng, bãi','Phí local charge'].some(x=>data.loai_chi?.startsWith(x)))?'selected':''}>Chi phí khác</option>
       </select></div>
       <div style="grid-column:1/-1;background:var(--bg);border-radius:var(--r);padding:10px 12px;border:1px solid var(--border)">
         <div style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px"><i class="ti ti-coins"></i> Số tiền</div>
