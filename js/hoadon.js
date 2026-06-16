@@ -293,7 +293,7 @@ Trả về JSON ARRAY với đúng 1 phần tử (chỉ array thuần, không ma
 [{
   "so_hd": "số hóa đơn hoặc số biên lai",
   "ngay_hd": "ngày trên HĐ format YYYY-MM-DD",
-  "loai_dv": "Chỉ được chọn 1 trong: Nâng hàng / Nâng vỏ / Hạ hàng / Hạ vỏ / Phí CSHT / Lưu ca / Phí cảng, bãi / Phí local charge / Chi phí khác. Quy tắc: (1) Nâng hàng = nâng container hàng đầy lên xe/tàu. Nâng vỏ = nâng container rỗng. Hạ hàng = hạ container hàng đầy xuống. Hạ vỏ = hạ container rỗng. Nếu HĐ ghi rõ nâng hay hạ thì phân biệt chính xác. Nếu HĐ gộp cả nâng lẫn hạ trong cùng 1 dòng → chọn Nâng hàng. (2) CSHT / cơ sở hạ tầng → Phí CSHT. (3) Vệ sinh/sửa/rửa cont / lưu bãi / lưu cont → Phí cảng, bãi. (4) Local charge / phụ phí → Phí local charge. (5) Còn lại → Chi phí khác.",
+  "loai_dv": "Chỉ được chọn 1 trong: Nâng/hạ cont / Phí CSHT / Lưu ca / Phí cảng, bãi / Phí local charge / Chi phí khác. Quy tắc: (1) Bất kỳ dịch vụ nâng container, hạ container, nâng hàng, hạ hàng, nâng vỏ, hạ vỏ, nâng hạ cont → đều chọn Nâng/hạ cont. (2) CSHT / cơ sở hạ tầng → Phí CSHT. (3) Vệ sinh/sửa/rửa cont / lưu bãi / lưu cont → Phí cảng, bãi. (4) Local charge / phụ phí → Phí local charge. (5) Còn lại → Chi phí khác.",
   "tong_tien": số tiền VNĐ cuối cùng (số nguyên không dấu phẩy),
   "so_cont_list": ["POLU4510295"],
   "loai_cont": "20DC hoặc 40HC v.v",
@@ -349,16 +349,70 @@ Lưu ý: số cont thường sau "Công-te-nơ số:" hoặc trong tên DV như 
 // ── 7. KHỚP CONT VỚI VẬN ĐƠN ────────────────────────────────────────────────
 async function matchContToVanDon(ai){
   const conts=ai.so_cont_list||[];
-  if(conts.length>0){
-    const{data:vds}=await db.from('van_don').select('id,ma_don,so_cont,ten_khach,loai_hang').in('so_cont',conts);
-    if(vds&&vds.length>0) return{trang_thai:'da_khop',van_don_matches:vds,so_cont_list:conts};
-  }
+
   if(conts.length===0&&ai.tong_tien>0){
     const s40=Math.round(ai.tong_tien/500000),s20=Math.round(ai.tong_tien/250000);
     return{trang_thai:'cho_xu_ly',ly_do_cho:`HĐ CSHT — Ước tính ${s40} cont 40 hoặc ${s20} cont 20. Cần chọn bill/booking.`,so_cont_list:[]};
   }
-  if(conts.length>0) return{trang_thai:'cho_xu_ly',ly_do_cho:`Số cont ${conts.join(', ')} chưa có trong hệ thống.`,so_cont_list:conts};
-  return{trang_thai:'cho_xu_ly',ly_do_cho:'AI không đọc được số cont.',so_cont_list:[]};
+  if(conts.length===0){
+    return{trang_thai:'cho_xu_ly',ly_do_cho:'AI không đọc được số cont.',so_cont_list:[]};
+  }
+
+  // Query tất cả VĐ khớp với các số cont AI đọc được
+  const{data:vds}=await db.from('van_don')
+    .select('id,ma_don,so_cont,ten_khach,loai_hang,phi_doi_lenh,tra_thau_doi_lenh')
+    .in('so_cont',conts);
+
+  if(!vds||vds.length===0){
+    return{trang_thai:'cho_xu_ly',ly_do_cho:`Số cont ${conts.join(', ')} chưa có trong hệ thống.`,so_cont_list:conts};
+  }
+
+  // ── Trường hợp: 1 HĐ nhiều cont — kiểm tra xem các cont có cùng 1 khách không
+  if(conts.length>1){
+    const khachSet=new Set(vds.map(v=>v.ten_khach).filter(Boolean));
+    if(khachSet.size<=1){
+      // Cùng 1 khách → logic cũ, ghi tất cả
+      return{trang_thai:'da_khop',van_don_matches:vds,so_cont_list:conts};
+    }
+    // Nhiều khách khác nhau trong 1 HĐ nhiều cont → xử lý tay
+    return{
+      trang_thai:'cho_xu_ly',
+      ly_do_cho:`HĐ gồm ${conts.length} cont thuộc ${khachSet.size} khách khác nhau (${[...khachSet].join(', ')}). Cần xử lý tay để phân bổ đúng.`,
+      so_cont_list:conts,
+    };
+  }
+
+  // ── Trường hợp: 1 cont — kiểm tra số VĐ khớp
+  if(vds.length===1){
+    // Chỉ 1 VĐ → ghi nhận bình thường
+    return{trang_thai:'da_khop',van_don_matches:vds,so_cont_list:conts};
+  }
+
+  // 1 cont nhưng khớp nhiều VĐ (nhiều khách khác nhau)
+  const coDoiLenh=vds.filter(v=>+v.phi_doi_lenh>0||+v.tra_thau_doi_lenh>0);
+
+  if(coDoiLenh.length===1){
+    // Chỉ 1 khách có đổi lệnh → ghi nhận vào khách đó
+    return{trang_thai:'da_khop',van_don_matches:coDoiLenh,so_cont_list:conts};
+  }
+
+  if(coDoiLenh.length===0){
+    // Không ai có đổi lệnh → chuyển xử lý tay, OPS tự chọn
+    const khachNames=vds.map(v=>`${v.ma_don}/${v.ten_khach||'?'}`).join(', ');
+    return{
+      trang_thai:'cho_xu_ly',
+      ly_do_cho:`Cont ${conts[0]} khớp ${vds.length} VĐ (${khachNames}) — không có khách nào tick đổi lệnh. Chọn VĐ phù hợp.`,
+      so_cont_list:conts,
+    };
+  }
+
+  // Cả 2 (hoặc nhiều hơn) đều có đổi lệnh → xử lý tay bắt buộc
+  const khachNames=coDoiLenh.map(v=>`${v.ma_don}/${v.ten_khach||'?'}`).join(', ');
+  return{
+    trang_thai:'cho_xu_ly',
+    ly_do_cho:`Cont ${conts[0]} có ${coDoiLenh.length} VĐ đều có đổi lệnh (${khachNames}). OPS cần chọn đúng khách chịu phí.`,
+    so_cont_list:conts,
+  };
 }
 
 // ── 8. LƯU HÓA ĐƠN + TẠO CHI HỘ NGAY ──────────────────────────────────────
@@ -379,13 +433,8 @@ function buildDisplayName(loaiDv, conts, ngayHd){
 function mapLoaiDv(loaiDv){
   if(!loaiDv) return 'Chi phí khác';
   const v=loaiDv.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  // Phân biệt rõ từng loại nâng/hạ để bảng kê map đúng cột
-  if(/ha vo|ha rang|ha container rong|ha vỏ/.test(v)) return 'Hạ vỏ';
-  if(/ha hang|ha container hang|ha day|ha đầy/.test(v)) return 'Hạ hàng';
-  if(/nang vo|nang rang|nang container rong|nâng vỏ/.test(v)) return 'Nâng vỏ';
-  if(/nang hang|nang container hang|nang day|nâng hàng/.test(v)) return 'Nâng hàng';
-  // Gộp nâng+hạ cùng 1 HĐ → Nâng hàng (fallback)
-  if(/nang|ha cont|nang ha/.test(v)) return 'Nâng hàng';
+  // Tất cả dạng nâng/hạ cont → gộp thành 1 loại duy nhất cho bảng kê
+  if(/nang|ha hang|ha vo|ha cont|nang ha|nang vo/.test(v)) return 'Nâng/hạ cont';
   if(/csht|co so ha tang/.test(v)) return 'Phí CSHT';
   if(/luu ca/.test(v)) return 'Lưu ca';
   if(/ve sinh|sua cont|rua cont|luu bai|luu cont|phi cang|cang bai/.test(v)) return 'Phí cảng, bãi';
