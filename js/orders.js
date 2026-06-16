@@ -64,10 +64,10 @@ function _renderOrdersUI(c){
   </div>
   <div class="tbl-wrap"><table class="tbl">
     <colgroup>
-      <col style="width:140px"><col style="width:75px"><col style="width:115px"><col style="width:110px">
-      <col style="width:55px"><col style="width:100px"><col style="width:90px"><col style="width:60px">
-      <col style="width:85px"><col style="width:100px"><col style="width:95px">${_canM?'<col style="width:95px"><col style="width:90px">':''}
-      <col style="width:110px">
+      <col style="width:105px"><col style="width:70px"><col style="width:110px"><col style="width:90px">
+      <col style="width:50px"><col style="width:100px"><col style="width:90px"><col style="width:60px">
+      <col style="width:85px"><col style="width:95px"><col style="width:90px">${_canM?'<col style="width:90px"><col style="width:85px">':''}
+      <col style="width:105px">
     </colgroup>
     <thead><tr>
       <th>Mã đơn</th><th>Ngày</th><th>Khách hàng</th><th>Bill / Booking</th>
