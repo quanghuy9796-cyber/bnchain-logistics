@@ -18,20 +18,23 @@ async function pgOrders(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   const COLS='id,ma_don,ngay,trang_thai,ten_khach,so_bill,so_booking,loai_hang,so_cont,loai_cont,loai_xe_hang,loai_chuyen,bien_kiem_soat,ten_lai_xe,hanh_trinh,diem_lay,diem_tra,locked,ky_thanh_toan,trang_thai_bang_ke,gia_cuoc_khach,gia_cuoc_thau,thanh_toan_khach,thanh_toan_thau,phi_doi_lenh,phi_to_khai,co_doi_lenh,co_to_khai,ngay_yeu_cau,created_at,ma_thau_phu,loai_phan_loai_xe,la_xe_noi_bo,ghi_chu,ghi_chu_xe,diem_tra_phat_sinh,created_by,tra_thau_doi_lenh,don_vi_doi_lenh';
   let q=db.from('van_don').select(COLS).order('ngay',{ascending:false}).order('created_at',{ascending:false});
-  // nhan_vien chỉ xem đơn do mình tạo
   if(CU?.vai_tro==='nhan_vien') q=q.eq('created_by',CU.id);
   if(ORDER_THANG){const[y,m]=ORDER_THANG.split('-');q=q.gte('ngay',`${y}-${m}-01`).lte('ngay',`${y}-${m}-31`);}
   else{const d3m=new Date();d3m.setMonth(d3m.getMonth()-3);const cutoff=`${d3m.getFullYear()}-${String(d3m.getMonth()+1).padStart(2,'0')}-01`;q=q.gte('ngay',cutoff);}
   const{data}=await q.limit(500);
   ORDERS=data||[];
+  _canM=canSee(['ke_toan','ceo']);
+  _renderOrdersUI(c);
+}
+
+function _renderOrdersUI(c){
   const counts={all:ORDERS.length,'Chờ xếp xe':0,'Đang vận chuyển':0,'Chờ xác nhận':0,'Hoàn thành':0};
   ORDERS.forEach(o=>counts[o.trang_thai]=(counts[o.trang_thai]||0)+1);
+  const sq=ORDER_SEARCH.trim().toLowerCase();
   _filteredOrders=ORDERS.filter(o=>{
-    const sq=ORDER_SEARCH.trim().toLowerCase();
     const mq=!sq||(o.ma_don?.toLowerCase().includes(sq)||o.ten_khach?.toLowerCase().includes(sq)||o.so_bill?.toLowerCase().includes(sq)||o.so_booking?.toLowerCase().includes(sq)||o.so_cont?.toLowerCase().includes(sq)||o.bien_kiem_soat?.toLowerCase().includes(sq));
     return mq&&(!ORDER_LOAI||o.loai_hang===ORDER_LOAI)&&(ORDER_FILTER==='all'||o.trang_thai===ORDER_FILTER);
   });
-  _canM=canSee(['ke_toan','ceo']);
   const totalPages=Math.max(1,Math.ceil(_filteredOrders.length/ORDER_PAGE_SIZE));
   if(ORDER_PAGE>totalPages)ORDER_PAGE=totalPages;if(ORDER_PAGE<1)ORDER_PAGE=1;
   const ps=(ORDER_PAGE-1)*ORDER_PAGE_SIZE;
@@ -40,15 +43,15 @@ async function pgOrders(c){
   const thOpts=Array.from({length:6},(_,i)=>{const d=new Date(now.getFullYear(),now.getMonth()-i,1);const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;return`<option value="${v}" ${ORDER_THANG===v?'selected':''}>T${d.getMonth()+1}/${d.getFullYear()}</option>`;}).join('');
   c.innerHTML=`
   <div class="status-bar">
-    <div class="status-btn ${ORDER_FILTER==='all'?'active':''}" onclick="ORDER_FILTER='all';ORDER_PAGE=1;pgOrders(document.getElementById('content'))"><i class="ti ti-list"></i>Tất cả <span class="cnt">${counts.all}</span></div>
-    <div class="status-btn s-cho ${ORDER_FILTER==='Chờ xếp xe'?'active':''}" onclick="ORDER_FILTER='Chờ xếp xe';ORDER_PAGE=1;pgOrders(document.getElementById('content'))"><i class="ti ti-clock"></i>Chờ xếp xe <span class="cnt">${counts['Chờ xếp xe']||0}</span></div>
-    <div class="status-btn s-chay ${ORDER_FILTER==='Đang vận chuyển'?'active':''}" onclick="ORDER_FILTER='Đang vận chuyển';ORDER_PAGE=1;pgOrders(document.getElementById('content'))"><i class="ti ti-truck"></i>Đang chạy <span class="cnt">${counts['Đang vận chuyển']||0}</span></div>
-    <div class="status-btn s-xong ${ORDER_FILTER==='Hoàn thành'?'active':''}" onclick="ORDER_FILTER='Hoàn thành';ORDER_PAGE=1;pgOrders(document.getElementById('content'))"><i class="ti ti-lock"></i>Hoàn thành <span class="cnt">${counts['Hoàn thành']||0}</span></div>
+    <div class="status-btn ${ORDER_FILTER==='all'?'active':''}" onclick="ORDER_FILTER='all';ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))"><i class="ti ti-list"></i>Tất cả <span class="cnt">${counts.all}</span></div>
+    <div class="status-btn s-cho ${ORDER_FILTER==='Chờ xếp xe'?'active':''}" onclick="ORDER_FILTER='Chờ xếp xe';ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))"><i class="ti ti-clock"></i>Chờ xếp xe <span class="cnt">${counts['Chờ xếp xe']||0}</span></div>
+    <div class="status-btn s-chay ${ORDER_FILTER==='Đang vận chuyển'?'active':''}" onclick="ORDER_FILTER='Đang vận chuyển';ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))"><i class="ti ti-truck"></i>Đang chạy <span class="cnt">${counts['Đang vận chuyển']||0}</span></div>
+    <div class="status-btn s-xong ${ORDER_FILTER==='Hoàn thành'?'active':''}" onclick="ORDER_FILTER='Hoàn thành';ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))"><i class="ti ti-lock"></i>Hoàn thành <span class="cnt">${counts['Hoàn thành']||0}</span></div>
   </div>
   <div class="toolbar">
     ${canSee(['nhan_vien','quan_ly','ke_toan','ceo'])?`<button class="btn btn-primary" onclick="openForm()"><i class="ti ti-plus"></i> Thêm vận đơn</button>`:''}
-    <input class="search-inp" placeholder="Tìm mã đơn, bill, booking, cont, biển số..." value="${ORDER_SEARCH}" oninput="clearTimeout(window._searchT);window._searchT=setTimeout(()=>{ORDER_SEARCH=this.value;ORDER_PAGE=1;pgOrders(document.getElementById('content'))},400)">
-    <select class="filter-sel" onchange="ORDER_LOAI=this.value;ORDER_PAGE=1;pgOrders(document.getElementById('content'))">
+    <input class="search-inp" placeholder="Tìm mã đơn, bill, booking, cont, biển số..." value="${ORDER_SEARCH}" oninput="clearTimeout(window._searchT);window._searchT=setTimeout(()=>{ORDER_SEARCH=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))},300)">
+    <select class="filter-sel" onchange="ORDER_LOAI=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
       <option value="">Tất cả loại</option>
       <option value="Xuất" ${ORDER_LOAI==='Xuất'?'selected':''}>Xuất</option>
       <option value="Nhập" ${ORDER_LOAI==='Nhập'?'selected':''}>Nhập</option>
@@ -78,14 +81,14 @@ async function pgOrders(c){
     <span style="font-size:11.5px;color:var(--text-muted)">Hiển thị ${ps+1}–${Math.min(ps+ORDER_PAGE_SIZE,_filteredOrders.length)} / ${_filteredOrders.length} đơn</span>
     <div id="pag-btns" style="display:flex;gap:4px">${_buildPagBtns(ORDER_PAGE,totalPages)}</div>
   </div>`:''}`;
+  if(SEL){
+    const selTr=document.querySelector(`#orders-tbody tr[onclick*="${SEL}"]`);
+    if(selTr)selTr.classList.add('selected');
+  }
 }
 function _buildRows(list){
   if(!list||list.length===0)return'<tr><td colspan="20"><div class="empty"><i class="ti ti-inbox"></i>Chưa có dữ liệu</div></td></tr>';
-  const lcTag=lc=>!lc?'—':{
-    'Thường':'<span class="tag" style="background:#f0fdf4;color:#166534">Thường</span>',
-    'Kết hợp':'<span class="tag" style="background:#eff6ff;color:#1d4ed8">Kết hợp</span>',
-    'Kẹp ghép':'<span class="tag" style="background:#fef9c3;color:#854d0e">Kẹp ghép</span>',
-  }[lc]||lc;
+  const lcTag=lc=>!lc?'—':({'Thường':'<span class="tag" style="background:#f0fdf4;color:#166534">Thường</span>','Kết hợp':'<span class="tag" style="background:#eff6ff;color:#1d4ed8">Kết hợp</span>','Kẹp ghép':'<span class="tag" style="background:#fef9c3;color:#854d0e">Kẹp ghép</span>'}[lc]||lc);
   return list.map(o=>`<tr onclick="openDetail('${o.id}')" class="${SEL===o.id?'selected':''} ${o.locked?'locked':''}">
     <td><span style="color:var(--teal);font-weight:600">${o.ma_don}</span>${o.locked?'<i class="ti ti-lock" style="color:var(--success);font-size:10px;margin-left:3px"></i>':''}</td>
     <td>${fmtDate(o.ngay)}</td>
@@ -118,30 +121,33 @@ function _goPage(){
 
 // ==================== DETAIL PANEL ====================
 async function openDetail(id, tab='info'){
+  // Bỏ selected cũ bằng id cụ thể thay vì querySelectorAll toàn bộ
+  if(SEL&&SEL!==id){
+    const old=document.querySelector(`#orders-tbody tr[onclick*="${SEL}"]`);
+    if(old)old.classList.remove('selected');
+  }
   SEL=id;
   const o=ORDERS.find(x=>x.id===id);
   if(!o)return;
+  const newTr=document.querySelector(`#orders-tbody tr[onclick*="${id}"]`);
+  if(newTr)newTr.classList.add('selected');
   const dp=document.getElementById('dp');
   dp.style.display='flex';dp.style.flexDirection='column';
   DP_TAB=tab;
   await renderDP(o);
-  document.querySelectorAll('.tbl tr').forEach(tr=>{
-    if(tr.getAttribute('onclick')?.includes(id))tr.classList.add('selected');
-    else tr.classList.remove('selected');
-  });
 }
 
 async function renderDP(o){
   const dp=document.getElementById('dp');
   const canM=canSee(['ke_toan','ceo']);
   const isOpsHP=CU?.vai_tro==='ops_hp';
-  // nhan_vien chỉ edit đơn do mình tạo và chưa khóa
-  // ops_hp: xem hết nhưng không edit gì (trừ upload HĐ)
   const editable=isOpsHP?false:canEdit(o)&&(CU?.vai_tro!=='nhan_vien'||o.created_by===CU?.id);
-  // ke_toan/ceo luôn nhập được cước dù đơn đã locked — không cần mở khóa
   const editableCuoc=canM&&!editable?true:editable;
-  const{data:chiHoList}=await db.from('chi_ho').select('*').eq('van_don_id',o.id).order('ngay_chi');
-  const totalCH=(chiHoList||[]).reduce((s,c)=>s+(+c.so_tien||0),0);
+  // Luôn fetch chi_ho đầy đủ — badge và nội dung tab cần chính xác ngay từ đầu
+  const{data:chiHoData}=await db.from('chi_ho').select('*').eq('van_don_id',o.id).order('ngay_chi');
+  const chiHoList=chiHoData||[];
+  const chiHoCount=chiHoList.length;
+  const totalCH=chiHoList.reduce((s,c)=>s+(+c.so_tien||0),0);
   const loi=(+o.gia_cuoc_khach||0)-(+o.gia_cuoc_thau||0)-totalCH;
 
   dp.innerHTML=`
@@ -155,7 +161,7 @@ async function renderDP(o){
   <div class="tabs">
     <div class="tab ${DP_TAB==='info'?'active':''}" onclick="switchTab('info','${o.id}')"><i class="ti ti-info-circle"></i> Thông tin</div>
     <div class="tab ${DP_TAB==='xe'?'active':''}" onclick="switchTab('xe','${o.id}')"><i class="ti ti-truck"></i> Xe & Cont</div>
-    <div class="tab ${DP_TAB==='chiho'?'active':''}" onclick="switchTab('chiho','${o.id}')"><i class="ti ti-receipt"></i> Chi hộ ${chiHoList?.length?`<span style="background:var(--warning);color:#fff;border-radius:10px;padding:0 5px;font-size:10px;margin-left:2px">${chiHoList.length}</span>`:''}</div>
+    <div class="tab ${DP_TAB==='chiho'?'active':''}" onclick="switchTab('chiho','${o.id}')"><i class="ti ti-receipt"></i> Chi hộ ${chiHoCount?`<span style="background:var(--warning);color:#fff;border-radius:10px;padding:0 5px;font-size:10px;margin-left:2px">${chiHoCount}</span>`:''}</div>
     ${canM?`<div class="tab ${DP_TAB==='cuoc'?'active':''}" onclick="switchTab('cuoc','${o.id}')"><i class="ti ti-coins"></i> Cước & Chốt</div>`:''}
   </div>
   <div class="tab-content" id="tab-body">
