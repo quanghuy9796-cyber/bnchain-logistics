@@ -75,6 +75,7 @@ textarea{resize:vertical;min-height:54px}
 .tbl tr:hover td{background:#f8fbfc;cursor:pointer}
 .tbl tr.selected td{background:#fff3e6}
 .tbl tr.locked td{background:#f8fffe;opacity:.85}
+.tbl tr.locked.selected td{background:#fff3e6!important;opacity:1}
 /* TAGS */
 .tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;white-space:nowrap}
 .tag-xuat{background:#dbeafe;color:#1d4ed8}
