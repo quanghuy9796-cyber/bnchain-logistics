@@ -199,7 +199,7 @@ async function pgCongNo(c){
 async function pgBangKe(c){
   if(!canSee(['ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
   if(!KH||!KH.length){
-    const{data}=await db.from('khach_hang').select('*').eq('active',true).order('ten_cong_ty');
+    const{data}=await db.from('khach_hang').select('*').eq('active',true).order('ten_cong_ty',{ascending:true});
     KH=data||[];
   }
   const now=new Date();
@@ -238,12 +238,21 @@ async function loadBangKe(){
   res.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   canhbao.innerHTML='';
 
+  // DEBUG: thử không filter locked trước để xem có đơn nào không
+  const{data:debugOrders}=await db.from('van_don').select('id,ma_don,locked,trang_thai,ten_khach,ngay')
+    .ilike('ten_khach',khName.trim())
+    .gte('ngay',`${y}-${m.padStart(2,'0')}-01`)
+    .lte('ngay',`${y}-${m.padStart(2,'0')}-31`);
+  console.log(`[BK DEBUG] Tổng đơn khách "${khName}" tháng ${thang} (chưa filter locked):`, debugOrders?.length||0);
+  if(debugOrders?.length) console.log('[BK DEBUG] Sample locked values:', debugOrders.slice(0,3).map(o=>({ma_don:o.ma_don,locked:o.locked,type:typeof o.locked,trang_thai:o.trang_thai})));
+
   // Load đơn: tất cả đơn locked=true của khách trong tháng theo ngày chạy
   const{data:orders}=await db.from('van_don').select('*')
-    .eq('ten_khach',khName).eq('locked',true)
+    .ilike('ten_khach',khName.trim()).eq('locked',true)
     .gte('ngay',`${y}-${m.padStart(2,'0')}-01`)
     .lte('ngay',`${y}-${m.padStart(2,'0')}-31`)
-    .order('ngay').order('so_bill');
+    .order('ngay',{ascending:true}).order('so_bill',{ascending:true,nullsFirst:false});
+  console.log(`[BK DEBUG] Sau filter locked=true:`, orders?.length||0);
 
   const list=orders||[];
   if(!list.length){
@@ -267,7 +276,7 @@ async function loadBangKe(){
 
   // Load chi_ho
   const ids=list.map(o=>o.id);
-  const{data:chiHoAll}=await db.from('chi_ho').select('*').in('van_don_id',ids).eq('la_tham_chieu',false).order('ngay_chi');
+  const{data:chiHoAll}=await db.from('chi_ho').select('*').in('van_don_id',ids).eq('la_tham_chieu',false).order('ngay_chi',{ascending:true});
   const chiHoMap={};
   (chiHoAll||[]).forEach(ch=>{
     if(!chiHoMap[ch.van_don_id])chiHoMap[ch.van_don_id]=[];
@@ -1017,7 +1026,7 @@ async function loadBaoCao(){
   bc.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải dữ liệu...</div>';
 
   const[{data:orders},{data:chiHoAll}]=await Promise.all([
-    db.from('van_don').select('*').gte('ngay',from).lte('ngay',to).eq('locked',true).order('ngay'),
+    db.from('van_don').select('*').gte('ngay',from).lte('ngay',to).eq('locked',true).order('ngay',{ascending:true}),
     db.from('chi_ho').select('*').gte('ngay_chi',from).lte('ngay_chi',to),
   ]);
   const list=orders||[];
