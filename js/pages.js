@@ -381,20 +381,26 @@ async function loadBangKe(){
   let p2Rows='';
   Object.entries(p2ByCont).forEach(([cont,{items}],i)=>{
     const csht=items.find(c=>c.loai_chi?.includes('CSHT')||c.loai_chi?.includes('Hạ tầng')||c.loai_chi?.includes('Phí CSHT'));
-    const nang=items.find(c=>c.loai_chi?.includes('Nâng hàng')||c.loai_chi?.includes('Nâng vỏ')||c.loai_chi?.includes('Nâng, hạ')||c.loai_chi?.includes('Nâng hạ'));
-    const ha=items.find(c=>c.loai_chi?.includes('Hạ hàng')||c.loai_chi?.includes('Hạ vỏ'));
-    const khac=items.filter(c=>c!==csht&&c!==nang&&c!==ha);
+    // Gộp tất cả nâng/hạ cont vào 1 nhóm (cột 1 nâng/hạ)
+    const nangHa=items.filter(c=>c!==csht&&(
+      c.loai_chi?.includes('Nâng/hạ')||c.loai_chi?.includes('Nâng hàng')||c.loai_chi?.includes('Nâng vỏ')||
+      c.loai_chi?.includes('Hạ hàng')||c.loai_chi?.includes('Hạ vỏ')||
+      c.loai_chi?.includes('Nâng, hạ')||c.loai_chi?.includes('Nâng hạ')
+    ));
+    const khac=items.filter(c=>c!==csht&&!nangHa.includes(c));
     const tongCont=items.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
     const khacTien=khac.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
+    const nangHaTien=nangHa.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
+    const nangHaHD=nangHa.map(c=>c.chung_tu||'').filter(Boolean).join(', ');
     p2Rows+=`<tr>
       <td>${i+1}</td>
       <td style="font-weight:600;font-family:monospace;font-size:11px">${cont}</td>
       <td style="font-size:11px">${csht?fmt(csht.tien_thu_khach||csht.so_tien):'—'}</td>
       <td style="font-size:10px;color:var(--primary)">${csht?.chung_tu||''}</td>
-      <td style="font-size:11px">${nang?fmt(nang.tien_thu_khach||nang.so_tien):'—'}</td>
-      <td style="font-size:10px;color:var(--primary)">${nang?.chung_tu||''}</td>
-      <td style="font-size:11px">${ha?fmt(ha.tien_thu_khach||ha.so_tien):'—'}</td>
-      <td style="font-size:10px;color:var(--primary)">${ha?.chung_tu||''}</td>
+      <td style="font-size:11px">${nangHaTien>0?fmt(nangHaTien):'—'}</td>
+      <td style="font-size:10px;color:var(--primary)">${nangHaHD}</td>
+      <td style="font-size:11px">—</td>
+      <td style="font-size:10px;color:var(--primary)"></td>
       <td style="font-size:11px">${khacTien>0?fmt(khacTien):'—'}</td>
       <td style="font-size:10px;color:var(--text-muted)">${khac.map(c=>c.chung_tu||c.loai_chi).filter(Boolean).join(', ')}</td>
       <td class="text-orange fw6">${fmtM(tongCont)}</td>
@@ -500,8 +506,8 @@ async function loadBangKe(){
           <th rowspan="2">STT</th>
           <th rowspan="2">Số cont</th>
           <th colspan="2" style="text-align:center;background:#fef3c7;color:#92400e">CSHT</th>
-          <th colspan="2" style="text-align:center;background:#dcfce7;color:#166534">Nâng hàng/vỏ</th>
-          <th colspan="2" style="text-align:center;background:#dbeafe;color:#1e40af">Hạ hàng/vỏ</th>
+          <th colspan="2" style="text-align:center;background:#dcfce7;color:#166534">Nâng/hạ cont</th>
+          <th colspan="2" style="text-align:center;background:#dbeafe;color:#1e40af">Nâng/hạ cont (2)</th>
           <th colspan="2" style="text-align:center;background:#f3f4f6">Khác</th>
           <th rowspan="2" style="background:#fff3e6">Tổng</th>
         </tr>
@@ -801,7 +807,7 @@ async function xuatExcelBangKe(){
 
     const h2hStyle=cs({bold:true,sz:9,color:C_WHITE,bg:'548235',align:'center'});
     push(['STT','SỐ CONT',
-      'CSHT','SHĐ','NÂNG HÀNG/VỎ','SHĐ','HẠ HÀNG/VỎ','SHĐ','KHÁC','TỔNG'],
+      'CSHT','SHĐ','NÂNG/HẠ CONT','SHĐ','NÂNG/HẠ CONT (2)','SHĐ','KHÁC','TỔNG'],
       Array(10).fill(h2hStyle));
 
     const p2ByCont={};
@@ -815,18 +821,22 @@ async function xuatExcelBangKe(){
     Object.entries(p2ByCont).forEach(([cont,items],i)=>{
       const bg=i%2===0?C_WHITE:'F2F7EE';
       const csht=items.find(c=>c.loai_chi==='CSHT'||c.loai_chi?.includes('Hạ tầng')||c.loai_chi?.includes('CSHT'));
-      const nang=items.find(c=>c.loai_chi?.startsWith('Nâng'));
-      const ha=items.find(c=>c.loai_chi?.startsWith('Hạ'));
-      const khac=items.filter(c=>c!==csht&&c!==nang&&c!==ha);
+      // Gộp tất cả nâng/hạ cont vào cột 1, cột 2 để trống
+      const nangHa=items.filter(c=>c!==csht&&(
+        c.loai_chi?.includes('Nâng/hạ')||c.loai_chi?.startsWith('Nâng')||c.loai_chi?.startsWith('Hạ')
+      ));
+      const khac=items.filter(c=>c!==csht&&!nangHa.includes(c));
+      const nangHaTien=nangHa.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
+      const nangHaHD=nangHa.map(c=>c.chung_tu||'').filter(Boolean).join(', ');
       const tongCont=items.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
       push([
         i+1, cont,
         csht?+(csht.tien_thu_khach||csht.so_tien)||0:'',
         csht?.chung_tu||'',
-        nang?+(nang.tien_thu_khach||nang.so_tien)||0:'',
-        nang?.chung_tu||'',
-        ha?+(ha.tien_thu_khach||ha.so_tien)||0:'',
-        ha?.chung_tu||'',
+        nangHaTien||'',
+        nangHaHD,
+        '',  // cột NÂNG/HẠ CONT (2) — để trống, chỉ giữ cấu trúc bảng
+        '',
         khac.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)||'',
         tongCont,
       ],[
