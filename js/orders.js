@@ -61,16 +61,16 @@ async function pgOrders(c){
   </div>
   <div class="tbl-wrap"><table class="tbl">
     <colgroup>
-      <col style="width:140px"><col style="width:75px"><col style="width:55px"><col style="width:110px">
-      <col style="width:115px"><col style="width:95px"><col style="width:70px"><col style="width:100px">
-      <col style="width:95px">${_canM?'<col style="width:100px"><col style="width:95px">':''}
-      <col style="width:115px"><col style="width:95px">
+      <col style="width:140px"><col style="width:75px"><col style="width:115px"><col style="width:110px">
+      <col style="width:55px"><col style="width:100px"><col style="width:90px"><col style="width:60px">
+      <col style="width:85px"><col style="width:100px"><col style="width:95px">${_canM?'<col style="width:95px"><col style="width:90px">':''}
+      <col style="width:110px">
     </colgroup>
     <thead><tr>
-      <th>Mã đơn</th><th>Ngày</th><th>Loại</th><th>Bill / Booking</th>
-      <th>Khách hàng</th><th>Hành trình</th><th>Cont</th><th>Biển số</th>
-      <th>Lái xe</th>${_canM?'<th>Cước KH</th><th>Cước thầu</th>':''}
-      <th>Trạng thái</th><th>Thu khách</th>
+      <th>Mã đơn</th><th>Ngày</th><th>Khách hàng</th><th>Bill / Booking</th>
+      <th>Loại</th><th>Hành trình</th><th>Số Cont</th><th>Loại C.</th>
+      <th>Loại chuyến</th><th>Biển số</th><th>Thầu phụ</th>${_canM?'<th>Cước KH</th><th>Cước thầu</th>':''}
+      <th>Trạng thái</th>
     </tr></thead>
     <tbody id="orders-tbody">${_buildRows(pageList)}</tbody>
   </table></div>
@@ -81,14 +81,25 @@ async function pgOrders(c){
 }
 function _buildRows(list){
   if(!list||list.length===0)return'<tr><td colspan="20"><div class="empty"><i class="ti ti-inbox"></i>Chưa có dữ liệu</div></td></tr>';
+  const lcTag=lc=>!lc?'—':{
+    'Thường':'<span class="tag" style="background:#f0fdf4;color:#166534">Thường</span>',
+    'Kết hợp':'<span class="tag" style="background:#eff6ff;color:#1d4ed8">Kết hợp</span>',
+    'Kẹp ghép':'<span class="tag" style="background:#fef9c3;color:#854d0e">Kẹp ghép</span>',
+  }[lc]||lc;
   return list.map(o=>`<tr onclick="openDetail('${o.id}')" class="${SEL===o.id?'selected':''} ${o.locked?'locked':''}">
     <td><span style="color:var(--teal);font-weight:600">${o.ma_don}</span>${o.locked?'<i class="ti ti-lock" style="color:var(--success);font-size:10px;margin-left:3px"></i>':''}</td>
-    <td>${fmtDate(o.ngay)}</td><td>${loaiTag(o.loai_hang)}</td>
-    <td style="color:var(--primary);font-weight:500" title="${o.so_bill||o.so_booking||''}">${o.so_bill||o.so_booking||'-'}</td>
-    <td>${o.ten_khach}</td><td title="${o.hanh_trinh||''}">${o.hanh_trinh||'-'}</td>
-    <td>${o.so_cont||'—'}</td><td>${o.bien_kiem_soat||'—'}</td><td>${o.ten_lai_xe||'—'}</td>
+    <td>${fmtDate(o.ngay)}</td>
+    <td title="${o.ten_khach}">${o.ten_khach}</td>
+    <td style="color:var(--primary);font-weight:500" title="${o.so_bill||o.so_booking||''}">${o.so_bill||o.so_booking||'—'}</td>
+    <td>${loaiTag(o.loai_hang)}</td>
+    <td title="${o.hanh_trinh||''}">${o.hanh_trinh||'—'}</td>
+    <td title="${o.so_cont||''}">${o.so_cont||'—'}</td>
+    <td style="font-size:11px">${o.loai_cont||o.loai_xe_hang||'—'}</td>
+    <td>${lcTag(o.loai_chuyen)}</td>
+    <td>${o.bien_kiem_soat||'—'}</td>
+    <td style="font-size:11px;color:var(--text-muted)">${o.ma_thau_phu||'—'}</td>
     ${_canM?`<td class="text-blue fw6">${o.gia_cuoc_khach>0?fmt(o.gia_cuoc_khach):'—'}</td><td class="text-red">${o.gia_cuoc_thau>0?fmt(o.gia_cuoc_thau):'—'}</td>`:''}
-    <td>${ttTag(o.trang_thai)}</td><td>${thuTag(o.thanh_toan_khach)}</td>
+    <td>${ttTag(o.trang_thai)}</td>
   </tr>`).join('');
 }
 function _buildPagBtns(cur,total){
@@ -396,7 +407,21 @@ function renderTabCuoc(o,chiHoList,editable,loi){
   const traThauDL=(+o.tra_thau_doi_lenh||0);
   const thucTraThau=(+o.gia_cuoc_thau||0)+totalTraThau+traThauDL-(isThauThueLai?totalTraLX:0);
   const coThau=!!o.ma_thau_phu;
+  const lcBg2={'Thường':'#f0fdf4','Kết hợp':'#eff6ff','Kẹp ghép':'#fef9c3'};
+  const lcColor2={'Thường':'#166534','Kết hợp':'#1d4ed8','Kẹp ghép':'#854d0e'};
   return`${lockBar}
+  <div style="background:linear-gradient(135deg,#1a2f38 0%,#2d4a55 100%);border-radius:var(--r);padding:12px 14px;margin-bottom:12px;color:#fff">
+    <div style="font-size:10px;font-weight:600;opacity:.5;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Thông tin chuyến</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px">
+      <div><div style="font-size:10px;opacity:.55">Khách hàng</div><div style="font-size:12.5px;font-weight:600;margin-top:2px">${o.ten_khach||'—'}</div></div>
+      <div><div style="font-size:10px;opacity:.55">Bill / Booking</div><div style="font-size:12.5px;font-weight:600;color:var(--primary);margin-top:2px">${o.so_bill||o.so_booking||'—'}</div></div>
+      <div><div style="font-size:10px;opacity:.55">Số Cont</div><div style="font-size:12.5px;font-weight:600;margin-top:2px">${o.so_cont||'—'}</div></div>
+      <div><div style="font-size:10px;opacity:.55">Loại Cont / Xe</div><div style="font-size:12.5px;font-weight:600;margin-top:2px">${o.loai_cont||o.loai_xe_hang||'—'}</div></div>
+      <div><div style="font-size:10px;opacity:.55">Loại chuyến</div><div style="margin-top:4px">${o.loai_chuyen?`<span style="background:${lcBg2[o.loai_chuyen]||'rgba(255,255,255,.15)'};color:${lcColor2[o.loai_chuyen]||'#fff'};border-radius:4px;padding:2px 9px;font-size:11px;font-weight:600">${o.loai_chuyen}</span>`:'<span style="opacity:.4;font-size:12px">—</span>'}</div></div>
+      <div><div style="font-size:10px;opacity:.55">Biển số xe</div><div style="font-size:12.5px;font-weight:600;margin-top:2px">${o.bien_kiem_soat||'—'}</div></div>
+      ${o.ma_thau_phu?`<div style="grid-column:span 2;border-top:1px solid rgba(255,255,255,.1);padding-top:6px;margin-top:2px"><div style="font-size:10px;opacity:.55">Thầu phụ</div><div style="font-size:12.5px;font-weight:600;color:#fbbf24;margin-top:2px">${o.ma_thau_phu}</div></div>`:''}
+    </div>
+  </div>
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-coins"></i>Cước & Thu khách</div>
     <div class="form-grid">
