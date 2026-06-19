@@ -1064,12 +1064,15 @@ async function loadBaoCao(){
   });
   const khArr=Object.entries(khMap).sort((a,b)=>b[1].cuoc-a[1].cuoc);
 
-  // Group đầu xe
+  // Group đầu xe — chỉ tính xe có trong danh mục "Phương tiện & Lái xe"
+  const xeBienSet=new Set((XE||[]).map(x=>x.bien_so));
   const xeMap={};
   list.forEach(o=>{
     const k=o.bien_kiem_soat||'Không có biển';
-    if(!xeMap[k])xeMap[k]={cuoc:0,so:0,kh:0,thuong:0,thau:o.ma_thau_phu||''};
+    if(!xeBienSet.has(k))return; // bỏ qua biển số không có trong danh mục
+    if(!xeMap[k])xeMap[k]={cuoc:0,cuocKH:0,so:0,kh:0,thuong:0,thau:o.ma_thau_phu||''};
     xeMap[k].cuoc+=+o.gia_cuoc_thau||0;
+    xeMap[k].cuocKH+=+o.gia_cuoc_khach||0;
     xeMap[k].so++;
     if(o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép')xeMap[k].kh++;
     else xeMap[k].thuong++;
@@ -1218,8 +1221,8 @@ async function loadBaoCao(){
       Chi tiết theo đầu xe
     </div>
     <table class="tbl">
-      <colgroup><col style="width:110px"><col style="width:130px"><col style="width:60px"><col style="width:110px"><col style="width:110px"><col style="width:70px"><col style="width:70px"><col style="width:80px"></colgroup>
-      <thead><tr><th>Biển số</th><th>Thầu phụ</th><th>Chuyến</th><th>Cước thầu</th><th>TB/chuyến</th><th>Thường</th><th>KH/KG</th><th>Tỉ lệ KH</th></tr></thead>
+      <colgroup><col style="width:110px"><col style="width:130px"><col style="width:60px"><col style="width:100px"><col style="width:100px"><col style="width:100px"><col style="width:70px"><col style="width:70px"><col style="width:80px"></colgroup>
+      <thead><tr><th>Biển số</th><th>Thầu phụ</th><th>Chuyến</th><th>Cước khách</th><th>Cước thầu</th><th>TB/chuyến</th><th>Thường</th><th>KH/KG</th><th>Tỉ lệ KH</th></tr></thead>
       <tbody>
       ${xeArr.map(([k,v])=>{
         const tl=v.so>0?Math.round(v.kh/v.so*100):0;
@@ -1229,6 +1232,7 @@ async function loadBaoCao(){
           <td class="text-blue fw6">${k}</td>
           <td style="font-size:11px">${v.thau||'—'}</td>
           <td class="fw6">${v.so}</td>
+          <td class="text-blue fw6">${fmt(Math.round(v.cuocKH/1e6))}tr</td>
           <td class="text-red fw6">${fmt(Math.round(v.cuoc/1e6))}tr</td>
           <td>${fmt(Math.round(tb/1e3))}k</td>
           <td>${v.thuong}</td>
@@ -1236,15 +1240,24 @@ async function loadBaoCao(){
           <td><span style="font-weight:700;color:${mau}">${tl}%</span></td>
         </tr>`;
       }).join('')}
-      <tr style="background:#f5f9fb;font-weight:600">
+      ${(()=>{
+        const tongSo=xeArr.reduce((s,[,v])=>s+v.so,0);
+        const tongCuocKHXe=xeArr.reduce((s,[,v])=>s+v.cuocKH,0);
+        const tongCuocThauXe=xeArr.reduce((s,[,v])=>s+v.cuoc,0);
+        const tongThuongXe=xeArr.reduce((s,[,v])=>s+v.thuong,0);
+        const tongKHXe=xeArr.reduce((s,[,v])=>s+v.kh,0);
+        const tiLeKHXe=tongSo>0?Math.round(tongKHXe/tongSo*100):0;
+        return`<tr style="background:#f5f9fb;font-weight:600">
         <td colspan="2">Tổng cộng</td>
-        <td>${list.length}</td>
-        <td class="text-red">${fmt(Math.round(tongCuocThau/1e6))}tr</td>
-        <td>${fmt(Math.round(tongCuocThau/list.length/1e3))}k</td>
-        <td>${list.length-tongKH}</td>
-        <td style="color:var(--success)">${tongKH}</td>
-        <td style="color:${tiLeKH>=50?'var(--success)':tiLeKH>=30?'var(--warning)':'var(--danger)'};font-weight:700">${tiLeKH}%</td>
-      </tr>
+        <td>${tongSo}</td>
+        <td class="text-blue">${fmt(Math.round(tongCuocKHXe/1e6))}tr</td>
+        <td class="text-red">${fmt(Math.round(tongCuocThauXe/1e6))}tr</td>
+        <td>${tongSo>0?fmt(Math.round(tongCuocThauXe/tongSo/1e3)):0}k</td>
+        <td>${tongThuongXe}</td>
+        <td style="color:var(--success)">${tongKHXe}</td>
+        <td style="color:${tiLeKHXe>=50?'var(--success)':tiLeKHXe>=30?'var(--warning)':'var(--danger)'};font-weight:700">${tiLeKHXe}%</td>
+      </tr>`;
+      })()}
       </tbody>
     </table>
   </div>`;
