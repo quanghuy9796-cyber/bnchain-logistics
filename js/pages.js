@@ -1049,9 +1049,12 @@ async function loadBaoCao(){
   const tongCuocKH=list.reduce((s,o)=>s+(+o.gia_cuoc_khach||0),0);
   const tongCuocThau=list.reduce((s,o)=>s+(+o.gia_cuoc_thau||0),0);
   const tongCH=chiHo.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
+  const tongCHTraThau=chiHo.reduce((s,c)=>s+(+c.tien_tra_thau||0),0);
+  const tongTraDoiLenhThau=list.reduce((s,o)=>s+(+o.tra_thau_doi_lenh||0),0);
+  const tongTraThauThuc=tongCuocThau+tongCHTraThau+tongTraDoiLenhThau;
   const tongDV=list.reduce((s,o)=>s+(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0),0);
   const tongThu=tongCuocKH+tongCH+tongDV;
-  const loiNhuan=tongThu-tongCuocThau;
+  const loiNhuan=tongThu-tongTraThauThuc;
   const tongKH=list.filter(o=>o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép').length;
   const tiLeKH=list.length?Math.round(tongKH/list.length*100):0;
 
@@ -1146,8 +1149,8 @@ async function loadBaoCao(){
     </div>
     <div class="stat-card">
       <div class="stat-lbl">Tổng trả thầu</div>
-      <div class="stat-val text-red">${fmt(Math.round(tongCuocThau/1e6))}tr</div>
-      <div class="stat-sub">${xeArr.length} đầu xe · ${list.length} chuyến</div>
+      <div class="stat-val text-red">${fmt(Math.round(tongTraThauThuc/1e6))}tr</div>
+      <div class="stat-sub">Cước thầu ${fmt(Math.round(tongCuocThau/1e6))}tr + Chi hộ ${fmt(Math.round(tongCHTraThau/1e6))}tr + DV ${fmt(Math.round(tongTraDoiLenhThau/1e6))}tr</div>
     </div>
     <div class="stat-card">
       <div class="stat-lbl">Lợi nhuận gộp</div>
