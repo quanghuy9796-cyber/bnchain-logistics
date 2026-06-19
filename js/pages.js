@@ -1048,8 +1048,8 @@ async function loadBaoCao(){
   // ── TÍNH TOÁN ──
   const tongCuocKH=list.reduce((s,o)=>s+(+o.gia_cuoc_khach||0),0);
   const tongCuocThau=list.reduce((s,o)=>s+(+o.gia_cuoc_thau||0),0);
-  const tongCH=chiHo.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
-  const tongCHTraThau=chiHo.reduce((s,c)=>s+(+c.tien_tra_thau||0),0);
+  const tongCH=chiHo.filter(c=>!c.hoa_don_khach).reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
+  const tongCHTraThau=chiHo.filter(c=>!c.hoa_don_khach).reduce((s,c)=>s+(+c.tien_tra_thau||0),0);
   const tongTraDoiLenhThau=list.reduce((s,o)=>s+(+o.tra_thau_doi_lenh||0),0);
   const tongTraThauThuc=tongCuocThau+tongCHTraThau+tongTraDoiLenhThau;
   const tongDV=list.reduce((s,o)=>s+(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0),0);
