@@ -424,6 +424,7 @@ function renderTabCuoc(o,chiHoList,editable,loi){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px">
       <div><div style="font-size:10px;opacity:.55">Khách hàng</div><div style="font-size:12.5px;font-weight:600;margin-top:2px">${o.ten_khach||'—'}</div></div>
       <div><div style="font-size:10px;opacity:.55">Bill / Booking</div><div style="font-size:12.5px;font-weight:600;color:var(--primary);margin-top:2px">${o.so_bill||o.so_booking||'—'}</div></div>
+      <div style="grid-column:span 2"><div style="font-size:10px;opacity:.55">Hành trình</div><div style="font-size:12.5px;font-weight:600;margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span>${o.diem_lay||'—'}</span><i class="ti ti-arrow-right" style="font-size:12px;opacity:.5"></i><span>${o.diem_tra||'—'}</span></div></div>
       <div><div style="font-size:10px;opacity:.55">Số Cont</div><div style="font-size:12.5px;font-weight:600;margin-top:2px">${o.so_cont||'—'}</div></div>
       <div><div style="font-size:10px;opacity:.55">Loại Cont / Xe</div><div style="font-size:12.5px;font-weight:600;margin-top:2px">${o.loai_cont||o.loai_xe_hang||'—'}</div></div>
       <div><div style="font-size:10px;opacity:.55">Loại chuyến</div><div style="margin-top:4px">${o.loai_chuyen?`<span style="background:${lcBg2[o.loai_chuyen]||'rgba(255,255,255,.15)'};color:${lcColor2[o.loai_chuyen]||'#fff'};border-radius:4px;padding:2px 9px;font-size:11px;font-weight:600">${o.loai_chuyen}</span>`:'<span style="opacity:.4;font-size:12px">—</span>'}</div></div>
@@ -498,7 +499,14 @@ function renderTabCuoc(o,chiHoList,editable,loi){
         <input type="text" id="fc-dvdl" value="${o.don_vi_doi_lenh||''}"
           placeholder="Tên đơn vị làm đổi lệnh"
           ${!editable?'disabled':''}></div>
-    </div>`:`
+    </div>
+    ${totalTraThau>0?`
+    <div style="background:var(--bg);border-radius:var(--r);padding:10px 12px;font-size:12px;margin-top:8px">
+      <div style="display:flex;justify-content:space-between;padding:3px 0">
+        <span>Chi hộ phát sinh trả thầu (${chiHoList.filter(c=>!c.la_tham_chieu&&(+c.tien_tra_thau||0)>0).length} khoản)</span>
+        <span class="text-orange fw6">${fmtM(totalTraThau)}</span>
+      </div>
+    </div>`:''}`:`
     <div style="background:var(--teal-light);border-radius:var(--r);padding:8px 12px;font-size:12px;color:var(--teal)">
       <i class="ti ti-info-circle"></i> 
       ${o.la_xe_noi_bo?'Xe nội bộ — tính lương theo chuyến (xây dựng sau)':'Chưa có thầu phụ — điền biển số ở Tab Xe & Cont để tự động nhận diện'}
