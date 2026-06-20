@@ -100,7 +100,7 @@ async function doLogin(){
   document.getElementById('login-page').style.display='none';
   document.getElementById('app-page').style.display='flex';
   document.getElementById('u-name').textContent=data.ho_ten;
-  const rMap={nhan_vien:'Nhân viên',quan_ly:'Quản lý',ke_toan:'Kế toán',ceo:'CEO',ops_hp:'OPS Hải Phòng'};
+  const rMap={nhan_vien:'Nhân viên',quan_ly:'Quản lý',ke_toan:'Kế toán',ceo:'CEO',ops_hp:'OPS Hải Phòng',thu_quy:'Thủ quỹ'};
   document.getElementById('u-role').textContent=rMap[data.vai_tro];
   document.getElementById('role-pill').textContent=rMap[data.vai_tro];
   document.getElementById('today-lbl').textContent=new Date().toLocaleDateString('vi-VN',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'});
@@ -139,13 +139,13 @@ function nav(p,el){
   document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
   el.classList.add('active');PAGE=p;SEL=null;
   document.getElementById('dp').style.display='none';
-  const T={orders:'Quản lý vận đơn',dieuvan:'Bảng điều vận',chiho:'Chi hộ / Phát sinh',hoadon:'Upload & Xử lý Hóa Đơn',congno:'Công nợ',bangke:'Bảng kê thu khách',traphau:'Trả thầu phụ',baocao:'Báo cáo tháng',kh:'Khách hàng',laixe:'Lái xe',thauphu:'Thầu phụ',xe:'Quản lý xe',nv:'Nhân viên',diadiem:'Điểm & Cung đường'};
+  const T={orders:'Quản lý vận đơn',dieuvan:'Bảng điều vận',chiho:'Chi hộ / Phát sinh',hoadon:'Upload & Xử lý Hóa Đơn',congno:'Công nợ',bangke:'Bảng kê thu khách',traphau:'Trả thầu phụ',baocao:'Báo cáo tháng',kh:'Khách hàng',laixe:'Lái xe',thauphu:'Thầu phụ',xe:'Quản lý xe',nv:'Nhân viên',diadiem:'Điểm & Cung đường',chiphi:'Chi phí',khodau:'Kho dầu',taisan:'Tài sản cố định'};
   document.getElementById('page-title').textContent=T[p]||p;
   renderPage();
 }
 function renderPage(){
   const c=document.getElementById('content');
-  const P={orders:pgOrders,dieuvan:pgDieuVan,chiho:pgChiHo,hoadon:pgHoaDon,congno:pgCongNo,bangke:pgBangKe,traphau:pgTraThau,baocao:pgBaoCao,kh:pgKH,laixe:pgLaiXe,thauphu:pgThauPhu,xe:pgXe,nv:pgNV,diadiem:pgDiaDiem};
+  const P={orders:pgOrders,dieuvan:pgDieuVan,chiho:pgChiHo,hoadon:pgHoaDon,congno:pgCongNo,bangke:pgBangKe,traphau:pgTraThau,baocao:pgBaoCao,kh:pgKH,laixe:pgLaiXe,thauphu:pgThauPhu,xe:pgXe,nv:pgNV,diadiem:pgDiaDiem,chiphi:pgChiPhi,khodau:pgKhoDau,taisan:pgTaiSan};
   if(P[PAGE])P[PAGE](c); else c.innerHTML='<div class="empty"><i class="ti ti-tools"></i>Đang xây dựng...</div>';
 }
 
