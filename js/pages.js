@@ -962,8 +962,26 @@ async function xuatExcelBangKe(){
 async function pgTraThau(c){
   if(!canSee(['ke_toan','ceo','thu_quy'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
-  const{data}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,hanh_trinh,ten_lai_xe,gia_cuoc_thau,thanh_toan_thau,ma_thau_phu,so_cont,locked').neq('thanh_toan_thau','Đã trả').gt('gia_cuoc_thau',0).order('ngay',{ascending:false}).limit(500);
+  const{data}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,hanh_trinh,ten_lai_xe,gia_cuoc_thau,thanh_toan_thau,ma_thau_phu,so_cont,locked,loai_phan_loai_xe,tra_thau_doi_lenh').neq('thanh_toan_thau','Đã trả').gt('gia_cuoc_thau',0).order('ngay',{ascending:false}).limit(500);
   const list=data||[];
+  // Chi hộ trả thầu phát sinh (nhập qua tab Chi hộ của đơn) — PHẢI cộng vào số phải trả thầu,
+  // bất kể được nhập trước hay sau khi đơn có biển số/thầu phụ (join theo van_don_id, không snapshot)
+  let chiHoMap={};
+  if(list.length){
+    const{data:chiHoRows}=await db.from('chi_ho').select('van_don_id,tien_tra_thau,tien_tra_laixe').in('van_don_id',list.map(o=>o.id));
+    (chiHoRows||[]).forEach(r=>{
+      if(!chiHoMap[r.van_don_id])chiHoMap[r.van_don_id]={traThau:0,traLX:0};
+      chiHoMap[r.van_don_id].traThau+=(+r.tien_tra_thau||0);
+      chiHoMap[r.van_don_id].traLX+=(+r.tien_tra_laixe||0);
+    });
+  }
+  list.forEach(o=>{
+    const ch0=chiHoMap[o.id]||{traThau:0,traLX:0};
+    o._traThauThem=ch0.traThau;
+    o._traLX=ch0.traLX;
+    o._traDL=+o.tra_thau_doi_lenh||0;
+    o._thucTra=(+o.gia_cuoc_thau||0)+o._traThauThem+o._traDL-(o.loai_phan_loai_xe==='thau_thue_lai'?o._traLX:0);
+  });
   // Chi hộ chưa thu hồi (Dầu, Sửa xe, Trả nợ thầu...) — module Chi phí. Bọc try/catch vì bảng có thể chưa tồn tại nếu chưa chạy migration.
   let chiPhiCH=[],dauXuatCH=[];
   try{
@@ -992,7 +1010,7 @@ async function pgTraThau(c){
     chThau[k].tong+=(+o.thanh_tien||0);
     chThau[k].items.push({id:o.id,nguon:'dau_xuat',label:`Dầu ${o.so_lit} lít`,tien:+o.thanh_tien||0,ngay:o.ngay_do});
   });
-  const tongAll=list.reduce((s,o)=>s+(+o.gia_cuoc_thau||0),0);
+  const tongAll=list.reduce((s,o)=>s+o._thucTra,0);
   c.innerHTML=`
   <div class="stats-row stats-3" style="margin-bottom:14px">
     <div class="stat-card"><div class="stat-lbl">Tổng phải trả thầu</div><div class="stat-val text-red">${fmt(Math.round(tongAll/1e6))}tr</div></div>
@@ -1000,7 +1018,7 @@ async function pgTraThau(c){
     <div class="stat-card"><div class="stat-lbl">Số nhà thầu</div><div class="stat-val">${Object.keys(groups).length}</div></div>
   </div>
   ${Object.entries(groups).map(([tp,items])=>{
-    const tong=items.reduce((s,o)=>s+(+o.gia_cuoc_thau||0),0);
+    const tong=items.reduce((s,o)=>s+o._thucTra,0);
     const ch=chThau[tp];
     const conPhaiTra=tong-(ch?.tong||0);
     return`<div class="bk-group">
@@ -1013,7 +1031,7 @@ async function pgTraThau(c){
       <tbody>${items.map(o=>`<tr>
         <td style="color:var(--teal);font-weight:600">${o.ma_don}</td><td>${o.ngay}</td>
         <td>${o.ten_khach}</td><td>${o.hanh_trinh||'—'}</td><td>${o.ten_lai_xe||'—'}</td>
-        <td class="text-red fw6">${fmtM(o.gia_cuoc_thau)}</td>
+        <td class="text-red fw6">${fmtM(o._thucTra)}${(o._traThauThem>0||o._traDL>0||(o.loai_phan_loai_xe==='thau_thue_lai'&&o._traLX>0))?`<div style="font-size:10px;color:var(--text-muted);font-weight:400">Cước ${fmtM(o.gia_cuoc_thau)}${o._traThauThem>0?' + Chi hộ '+fmtM(o._traThauThem):''}${o._traDL>0?' + Đổi lệnh '+fmtM(o._traDL):''}${(o.loai_phan_loai_xe==='thau_thue_lai'&&o._traLX>0)?' − Lương LX '+fmtM(o._traLX):''}</div>`:''}</td>
         <td>${thuTag(o.thanh_toan_thau)}</td>
       </tr>`).join('')}</tbody>
     </table>
