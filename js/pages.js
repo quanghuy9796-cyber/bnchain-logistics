@@ -5,7 +5,7 @@
 async function pgDieuVan(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   const isNV=CU?.vai_tro==='nhan_vien';
-  const canM=canSee(['ke_toan','ceo']);
+  const canM=canSee(['ke_toan','ceo','thu_quy']);
 
   // Query 1: đơn chưa hoàn thành (tất cả role)
   let q1=db.from('van_don').select('id,ma_don,ngay,trang_thai,ten_khach,loai_hang,so_bill,so_booking,so_cont,loai_cont,bien_kiem_soat,ten_lai_xe,hanh_trinh,ngay_yeu_cau,created_by,locked,gia_cuoc_khach')
@@ -124,7 +124,7 @@ async function pgDieuVan(c){
 
 // ==================== CHI HO ====================
 async function pgChiHo(c){
-  if(!canSee(['quan_ly','ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền xem</div>';return;}
+  if(!canSee(['quan_ly','ke_toan','ceo','thu_quy'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền xem</div>';return;}
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   const{data}=await db.from('chi_ho').select('*').eq('la_tham_chieu',false).order('ngay_chi',{ascending:false}).limit(300);
   const list=data||[];
@@ -157,7 +157,7 @@ async function pgChiHo(c){
 
 // ==================== CÔNG NỢ ====================
 async function pgCongNo(c){
-  if(!canSee(['ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Chỉ Kế toán và CEO có quyền xem</div>';return;}
+  if(!canSee(['ke_toan','ceo','thu_quy'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Chỉ Kế toán, Thủ quỹ và CEO có quyền xem</div>';return;}
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   const{data}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_hang,so_cont,so_bill,so_booking,gia_cuoc_khach,trang_thai,locked,hanh_trinh').eq('locked',true).order('ngay',{ascending:false}).limit(1000);
   const list=data||[];
@@ -197,7 +197,7 @@ async function pgCongNo(c){
 
 // ==================== BẢNG KÊ ====================
 async function pgBangKe(c){
-  if(!canSee(['ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
+  if(!canSee(['ke_toan','ceo','thu_quy'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
   if(!KH||!KH.length){
     const{data}=await db.from('khach_hang').select('*').eq('active',true).order('ten_cong_ty',{ascending:true});
     KH=data||[];
@@ -960,16 +960,37 @@ async function xuatExcelBangKe(){
 
 // ============ AI SCAN HÓA ĐƠN ============
 async function pgTraThau(c){
-  if(!canSee(['ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
+  if(!canSee(['ke_toan','ceo','thu_quy'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   const{data}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,hanh_trinh,ten_lai_xe,gia_cuoc_thau,thanh_toan_thau,ma_thau_phu,so_cont,locked').neq('thanh_toan_thau','Đã trả').gt('gia_cuoc_thau',0).order('ngay',{ascending:false}).limit(500);
   const list=data||[];
+  // Chi hộ chưa thu hồi (Dầu, Sửa xe, Trả nợ thầu...) — module Chi phí. Bọc try/catch vì bảng có thể chưa tồn tại nếu chưa chạy migration.
+  let chiPhiCH=[],dauXuatCH=[];
+  try{
+    const[r1,r2]=await Promise.all([
+      db.from('chi_phi').select('id,ma_thau_phu,loai_chi_phi,so_tien,ngay').eq('can_kiem_soat',true).eq('trang_thai_thu_hoi','chua_thu_hoi').not('ma_thau_phu','is',null),
+      db.from('dau_xuat').select('id,ma_thau_phu,so_lit,thanh_tien,ngay_do').eq('trang_thai_thu_hoi','chua_thu_hoi').not('ma_thau_phu','is',null),
+    ]);
+    chiPhiCH=r1.data||[];dauXuatCH=r2.data||[];
+  }catch(err){console.warn('[pgTraThau] chưa có bảng chi_phi/dau_xuat — chạy migration trước:',err.message);}
   // Group theo thầu phụ
   const groups={};
   list.forEach(o=>{
     const k=o.ma_thau_phu||'Khác';
     if(!groups[k])groups[k]=[];
     groups[k].push(o);
+  });
+  // Group chi hộ chưa thu hồi theo thầu phụ
+  const chThau={};
+  chiPhiCH.forEach(o=>{
+    const k=o.ma_thau_phu;if(!chThau[k])chThau[k]={tong:0,items:[]};
+    chThau[k].tong+=(+o.so_tien||0);
+    chThau[k].items.push({id:o.id,nguon:'chi_phi',label:o.loai_chi_phi,tien:+o.so_tien||0,ngay:o.ngay});
+  });
+  dauXuatCH.forEach(o=>{
+    const k=o.ma_thau_phu;if(!chThau[k])chThau[k]={tong:0,items:[]};
+    chThau[k].tong+=(+o.thanh_tien||0);
+    chThau[k].items.push({id:o.id,nguon:'dau_xuat',label:`Dầu ${o.so_lit} lít`,tien:+o.thanh_tien||0,ngay:o.ngay_do});
   });
   const tongAll=list.reduce((s,o)=>s+(+o.gia_cuoc_thau||0),0);
   c.innerHTML=`
@@ -980,6 +1001,8 @@ async function pgTraThau(c){
   </div>
   ${Object.entries(groups).map(([tp,items])=>{
     const tong=items.reduce((s,o)=>s+(+o.gia_cuoc_thau||0),0);
+    const ch=chThau[tp];
+    const conPhaiTra=tong-(ch?.tong||0);
     return`<div class="bk-group">
     <div class="bk-group-header">
       <div class="bk-group-title">${tp}</div>
@@ -994,14 +1017,39 @@ async function pgTraThau(c){
         <td>${thuTag(o.thanh_toan_thau)}</td>
       </tr>`).join('')}</tbody>
     </table>
-    <div class="bk-total-row"><span>Tổng trả ${tp}</span><span style="color:var(--danger)">${fmtM(tong)}</span></div>
+    ${ch?`<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:10px 12px;margin-top:8px">
+      <div style="font-size:11px;font-weight:600;color:#92400e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px"><i class="ti ti-receipt-2"></i> Chi hộ chưa thu hồi (Dầu / Sửa xe / Trả nợ — module Chi phí)</div>
+      ${ch.items.map(it=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+        <span>${it.label} · ${it.ngay||'—'}</span><span class="text-orange fw6">${fmtM(it.tien)}</span>
+      </div>`).join('')}
+      <div style="display:flex;justify-content:space-between;border-top:1px dashed #fde68a;margin-top:6px;padding-top:6px;font-size:12px;font-weight:700">
+        <span>Tổng chi hộ chưa thu hồi</span><span class="text-orange">${fmtM(ch.tong)}</span>
+      </div>
+      ${canSee(['ke_toan','ceo'])?`<button class="btn btn-xs btn-teal" style="margin-top:8px" onclick='xacNhanThuHoiThau(${JSON.stringify(tp)},${JSON.stringify(ch.items)})'><i class="ti ti-check"></i> Đánh dấu đã thu hồi</button>`:''}
+    </div>`:''}
+    <div class="bk-total-row"><span>${ch?'Còn phải trả (đã trừ chi hộ)':'Tổng trả'} ${tp}</span><span style="color:var(--danger)">${fmtM(conPhaiTra)}</span></div>
     </div>`;
   }).join('')}`;
 }
 
+// Đánh dấu các khoản chi hộ (chi_phi + dau_xuat) của 1 thầu phụ là đã thu hồi (đã trừ vào kỳ trả thầu này)
+async function xacNhanThuHoiThau(tenThau,items){
+  if(!canSee(['ke_toan','ceo'])){toast('Không có quyền thực hiện','error');return;}
+  if(!confirm(`Xác nhận đã trừ ${items.length} khoản chi hộ vào kỳ trả thầu "${tenThau}"?`))return;
+  const ky=today().slice(0,7);
+  const idsChiPhi=items.filter(i=>i.nguon==='chi_phi').map(i=>i.id);
+  const idsDauXuat=items.filter(i=>i.nguon==='dau_xuat').map(i=>i.id);
+  try{
+    if(idsChiPhi.length)await db.from('chi_phi').update({trang_thai_thu_hoi:'da_thu_hoi',thu_hoi_ky:ky}).in('id',idsChiPhi);
+    if(idsDauXuat.length)await db.from('dau_xuat').update({trang_thai_thu_hoi:'da_thu_hoi',thu_hoi_ky:ky}).in('id',idsDauXuat);
+    toast('Đã đánh dấu thu hồi');
+    pgTraThau(document.getElementById('content'));
+  }catch(err){toast('Lỗi: '+err.message,'error');}
+}
+
 // ==================== BÁO CÁO ====================
 async function pgBaoCao(c){
-  if(!canSee(['ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
+  if(!canSee(['ke_toan','ceo','thu_quy'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
   const now=new Date();
   const curM=String(now.getMonth()+1).padStart(2,'0');
   const curY=now.getFullYear();
