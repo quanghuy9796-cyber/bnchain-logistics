@@ -1165,8 +1165,8 @@ function openAddChiHo(vdId,maDon){
   const plXe=o.loai_phan_loai_xe||'';
   const isNoiBo=plXe==='noi_bo';
   const isThauThueLai=plXe==='thau_thue_lai';
-  const coThau=!!o.ma_thau_phu||plXe==='thau_tu_lai'||plXe==='thau_thue_lai';
-  const coLaiXe=isNoiBo||isThauThueLai;
+  const coThau=!isNoiBo;
+  const coLaiXe=isNoiBo||isThauThueLai||!plXe;
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
   bg.innerHTML=`<div class="modal" style="width:460px">
   <div class="modal-head"><h3><i class="ti ti-receipt" style="color:var(--warning)"></i>Thêm chi phí phát sinh</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
@@ -1192,7 +1192,7 @@ function openAddChiHo(vdId,maDon){
       <div style="grid-column:1/-1;border-radius:var(--r);padding:10px 12px;border:1px solid var(--border);background:var(--bg)">
         <div style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
           <i class="ti ti-coins"></i> Số tiền
-          ${isNoiBo?'<span style="background:#ede9fe;color:#7c3aed;border-radius:8px;padding:1px 8px;margin-left:6px;font-size:10px;text-transform:none">🚗 Xe nội bộ — '+o.bien_kiem_soat+'</span>':coThau?'<span style="background:#fef3c7;color:var(--warning);border-radius:8px;padding:1px 8px;margin-left:6px;font-size:10px;text-transform:none">🚛 Xe thầu — '+o.ma_thau_phu+'</span>':'<span style="background:#f1f5f9;color:var(--text-muted);border-radius:8px;padding:1px 8px;margin-left:6px;font-size:10px;text-transform:none">Chưa xếp xe</span>'}
+          ${isNoiBo?'<span style="background:#ede9fe;color:#7c3aed;border-radius:8px;padding:1px 8px;margin-left:6px;font-size:10px;text-transform:none">🚗 Xe nội bộ — '+o.bien_kiem_soat+'</span>':o.ma_thau_phu?'<span style="background:#fef3c7;color:var(--warning);border-radius:8px;padding:1px 8px;margin-left:6px;font-size:10px;text-transform:none">🚛 Xe thầu — '+o.ma_thau_phu+'</span>':'<span style="background:#f1f5f9;color:var(--text-muted);border-radius:8px;padding:1px 8px;margin-left:6px;font-size:10px;text-transform:none">Chưa xếp xe</span>'}
         </div>
         <div class="form-grid">
           <div class="form-group">
@@ -1204,7 +1204,7 @@ function openAddChiHo(vdId,maDon){
           </div>
           ${coThau?`
           <div class="form-group">
-            <label>Trả thầu (VNĐ) <span style="font-size:10px;color:var(--warning)">· ${o.ma_thau_phu||''}</span></label>
+            <label>Trả thầu (VNĐ) <span style="font-size:10px;color:var(--warning)">${o.ma_thau_phu?'· '+o.ma_thau_phu:'· chưa rõ thầu phụ'}</span></label>
             <input type="text" id="ch-trathau" placeholder="0"
               oninput="fmtOnInput(this)"
               style="border-color:var(--warning)">
@@ -1216,7 +1216,7 @@ function openAddChiHo(vdId,maDon){
             <input type="text" id="ch-tralaixe" placeholder="0"
               oninput="fmtOnInput(this)"
               style="border-color:#8b5cf6">
-            <span style="font-size:10px;color:#8b5cf6">${isThauThueLai?'Lương BN Chain trả hộ — trừ vào cước thầu khi quyết toán':'BN Chain trả lái xe chuyến này'}</span>
+            <span style="font-size:10px;color:#8b5cf6">${isThauThueLai?'Lương BN Chain trả hộ — trừ vào cước thầu khi quyết toán':isNoiBo?'BN Chain trả lái xe chuyến này':'Chưa rõ loại xe — điền nếu phát sinh'}</span>
           </div>`:`<input type="hidden" id="ch-tralaixe" value="0">`}
           <div class="form-group">
             <label>Người chi</label>
@@ -1252,8 +1252,10 @@ async function editChiHo(chiHoId, vdId, maDon){
   if(!data)return;
   const o=ORDERS.find(x=>x.id===vdId)||{};
   const plXe=o.loai_phan_loai_xe||'';
-  const coThau=!!o.ma_thau_phu||plXe==='thau_tu_lai'||plXe==='thau_thue_lai';
-  const coLaiXe=plXe==='noi_bo'||plXe==='thau_thue_lai';
+  const isNoiBo=plXe==='noi_bo';
+  const isThauThueLai=plXe==='thau_thue_lai';
+  const coThau=!isNoiBo;
+  const coLaiXe=isNoiBo||isThauThueLai||!plXe;
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
   bg.innerHTML=`<div class="modal" style="width:460px">
   <div class="modal-head"><h3><i class="ti ti-edit" style="color:var(--teal)"></i> Sửa chi phí phát sinh</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
