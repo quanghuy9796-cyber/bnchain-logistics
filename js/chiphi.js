@@ -71,13 +71,14 @@ async function renderGhiNhan(c){
     <button class="btn btn-primary" onclick="openModalChiPhi()"><i class="ti ti-plus"></i> Tạo phiếu chi phí</button>
   </div>
   <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Ngày</th><th>Loại chi phí</th><th>Diễn giải</th><th>Số tiền</th><th>Trạng thái</th><th>Chứng từ</th></tr></thead>
+    <thead><tr><th>Ngày</th><th>Loại chi phí</th><th>Diễn giải</th><th>Thụ hưởng</th><th>Số tiền</th><th>Trạng thái</th><th>Chứng từ</th></tr></thead>
     <tbody>
-    ${list.length===0?`<tr><td colspan="6"><div class="empty"><i class="ti ti-inbox"></i>Chưa có phiếu nào</div></td></tr>`:''}
+    ${list.length===0?`<tr><td colspan="7"><div class="empty"><i class="ti ti-inbox"></i>Chưa có phiếu nào</div></td></tr>`:''}
     ${list.map(o=>`<tr>
       <td>${fmtDate(o.ngay)}</td>
       <td>${o.loai_chi_phi}${o.can_kiem_soat?' <span class="tag" style="background:#FAECE7;color:#712B13;font-size:10px">Kiểm soát</span>':''}</td>
       <td style="font-size:12px">${o.noi_dung||'—'}${o.bien_kiem_soat?` · ${o.bien_kiem_soat}`:''}${o.ma_thau_phu?` · ${tenThauPhu(o.ma_thau_phu)}`:''}</td>
+      <td style="font-size:12px">${o.ten_thu_huong||'—'}${o.so_tk_thu_huong?`<br><span style="color:var(--text-muted)">STK ${o.so_tk_thu_huong}</span>`:''}</td>
       <td class="text-orange fw6">${fmtM(o.so_tien)}</td>
       <td>${cpTrangThaiTag(o.trang_thai)}</td>
       <td><button class="btn btn-xs" onclick="xemChungTuChiPhi('${o.id}')"><i class="ti ti-paperclip"></i></button></td>
@@ -105,6 +106,14 @@ function openModalChiPhi(){
       <div class="form-group"><label>Số tiền *</label><input id="cp-tien" data-money="1" oninput="fmtOnInput(this)" placeholder="0"></div>
       <div id="cp-dynamic" class="form-group full"></div>
       <div class="form-group full"><label>Diễn giải</label><input id="cp-noidung" placeholder="Mô tả ngắn"></div>
+      <div class="form-group full" style="background:var(--bg-soft,#f3f4f6);border-radius:var(--r);padding:10px 12px">
+        <label style="display:block;margin-bottom:6px"><i class="ti ti-building-bank"></i> Tài khoản thụ hưởng</label>
+        <div class="form-grid" style="gap:8px">
+          <div class="form-group"><label style="font-size:11px">Tên người/đơn vị *</label><input id="cp-thu-ten" placeholder="VD: Cây xăng Hoà Phát / Để tiền mặt nếu không chuyển khoản"></div>
+          <div class="form-group"><label style="font-size:11px">Số tài khoản</label><input id="cp-thu-stk" placeholder="VD: 0123456789"></div>
+          <div class="form-group full"><label style="font-size:11px">Ngân hàng</label><input id="cp-thu-nh" placeholder="VD: Vietcombank"></div>
+        </div>
+      </div>
       <div class="form-group full">
         <label>Chứng từ đính kèm <span id="cp-doc-hint" style="font-weight:400;color:var(--text-muted)"></span></label>
         <div id="cp-files-list" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"></div>
@@ -200,9 +209,14 @@ async function saveChiPhi(){
   const ngay=document.getElementById('cp-ngay').value;
   let soTien=parseNum(document.getElementById('cp-tien').value);
   const noiDung=document.getElementById('cp-noidung').value.trim();
+  const tenThuHuong=document.getElementById('cp-thu-ten').value.trim();
+  if(!tenThuHuong){toast('Nhập tên người/đơn vị thụ hưởng (ghi "Tiền mặt" nếu không chuyển khoản)','error');return;}
   const data={
     ma_de_nghi:'CP'+Date.now().toString(36).toUpperCase(),
     ngay,loai_chi_phi:loai,noi_dung:noiDung,
+    ten_thu_huong:tenThuHuong,
+    so_tk_thu_huong:document.getElementById('cp-thu-stk').value.trim()||null,
+    ngan_hang_thu_huong:document.getElementById('cp-thu-nh').value.trim()||null,
     can_kiem_soat:meta?.nhom==='kiem_soat',
     created_by:CU?.id,trang_thai:'cho_duyet',
   };
@@ -292,6 +306,7 @@ async function renderDuyetChiPhi(c){
       <div style="flex:1;min-width:180px">
         <div style="font-weight:600">${o.loai_chi_phi}${o.bien_kiem_soat?` · ${o.bien_kiem_soat}`:''}</div>
         <div style="font-size:12px;color:var(--text-muted)">${o.ma_thau_phu?tenThauPhu(o.ma_thau_phu):(o.ma_khach_hang||'')} · ${fmtM(o.so_tien)} · ${fmtDate(o.ngay)} · ${o.noi_dung||''}</div>
+        <div style="font-size:12px;color:var(--teal);margin-top:2px"><i class="ti ti-building-bank"></i> Thụ hưởng: <strong>${o.ten_thu_huong||'—'}</strong>${o.so_tk_thu_huong?` · STK ${o.so_tk_thu_huong}`:''}${o.ngan_hang_thu_huong?` · ${o.ngan_hang_thu_huong}`:''}</div>
       </div>
       <span class="tag ${o.duyet_ceo_at?'tag-dathu':'tag-cho'}">${o.duyet_ceo_at?'CEO đã duyệt':'Chờ CEO'}</span>
       <span class="tag ${o.duyet_thu_quy_at?'tag-dathu':'tag-cho'}">${o.duyet_thu_quy_at?'Thủ quỹ đã duyệt':'Chờ thủ quỹ'}</span>
