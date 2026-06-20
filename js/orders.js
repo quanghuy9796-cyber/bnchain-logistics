@@ -23,7 +23,7 @@ async function pgOrders(c){
   else{const d3m=new Date();d3m.setMonth(d3m.getMonth()-3);const cutoff=`${d3m.getFullYear()}-${String(d3m.getMonth()+1).padStart(2,'0')}-01`;q=q.gte('ngay',cutoff);}
   const{data}=await q.limit(500);
   ORDERS=data||[];
-  _canM=canSee(['ke_toan','ceo']);
+  _canM=canSee(['ke_toan','ceo','thu_quy']);
   _renderOrdersUI(c);
 }
 
@@ -140,9 +140,10 @@ async function openDetail(id, tab='info'){
 async function renderDP(o){
   const dp=document.getElementById('dp');
   const canM=canSee(['ke_toan','ceo']);
+  const canViewCuoc=canSee(['ke_toan','ceo','thu_quy']); // thủ quỹ chỉ xem Tab Cước để đối chiếu, không sửa
   const isOpsHP=CU?.vai_tro==='ops_hp';
   const editable=isOpsHP?false:canEdit(o)&&(CU?.vai_tro!=='nhan_vien'||o.created_by===CU?.id);
-  const editableCuoc=canM&&!editable?true:editable;
+  const editableCuoc=canM&&!editable?true:editable; // thu_quy không nằm trong canM -> luôn false nếu chưa editable
   // Luôn fetch chi_ho đầy đủ — badge và nội dung tab cần chính xác ngay từ đầu
   const{data:chiHoData}=await db.from('chi_ho').select('*').eq('van_don_id',o.id).order('ngay_chi');
   const chiHoList=chiHoData||[];
@@ -162,13 +163,13 @@ async function renderDP(o){
     <div class="tab ${DP_TAB==='info'?'active':''}" onclick="switchTab('info','${o.id}')"><i class="ti ti-info-circle"></i> Thông tin</div>
     <div class="tab ${DP_TAB==='xe'?'active':''}" onclick="switchTab('xe','${o.id}')"><i class="ti ti-truck"></i> Xe & Cont</div>
     <div class="tab ${DP_TAB==='chiho'?'active':''}" onclick="switchTab('chiho','${o.id}')"><i class="ti ti-receipt"></i> Chi hộ ${chiHoCount?`<span style="background:var(--warning);color:#fff;border-radius:10px;padding:0 5px;font-size:10px;margin-left:2px">${chiHoCount}</span>`:''}</div>
-    ${canM?`<div class="tab ${DP_TAB==='cuoc'?'active':''}" onclick="switchTab('cuoc','${o.id}')"><i class="ti ti-coins"></i> Cước & Chốt</div>`:''}
+    ${canViewCuoc?`<div class="tab ${DP_TAB==='cuoc'?'active':''}" onclick="switchTab('cuoc','${o.id}')"><i class="ti ti-coins"></i> Cước & Chốt</div>`:''}
   </div>
   <div class="tab-content" id="tab-body">
   ${DP_TAB==='info'?renderTabInfo(o,editable):''}
   ${DP_TAB==='xe'?renderTabXe(o,editable):''}
   ${DP_TAB==='chiho'?renderTabChiHo(o,chiHoList||[],editable,isOpsHP):''}
-  ${DP_TAB==='cuoc'&&canM?renderTabCuoc(o,chiHoList||[],editableCuoc,loi):''}
+  ${DP_TAB==='cuoc'&&canViewCuoc?renderTabCuoc(o,chiHoList||[],editableCuoc,loi):''}
   </div>`;
 }
 
