@@ -145,8 +145,8 @@ function nav(p,el){
 }
 function renderPage(){
   const c=document.getElementById('content');
-  const P={orders:pgOrders,dieuvan:pgDieuVan,chiho:pgChiHo,hoadon:pgHoaDon,congno:pgCongNo,bangke:pgBangKe,traphau:pgTraThau,baocao:pgBaoCao,kh:pgKH,laixe:pgLaiXe,thauphu:pgThauPhu,xe:pgXe,nv:pgNV,diadiem:pgDiaDiem,chiphi:pgChiPhi,khodau:pgKhoDau,taisan:pgTaiSan};
-  if(P[PAGE])P[PAGE](c); else c.innerHTML='<div class="empty"><i class="ti ti-tools"></i>Đang xây dựng...</div>';
+  const P={orders:window.pgOrders,dieuvan:window.pgDieuVan,chiho:window.pgChiHo,hoadon:window.pgHoaDon,congno:window.pgCongNo,bangke:window.pgBangKe,traphau:window.pgTraThau,baocao:window.pgBaoCao,kh:window.pgKH,laixe:window.pgLaiXe,thauphu:window.pgThauPhu,xe:window.pgXe,nv:window.pgNV,diadiem:window.pgDiaDiem,chiphi:window.pgChiPhi,khodau:window.pgKhoDau,taisan:window.pgTaiSan};
+  if(P[PAGE])P[PAGE](c); else c.innerHTML='<div class="empty"><i class="ti ti-tools"></i>Đang xây dựng... (nếu đây là trang Chi phí/Kho dầu/Tài sản, kiểm tra file js/chiphi.js đã được deploy chưa)</div>';
 }
 
 // ==================== ORDERS ====================
