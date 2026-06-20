@@ -74,14 +74,14 @@ async function renderGhiNhan(c){
     <thead><tr><th>Ngày</th><th>Loại chi phí</th><th>Diễn giải</th><th>Thụ hưởng</th><th>Số tiền</th><th>Trạng thái</th><th>Chứng từ</th></tr></thead>
     <tbody>
     ${list.length===0?`<tr><td colspan="7"><div class="empty"><i class="ti ti-inbox"></i>Chưa có phiếu nào</div></td></tr>`:''}
-    ${list.map(o=>`<tr>
+    ${list.map(o=>`<tr onclick="xemChiTietChiPhi('${o.id}')" style="cursor:pointer">
       <td>${fmtDate(o.ngay)}</td>
       <td>${o.loai_chi_phi}${o.can_kiem_soat?' <span class="tag" style="background:#FAECE7;color:#712B13;font-size:10px">Kiểm soát</span>':''}</td>
       <td style="font-size:12px">${o.noi_dung||'—'}${o.bien_kiem_soat?` · ${o.bien_kiem_soat}`:''}${o.ma_thau_phu?` · ${tenThauPhu(o.ma_thau_phu)}`:''}</td>
       <td style="font-size:12px">${o.ten_thu_huong||'—'}${o.so_tk_thu_huong?`<br><span style="color:var(--text-muted)">STK ${o.so_tk_thu_huong}</span>`:''}</td>
       <td class="text-orange fw6">${fmtM(o.so_tien)}</td>
       <td>${cpTrangThaiTag(o.trang_thai)}</td>
-      <td><button class="btn btn-xs" onclick="xemChungTuChiPhi('${o.id}')"><i class="ti ti-paperclip"></i></button></td>
+      <td><button class="btn btn-xs" onclick="event.stopPropagation();xemChiTietChiPhi('${o.id}')"><i class="ti ti-paperclip"></i></button></td>
     </tr>`).join('')}
     </tbody>
   </table></div>`;
@@ -118,7 +118,15 @@ function openModalChiPhi(){
         <label>Chứng từ đính kèm <span id="cp-doc-hint" style="font-weight:400;color:var(--text-muted)"></span></label>
         <div id="cp-files-list" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"></div>
         <input type="file" id="cp-file-input" multiple style="display:none" onchange="onAddChiPhiFiles(this)">
-        <button class="btn btn-xs" onclick="document.getElementById('cp-file-input').click()"><i class="ti ti-plus"></i> Thêm chứng từ</button>
+        <div id="cp-dropzone"
+          ondragover="event.preventDefault();this.style.borderColor='var(--teal)';this.style.background='#f0fdfa'"
+          ondragleave="this.style.borderColor='#d1d5db';this.style.background='transparent'"
+          ondrop="onDropChiPhiFiles(event,this)"
+          onclick="document.getElementById('cp-file-input').click()"
+          style="border:1.5px dashed #d1d5db;border-radius:var(--r);padding:16px;text-align:center;cursor:pointer;transition:.15s">
+          <i class="ti ti-cloud-upload" style="font-size:22px;color:var(--text-muted)"></i>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Kéo thả file vào đây, hoặc bấm để chọn</div>
+        </div>
         <label id="cp-khonghd-wrap" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);margin-top:8px;cursor:pointer">
           <input type="checkbox" id="cp-khong-hd" style="width:auto"> Không có hóa đơn — đính kèm ảnh/biên nhận thay thế
         </label>
@@ -191,6 +199,13 @@ function onAddChiPhiFiles(input){
   window._cpFiles=window._cpFiles||[];
   Array.from(input.files||[]).forEach(f=>window._cpFiles.push(f));
   input.value='';
+  renderCpFilesChips();
+}
+function onDropChiPhiFiles(e,zone){
+  e.preventDefault();
+  zone.style.borderColor='#d1d5db';zone.style.background='transparent';
+  window._cpFiles=window._cpFiles||[];
+  Array.from(e.dataTransfer?.files||[]).forEach(f=>window._cpFiles.push(f));
   renderCpFilesChips();
 }
 function removeCpFile(idx){window._cpFiles.splice(idx,1);renderCpFilesChips();}
@@ -282,14 +297,55 @@ async function uploadChiPhiFile(file,loai,maDeNghi){
   }catch(e){console.warn(e);return null;}
 }
 
-async function xemChungTuChiPhi(chiPhiId){
-  const{data}=await db.from('chi_phi_files').select('*').eq('chi_phi_id',chiPhiId);
-  const files=data||[];
-  if(!files.length){toast('Phiếu này không có chứng từ đính kèm');return;}
-  for(const f of files){
-    const{data:su}=await db.storage.from('hoa-don').createSignedUrl(f.duong_dan,3600);
-    if(su?.signedUrl)window.open(su.signedUrl,'_blank');
+async function xemChiTietChiPhi(id){
+  const{data:o}=await db.from('chi_phi').select('*').eq('id',id).single();
+  if(!o){toast('Không tìm thấy phiếu','error');return;}
+  const{data:files}=await db.from('chi_phi_files').select('*').eq('chi_phi_id',id);
+  const fileList=files||[];
+  let previewHtml='<div style="height:160px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;background:var(--bg-soft,#f3f4f6);border-radius:var(--r);margin-bottom:12px"><i class="ti ti-file-off" style="margin-right:6px"></i>Chưa có chứng từ đính kèm</div>';
+  let fileLinksHtml='';
+  if(fileList.length){
+    const first=fileList[0];
+    const{data:su}=await db.storage.from('hoa-don').createSignedUrl(first.duong_dan,3600);
+    if(su?.signedUrl){
+      const isPdf=first.duong_dan.toLowerCase().endsWith('.pdf');
+      previewHtml=isPdf
+        ?`<iframe src="${su.signedUrl}" style="width:100%;height:280px;border:none;border-radius:var(--r);margin-bottom:12px"></iframe>`
+        :`<img src="${su.signedUrl}" style="width:100%;max-height:280px;object-fit:contain;border-radius:var(--r);margin-bottom:12px;background:var(--bg-soft,#f3f4f6)">`;
+    }
+    if(fileList.length>1){
+      fileLinksHtml=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        ${fileList.map((f,i)=>`<button class="btn btn-xs ${i===0?'btn-teal':''}" onclick="xemMotChungTu('${f.duong_dan}')"><i class="ti ti-file"></i> ${f.ten_file||('File '+(i+1))}</button>`).join('')}
+      </div>`;
+    }
   }
+  const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
+  bg.innerHTML=`<div class="modal" style="width:560px">
+  <div class="modal-head"><h3><i class="ti ti-receipt-2" style="color:var(--teal)"></i> ${o.loai_chi_phi}${o.ma_de_nghi?` — ${o.ma_de_nghi}`:''}</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  <div class="modal-body" style="display:block">
+    ${previewHtml}
+    ${fileLinksHtml}
+    <div style="background:var(--bg-soft,#f3f4f6);border-radius:var(--r);padding:10px 14px;font-size:12px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Ngày</span><strong>${fmtDate(o.ngay)}</strong></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Số tiền</span><strong class="text-orange">${fmtM(o.so_tien)}</strong></div>
+      ${o.bien_kiem_soat?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Biển số</span><strong>${o.bien_kiem_soat}</strong></div>`:''}
+      ${o.ma_thau_phu?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Thầu phụ</span><strong>${tenThauPhu(o.ma_thau_phu)}</strong></div>`:''}
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Diễn giải</span><span style="text-align:right">${o.noi_dung||'—'}</span></div>
+      <div style="border-top:1px dashed #d1d5db;margin:6px 0"></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)"><i class="ti ti-building-bank"></i> Thụ hưởng</span><strong>${o.ten_thu_huong||'—'}</strong></div>
+      ${o.so_tk_thu_huong?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Số TK</span><span>${o.so_tk_thu_huong}</span></div>`:''}
+      ${o.ngan_hang_thu_huong?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Ngân hàng</span><span style="text-align:right">${o.ngan_hang_thu_huong}</span></div>`:''}
+      <div style="border-top:1px dashed #d1d5db;margin:6px 0"></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Trạng thái</span>${cpTrangThaiTag(o.trang_thai)}</div>
+    </div>
+  </div>
+  <div class="modal-foot"><button class="btn" onclick="closeModal()">Đóng</button></div>
+  </div>`;
+  document.body.appendChild(bg);
+}
+async function xemMotChungTu(path){
+  const{data:su}=await db.storage.from('hoa-don').createSignedUrl(path,3600);
+  if(su?.signedUrl)window.open(su.signedUrl,'_blank');
 }
 
 // ==================== TAB DUYỆT ====================
@@ -301,7 +357,7 @@ async function renderDuyetChiPhi(c){
   const canDuyetTQ=CU?.vai_tro==='thu_quy';
   const canMarkPaid=canSee(['ke_toan','ceo','thu_quy']);
   c.innerHTML=list.length===0?'<div class="empty"><i class="ti ti-checks"></i>Không có phiếu chờ duyệt</div>':
-  list.map(o=>`<div class="bk-group" style="padding:12px 14px;margin-bottom:10px">
+  list.map(o=>`<div class="bk-group" style="padding:12px 14px;margin-bottom:10px;cursor:pointer" onclick="xemChiTietChiPhi('${o.id}')">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <div style="flex:1;min-width:180px">
         <div style="font-weight:600">${o.loai_chi_phi}${o.bien_kiem_soat?` · ${o.bien_kiem_soat}`:''}</div>
@@ -310,10 +366,10 @@ async function renderDuyetChiPhi(c){
       </div>
       <span class="tag ${o.duyet_ceo_at?'tag-dathu':'tag-cho'}">${o.duyet_ceo_at?'CEO đã duyệt':'Chờ CEO'}</span>
       <span class="tag ${o.duyet_thu_quy_at?'tag-dathu':'tag-cho'}">${o.duyet_thu_quy_at?'Thủ quỹ đã duyệt':'Chờ thủ quỹ'}</span>
-      <button class="btn btn-xs" onclick="xemChungTuChiPhi('${o.id}')"><i class="ti ti-paperclip"></i> Chứng từ</button>
-      ${canDuyetCeo&&!o.duyet_ceo_at?`<button class="btn btn-xs btn-teal" onclick="duyetChiPhi('${o.id}','ceo')">Duyệt (CEO)</button>`:''}
-      ${canDuyetTQ&&!o.duyet_thu_quy_at?`<button class="btn btn-xs btn-teal" onclick="duyetChiPhi('${o.id}','thu_quy')">Duyệt (Thủ quỹ)</button>`:''}
-      ${o.trang_thai==='da_duyet'&&canMarkPaid?`<button class="btn btn-xs btn-primary" onclick="markChiPhiPaid('${o.id}')"><i class="ti ti-cash"></i> Đã thanh toán</button>`:''}
+      <button class="btn btn-xs" onclick="event.stopPropagation();xemChiTietChiPhi('${o.id}')"><i class="ti ti-paperclip"></i> Chi tiết</button>
+      ${canDuyetCeo&&!o.duyet_ceo_at?`<button class="btn btn-xs btn-teal" onclick="event.stopPropagation();duyetChiPhi('${o.id}','ceo')">Duyệt (CEO)</button>`:''}
+      ${canDuyetTQ&&!o.duyet_thu_quy_at?`<button class="btn btn-xs btn-teal" onclick="event.stopPropagation();duyetChiPhi('${o.id}','thu_quy')">Duyệt (Thủ quỹ)</button>`:''}
+      ${o.trang_thai==='da_duyet'&&canMarkPaid?`<button class="btn btn-xs btn-primary" onclick="event.stopPropagation();markChiPhiPaid('${o.id}')"><i class="ti ti-cash"></i> Đã thanh toán</button>`:''}
     </div>
   </div>`).join('');
 }
