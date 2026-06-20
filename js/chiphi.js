@@ -87,23 +87,36 @@ async function renderGhiNhan(c){
   </table></div>`;
 }
 
-function openModalChiPhi(){
-  if(!canSee(['ke_toan','ceo'])){toast('Không có quyền tạo phiếu','error');return;}
+async function openModalChiPhi(editId){
+  if(!canSee(['ke_toan','ceo'])){toast('Không có quyền','error');return;}
+  let existing=null;
+  if(editId){
+    const{data}=await db.from('chi_phi').select('*').eq('id',editId).single();
+    existing=data;
+    if(!existing){toast('Không tìm thấy phiếu','error');return;}
+    if(existing.trang_thai!=='cho_duyet'&&!canSee(['ceo'])){toast('Phiếu đã duyệt — chỉ CEO mới sửa được','error');return;}
+  }
   window._cpFiles=[];
+  window._cpEditId=editId||null;
+  const daThanhToan=existing?.trang_thai==='da_thanh_toan'; // đã sinh dau_nhap/tai_san — khóa các field gốc, chỉ cho sửa diễn giải/thụ hưởng
+  const{data:existFiles}=editId?await db.from('chi_phi_files').select('*').eq('chi_phi_id',editId):{data:[]};
+  window._cpExistingFiles=existFiles||[];
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  const loaiOpts=LOAI_CHI_PHI.map(l=>`<option value="${l.v}">${l.v}</option>`).join('');
+  const loaiOpts=LOAI_CHI_PHI.map(l=>`<option value="${l.v}" ${existing?.loai_chi_phi===l.v?'selected':''}>${l.v}</option>`).join('');
+  const lockAttr=daThanhToan?'disabled':'';
   bg.innerHTML=`<div class="modal" style="width:540px">
   <div class="modal-head">
-    <h3><i class="ti ti-receipt-2" style="color:var(--teal)"></i> Tạo phiếu chi phí</h3>
+    <h3><i class="ti ti-receipt-2" style="color:var(--teal)"></i> ${editId?'Sửa phiếu chi phí':'Tạo phiếu chi phí'}</h3>
     <button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
   </div>
   <div class="modal-body">
+    ${daThanhToan?`<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:8px 12px;margin-bottom:12px;font-size:12px;color:#92400e"><i class="ti ti-lock"></i> Phiếu đã thanh toán (đã sinh dữ liệu Kho dầu/Tài sản) — chỉ sửa được Diễn giải, Thụ hưởng và Chứng từ. Muốn đổi loại/số tiền, hãy xóa phiếu và tạo lại.</div>`:''}
     <div class="form-grid">
       <div class="form-group full"><label>Loại chi phí *</label>
-        <select id="cp-loai" onchange="onChangeLoaiChiPhi()"><option value="">-- Chọn --</option>${loaiOpts}</select>
+        <select id="cp-loai" onchange="onChangeLoaiChiPhi()" ${lockAttr}><option value="">-- Chọn --</option>${loaiOpts}</select>
       </div>
-      <div class="form-group"><label>Ngày *</label><input type="date" id="cp-ngay" value="${today()}"></div>
-      <div class="form-group"><label>Số tiền *</label><input id="cp-tien" data-money="1" oninput="fmtOnInput(this)" placeholder="0"></div>
+      <div class="form-group"><label>Ngày *</label><input type="date" id="cp-ngay" value="${existing?.ngay||today()}" ${lockAttr}></div>
+      <div class="form-group"><label>Số tiền *</label><input id="cp-tien" data-money="1" oninput="fmtOnInput(this)" placeholder="0" ${lockAttr}></div>
       <div id="cp-dynamic" class="form-group full"></div>
       <div class="form-group full"><label>Diễn giải</label><input id="cp-noidung" placeholder="Mô tả ngắn"></div>
       <div class="form-group full" style="background:var(--bg-soft,#f3f4f6);border-radius:var(--r);padding:10px 12px">
@@ -135,10 +148,44 @@ function openModalChiPhi(){
   </div>
   <div class="modal-foot">
     <button class="btn" onclick="closeModal()">Hủy</button>
-    <button class="btn btn-primary" onclick="saveChiPhi()"><i class="ti ti-send"></i> Gửi duyệt</button>
+    <button class="btn btn-primary" onclick="saveChiPhi()"><i class="ti ti-${editId?'device-floppy':'send'}"></i> ${editId?'Lưu thay đổi':'Gửi duyệt'}</button>
   </div>
   </div>`;
   document.body.appendChild(bg);
+  renderCpFilesChips();
+  if(existing){
+    document.getElementById('cp-loai').value=existing.loai_chi_phi;
+    onChangeLoaiChiPhi();
+    document.getElementById('cp-thu-ten').value=existing.ten_thu_huong||'';
+    document.getElementById('cp-thu-stk').value=existing.so_tk_thu_huong||'';
+    document.getElementById('cp-thu-nh').value=existing.ngan_hang_thu_huong||'';
+    const meta=LOAI_CHI_PHI.find(l=>l.v===existing.loai_chi_phi);
+    if(meta?.field==='dau'){
+      const{ghiChu,ncc,phieu}=parseDauNoiDung(existing.noi_dung);
+      document.getElementById('cp-noidung').value=ghiChu;
+      if(document.getElementById('cp-dau-ncc'))document.getElementById('cp-dau-ncc').value=ncc;
+      if(document.getElementById('cp-dau-phieu'))document.getElementById('cp-dau-phieu').value=phieu;
+      if(document.getElementById('cp-dau-lit'))document.getElementById('cp-dau-lit').value=fmtInput(String(existing.so_lit||0));
+      if(document.getElementById('cp-dau-gia'))document.getElementById('cp-dau-gia').value=fmtInput(String(existing.don_gia||0));
+    }else{
+      document.getElementById('cp-noidung').value=existing.noi_dung||'';
+    }
+    document.getElementById('cp-tien').value=fmtInput(String(existing.so_tien||0));
+    document.getElementById('cp-ngay').value=existing.ngay;
+    if(meta?.field==='xe'&&document.getElementById('cp-xe')){document.getElementById('cp-xe').value=existing.bien_kiem_soat||'';onChangeXeChiPhi();}
+    if(meta?.field==='thau'&&document.getElementById('cp-thau-sel'))document.getElementById('cp-thau-sel').value=existing.ma_thau_phu||'';
+    if(meta?.field==='taisan'){
+      if(document.getElementById('cp-taisan-loai'))document.getElementById('cp-taisan-loai').value=existing.loai_tai_san||'';
+      if(document.getElementById('cp-taisan-bien'))document.getElementById('cp-taisan-bien').value=existing.bien_kiem_soat||'';
+      if(document.getElementById('cp-taisan-khauhao'))document.getElementById('cp-taisan-khauhao').value=existing.thoi_gian_khau_hao_thang||60;
+    }
+    if(meta?.field==='khach'&&document.getElementById('cp-khach-sel'))document.getElementById('cp-khach-sel').value=existing.ma_khach_hang||'';
+    if(daThanhToan){
+      document.getElementById('cp-tien').setAttribute('disabled','');
+      ['cp-xe','cp-dau-ncc','cp-dau-phieu','cp-dau-lit','cp-dau-gia','cp-thau-sel','cp-taisan-loai','cp-taisan-bien','cp-taisan-khauhao','cp-khach-sel'].forEach(idAttr=>{const el=document.getElementById(idAttr);if(el)el.setAttribute('disabled','');});
+    }
+    renderCpFilesChips();
+  }
 }
 
 function onChangeLoaiChiPhi(){
@@ -209,15 +256,32 @@ function onDropChiPhiFiles(e,zone){
   renderCpFilesChips();
 }
 function removeCpFile(idx){window._cpFiles.splice(idx,1);renderCpFilesChips();}
+async function removeExistingCpFile(idx){
+  const f=(window._cpExistingFiles||[])[idx];
+  if(!f)return;
+  if(!confirm(`Xóa chứng từ "${f.ten_file}"?`))return;
+  try{
+    await db.storage.from('hoa-don').remove([f.duong_dan]);
+    await db.from('chi_phi_files').delete().eq('id',f.id);
+    window._cpExistingFiles.splice(idx,1);
+    renderCpFilesChips();
+    toast('Đã xóa chứng từ');
+  }catch(err){toast('Lỗi: '+err.message,'error');}
+}
 function renderCpFilesChips(){
   const box=document.getElementById('cp-files-list');
   if(!box)return;
-  box.innerHTML=(window._cpFiles||[]).map((f,i)=>`<div style="display:flex;align-items:center;gap:6px;background:var(--bg-soft,#f3f4f6);border-radius:6px;padding:4px 8px;font-size:12px">
+  const existingChips=(window._cpExistingFiles||[]).map((f,i)=>`<div style="display:flex;align-items:center;gap:6px;background:#E1F5EE;border-radius:6px;padding:4px 8px;font-size:12px">
+    <i class="ti ti-file-check"></i><span>${f.ten_file}</span><i class="ti ti-x" style="cursor:pointer;color:var(--text-muted)" onclick="removeExistingCpFile(${i})"></i>
+  </div>`).join('');
+  const newChips=(window._cpFiles||[]).map((f,i)=>`<div style="display:flex;align-items:center;gap:6px;background:var(--bg-soft,#f3f4f6);border-radius:6px;padding:4px 8px;font-size:12px">
     <i class="ti ti-file"></i><span>${f.name}</span><i class="ti ti-x" style="cursor:pointer;color:var(--text-muted)" onclick="removeCpFile(${i})"></i>
   </div>`).join('');
+  box.innerHTML=existingChips+newChips;
 }
 
 async function saveChiPhi(){
+  const editId=window._cpEditId||null;
   const loai=document.getElementById('cp-loai').value;
   if(!loai){toast('Chọn loại chi phí','error');return;}
   const meta=LOAI_CHI_PHI.find(l=>l.v===loai);
@@ -227,14 +291,13 @@ async function saveChiPhi(){
   const tenThuHuong=document.getElementById('cp-thu-ten').value.trim();
   if(!tenThuHuong){toast('Nhập tên người/đơn vị thụ hưởng (ghi "Tiền mặt" nếu không chuyển khoản)','error');return;}
   const data={
-    ma_de_nghi:'CP'+Date.now().toString(36).toUpperCase(),
     ngay,loai_chi_phi:loai,noi_dung:noiDung,
     ten_thu_huong:tenThuHuong,
     so_tk_thu_huong:document.getElementById('cp-thu-stk').value.trim()||null,
     ngan_hang_thu_huong:document.getElementById('cp-thu-nh').value.trim()||null,
     can_kiem_soat:meta?.nhom==='kiem_soat',
-    created_by:CU?.id,trang_thai:'cho_duyet',
   };
+  if(!editId){data.ma_de_nghi='CP'+Date.now().toString(36).toUpperCase();data.created_by=CU?.id;data.trang_thai='cho_duyet';}
   if(meta?.field==='xe'){
     const bien=document.getElementById('cp-xe')?.value;
     if(!bien){toast('Chọn biển số xe','error');return;}
@@ -257,7 +320,7 @@ async function saveChiPhi(){
     const ma=document.getElementById('cp-thau-sel')?.value;
     if(!ma){toast('Chọn thầu phụ','error');return;}
     data.ma_thau_phu=ma;
-    if(loai==='Trả nợ thầu')data.lien_ket_cong_no=false; // giai đoạn 1 — độc lập, chưa tự trừ Công nợ
+    if(loai==='Trả nợ thầu'&&!editId)data.lien_ket_cong_no=false; // giai đoạn 1 — độc lập, chưa tự trừ Công nợ
   }
   if(meta?.field==='taisan'){
     data.loai_tai_san=document.getElementById('cp-taisan-loai')?.value||null;
@@ -269,19 +332,35 @@ async function saveChiPhi(){
   }
   if(!soTien){toast('Nhập số tiền','error');return;}
   data.so_tien=soTien;
-  if(meta?.docRequired&&(!window._cpFiles||!window._cpFiles.length)){
+  const tongFile=(window._cpExistingFiles?.length||0)+(window._cpFiles?.length||0);
+  if(meta?.docRequired&&tongFile===0){
     toast(`Loại "${loai}" yêu cầu đính kèm chứng từ`,'error');return;
   }
   try{
-    const{data:saved,error}=await db.from('chi_phi').insert(data).select().single();
-    if(error){toast('Lỗi: '+error.message,'error');return;}
+    let chiPhiId=editId,maDeNghi,wasApproved=false;
+    if(editId){
+      const{data:existingRow}=await db.from('chi_phi').select('trang_thai,duyet_ceo_at,duyet_thu_quy_at,ma_de_nghi').eq('id',editId).single();
+      maDeNghi=existingRow?.ma_de_nghi;
+      wasApproved=existingRow?.trang_thai==='da_duyet';
+      // Nếu phiếu đã từng duyệt mà sửa nội dung gốc (chưa thanh toán) -> bắt buộc duyệt lại cho an toàn
+      if(wasApproved){
+        data.trang_thai='cho_duyet';data.duyet_ceo_at=null;data.duyet_ceo_by=null;data.duyet_thu_quy_at=null;data.duyet_thu_quy_by=null;
+      }
+      const{error}=await db.from('chi_phi').update(data).eq('id',editId);
+      if(error){toast('Lỗi: '+error.message,'error');return;}
+    }else{
+      const{data:saved,error}=await db.from('chi_phi').insert(data).select().single();
+      if(error){toast('Lỗi: '+error.message,'error');return;}
+      chiPhiId=saved.id;maDeNghi=saved.ma_de_nghi;
+    }
     if(window._cpFiles&&window._cpFiles.length){
       for(const f of window._cpFiles){
-        const path=await uploadChiPhiFile(f,loai,saved.ma_de_nghi);
-        if(path)await db.from('chi_phi_files').insert({chi_phi_id:saved.id,ten_file:f.name,duong_dan:path,uploaded_by:CU?.id});
+        const path=await uploadChiPhiFile(f,loai,maDeNghi);
+        if(path)await db.from('chi_phi_files').insert({chi_phi_id:chiPhiId,ten_file:f.name,duong_dan:path,uploaded_by:CU?.id});
       }
     }
-    toast('Đã gửi duyệt');closeModal();window._cpFiles=[];
+    toast(editId?('Đã lưu thay đổi'+(wasApproved?' — cần duyệt lại':'')):'Đã gửi duyệt');
+    closeModal();window._cpFiles=[];window._cpEditId=null;window._cpExistingFiles=[];
     pgChiPhi(document.getElementById('content'));
   }catch(err){toast('Lỗi: '+err.message,'error');}
 }
@@ -381,8 +460,12 @@ async function xemChiTietChiPhi(id){
         :`<div style="display:flex;gap:6px;flex-wrap:wrap">${fileList.map((f,i)=>`<button class="btn btn-xs" onclick="xemMotChungTu('${f.duong_dan}')"><i class="ti ti-file"></i> ${f.ten_file||('File '+(i+1))}</button>`).join('')}</div>`}
     </div>`;
   const foot=document.getElementById('cct-foot');
-  if(foot&&canSee(['ceo'])){
-    foot.innerHTML=`<button class="btn btn-danger" onclick="xoaChiPhi('${o.id}')"><i class="ti ti-trash"></i> Xóa phiếu</button><button class="btn" onclick="closeModal()">Đóng</button>`;
+  if(foot){
+    const canEditThis=canSee(['ceo'])||(canSee(['ke_toan'])&&o.trang_thai==='cho_duyet');
+    foot.innerHTML=`
+      ${canEditThis?`<button class="btn" onclick="closeModal();openModalChiPhi('${o.id}')"><i class="ti ti-edit"></i> Sửa</button>`:''}
+      ${canSee(['ceo'])?`<button class="btn btn-danger" onclick="xoaChiPhi('${o.id}')"><i class="ti ti-trash"></i> Xóa phiếu</button>`:''}
+      <button class="btn" onclick="closeModal()">Đóng</button>`;
   }
 }
 
@@ -596,38 +679,62 @@ function renderKhoDauTab(){
 async function renderXuatDau(c){
   const{data}=await db.from('dau_xuat').select('*').order('ngay_do',{ascending:false}).limit(150);
   const list=data||[];
+  const isCeo=canSee(['ceo']);
   c.innerHTML=`
   <div class="toolbar" style="margin-bottom:12px"><button class="btn btn-primary" onclick="openModalXuatDau()"><i class="ti ti-plus"></i> Ghi phiếu xuất dầu</button></div>
   <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Ngày</th><th>Biển số</th><th>Thầu phụ</th><th>Số lít</th><th>Đơn giá</th><th>Thành tiền</th><th>Thu hồi</th></tr></thead>
+    <thead><tr><th>Ngày</th><th>Biển số</th><th>Thầu phụ</th><th>Số lít</th><th>Đơn giá</th><th>Thành tiền</th><th>Thu hồi</th>${isCeo?'<th>Thao tác</th>':''}</tr></thead>
     <tbody>
-    ${list.length===0?`<tr><td colspan="7"><div class="empty"><i class="ti ti-inbox"></i>Chưa có phiếu xuất dầu</div></td></tr>`:''}
+    ${list.length===0?`<tr><td colspan="${isCeo?8:7}"><div class="empty"><i class="ti ti-inbox"></i>Chưa có phiếu xuất dầu</div></td></tr>`:''}
     ${list.map(o=>`<tr>
       <td>${fmtDate(o.ngay_do)}</td><td>${o.bien_kiem_soat}</td><td>${o.ma_thau_phu?tenThauPhu(o.ma_thau_phu):'Nội bộ'}</td>
       <td>${fmt(o.so_lit)} lít</td><td>${fmtM(o.don_gia_ban_le)}</td><td class="text-orange fw6">${fmtM(o.thanh_tien)}</td>
       <td><span class="tag ${o.trang_thai_thu_hoi==='da_thu_hoi'?'tag-dathu':(o.trang_thai_thu_hoi==='khong_thu_hoi'?'tag-new':'tag-cho')}">${o.trang_thai_thu_hoi==='da_thu_hoi'?'Đã thu hồi':(o.trang_thai_thu_hoi==='khong_thu_hoi'?'Không thu hồi':'Chưa thu hồi')}</span></td>
+      ${isCeo?`<td><button class="btn btn-xs" onclick="openModalXuatDau('${o.id}')"><i class="ti ti-edit"></i></button> <button class="btn btn-xs btn-danger" onclick="xoaXuatDau('${o.id}')"><i class="ti ti-trash"></i></button></td>`:''}
     </tr>`).join('')}
     </tbody>
   </table></div>`;
 }
 
-function openModalXuatDau(){
+async function xoaXuatDau(id){
+  if(!canSee(['ceo'])){toast('Chỉ CEO có quyền xóa','error');return;}
+  const{data:o}=await db.from('dau_xuat').select('*').eq('id',id).single();
+  if(!o)return;
+  let warn=`Xóa phiếu xuất dầu ${fmt(o.so_lit)} lít — ${o.bien_kiem_soat}?\nTồn kho dầu sẽ tự cộng lại đúng ${fmt(o.so_lit)} lít.`;
+  if(o.trang_thai_thu_hoi==='da_thu_hoi')warn+='\n⚠️ Khoản này ĐÃ được trừ vào 1 kỳ trả thầu trước — xóa sẽ mất lịch sử trừ đó.';
+  if(!confirm(warn))return;
+  const{error}=await db.from('dau_xuat').delete().eq('id',id);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast('Đã xóa phiếu xuất dầu');
+  pgKhoDau(document.getElementById('content'));
+}
+
+async function openModalXuatDau(editId){
   if(!canSee(['ke_toan','ceo'])){toast('Không có quyền','error');return;}
+  let existing=null;
+  if(editId){
+    if(!canSee(['ceo'])){toast('Chỉ CEO mới sửa được phiếu xuất dầu','error');return;}
+    const{data}=await db.from('dau_xuat').select('*').eq('id',editId).single();
+    existing=data;
+    if(!existing){toast('Không tìm thấy phiếu','error');return;}
+  }
+  window._xdEditId=editId||null;
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
-  const xeOpts=(XE||[]).map(x=>`<option value="${x.bien_so}">${x.bien_so}</option>`).join('');
+  const xeOpts=(XE||[]).map(x=>`<option value="${x.bien_so}" ${existing?.bien_kiem_soat===x.bien_so?'selected':''}>${x.bien_so}</option>`).join('');
   bg.innerHTML=`<div class="modal" style="width:460px">
-    <div class="modal-head"><h3><i class="ti ti-gas-station" style="color:var(--teal)"></i> Phiếu xuất dầu cho xe</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-head"><h3><i class="ti ti-gas-station" style="color:var(--teal)"></i> ${editId?'Sửa':''} Phiếu xuất dầu cho xe</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><div class="form-grid">
-      <div class="form-group"><label>Ngày đổ *</label><input type="date" id="xd-ngay" value="${today()}"></div>
+      <div class="form-group"><label>Ngày đổ *</label><input type="date" id="xd-ngay" value="${existing?.ngay_do||today()}"></div>
       <div class="form-group"><label>Biển số xe *</label><select id="xd-xe" onchange="onChangeXeXuatDau()"><option value="">-- Chọn --</option>${xeOpts}</select></div>
       <div class="form-group full"><label>Thầu phụ (tự động)</label><input id="xd-thau-auto" disabled></div>
-      <div class="form-group"><label>Số lít đổ *</label><input id="xd-lit" data-money="1" oninput="fmtOnInput(this);tinhTienXuatDau()" placeholder="0"></div>
-      <div class="form-group"><label>Đơn giá bán lẻ *</label><input id="xd-gia" data-money="1" oninput="fmtOnInput(this);tinhTienXuatDau()" placeholder="0"></div>
-      <div class="form-group full"><label>Thành tiền (tự tính)</label><input id="xd-tien" disabled></div>
+      <div class="form-group"><label>Số lít đổ *</label><input id="xd-lit" data-money="1" oninput="fmtOnInput(this);tinhTienXuatDau()" placeholder="0" value="${existing?fmtInput(String(existing.so_lit)):''}"></div>
+      <div class="form-group"><label>Đơn giá bán lẻ *</label><input id="xd-gia" data-money="1" oninput="fmtOnInput(this);tinhTienXuatDau()" placeholder="0" value="${existing?fmtInput(String(existing.don_gia_ban_le)):''}"></div>
+      <div class="form-group full"><label>Thành tiền (tự tính)</label><input id="xd-tien" disabled value="${existing?fmtInput(String(existing.thanh_tien)):''}"></div>
     </div></div>
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Hủy</button><button class="btn btn-primary" onclick="saveXuatDau()"><i class="ti ti-device-floppy"></i> Lưu phiếu</button></div>
   </div>`;
   document.body.appendChild(bg);
+  if(existing)onChangeXeXuatDau();
 }
 function onChangeXeXuatDau(){
   const bien=document.getElementById('xd-xe').value;
@@ -642,6 +749,7 @@ function tinhTienXuatDau(){
   const el=document.getElementById('xd-tien');if(el)el.value=fmtInput(String(lit*gia));
 }
 async function saveXuatDau(){
+  const editId=window._xdEditId||null;
   const bien=document.getElementById('xd-xe').value;
   if(!bien){toast('Chọn biển số xe','error');return;}
   const xe=(XE||[]).find(x=>x.bien_so===bien);
@@ -655,12 +763,18 @@ async function saveXuatDau(){
     ma_thau_phu:isNoiBo?null:(xe?.ma_thau_phu||null),
     doi_tuong:isNoiBo?'noi_bo':'thau_phu',
     so_lit:lit,don_gia_ban_le:gia,thanh_tien:lit*gia,
-    nguoi_thuc_hien:CU?.ho_ten,created_by:CU?.id,
-    trang_thai_thu_hoi:isNoiBo?'khong_thu_hoi':'chua_thu_hoi',
   };
-  const{error}=await db.from('dau_xuat').insert(data);
+  if(!editId){
+    data.nguoi_thuc_hien=CU?.ho_ten;data.created_by=CU?.id;
+    data.trang_thai_thu_hoi=isNoiBo?'khong_thu_hoi':'chua_thu_hoi';
+  }else if(isNoiBo){
+    data.trang_thai_thu_hoi='khong_thu_hoi'; // đổi sang xe nội bộ thì không thu hồi nữa
+  }
+  const{error}=editId
+    ?await db.from('dau_xuat').update(data).eq('id',editId)
+    :await db.from('dau_xuat').insert(data);
   if(error){toast('Lỗi: '+error.message,'error');return;}
-  toast('Đã lưu phiếu xuất dầu');closeModal();
+  toast(editId?'Đã lưu thay đổi':'Đã lưu phiếu xuất dầu');closeModal();window._xdEditId=null;
   pgKhoDau(document.getElementById('content'));
 }
 
