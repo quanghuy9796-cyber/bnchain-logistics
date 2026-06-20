@@ -347,7 +347,7 @@ async function xemChiTietChiPhi(id){
   bg.innerHTML=`<div class="modal" style="width:560px">
   <div class="modal-head"><h3><i class="ti ti-receipt-2" style="color:var(--teal)"></i> Chi tiết phiếu chi phí</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body" style="display:block" id="cct-body"><div class="loading"><i class="ti ti-loader-2"></i> Đang tải...</div></div>
-  <div class="modal-foot"><button class="btn" onclick="closeModal()">Đóng</button></div>
+  <div class="modal-foot" id="cct-foot"><button class="btn" onclick="closeModal()">Đóng</button></div>
   </div>`;
   document.body.appendChild(bg);
 
@@ -380,6 +380,33 @@ async function xemChiTietChiPhi(id){
         ?`<div style="font-size:12px;color:var(--text-muted)"><i class="ti ti-file-off"></i> Chưa có chứng từ đính kèm</div>`
         :`<div style="display:flex;gap:6px;flex-wrap:wrap">${fileList.map((f,i)=>`<button class="btn btn-xs" onclick="xemMotChungTu('${f.duong_dan}')"><i class="ti ti-file"></i> ${f.ten_file||('File '+(i+1))}</button>`).join('')}</div>`}
     </div>`;
+  const foot=document.getElementById('cct-foot');
+  if(foot&&canSee(['ceo'])){
+    foot.innerHTML=`<button class="btn btn-danger" onclick="xoaChiPhi('${o.id}')"><i class="ti ti-trash"></i> Xóa phiếu</button><button class="btn" onclick="closeModal()">Đóng</button>`;
+  }
+}
+
+// Xóa phiếu chi phí — chỉ CEO (admin). Dọn dẹp toàn bộ dữ liệu tự sinh liên quan:
+// file chứng từ trong Storage, bản ghi Kho dầu (dau_nhap) hoặc Tài sản cố định (tai_san) nếu phiếu đã tạo ra chúng.
+async function xoaChiPhi(id){
+  if(!canSee(['ceo'])){toast('Chỉ CEO có quyền xóa','error');return;}
+  const{data:o}=await db.from('chi_phi').select('*').eq('id',id).single();
+  if(!o){toast('Không tìm thấy phiếu','error');return;}
+  let warn=`Xóa phiếu "${o.loai_chi_phi}" — ${fmtM(o.so_tien)}?`;
+  if(o.trang_thai_thu_hoi==='da_thu_hoi')warn+='\n⚠️ Khoản này ĐÃ được trừ vào 1 kỳ trả thầu trước — xóa sẽ mất lịch sử trừ đó, báo cáo kỳ cũ có thể lệch nếu xem lại.';
+  if(o.loai_chi_phi==='Mua dầu nhập kho'&&o.trang_thai==='da_thanh_toan')warn+='\n⚠️ Sẽ xóa luôn lần nhập kho dầu tương ứng (trừ lại số lít đã cộng vào tồn kho).';
+  if(o.loai_chi_phi==='Mua xe'&&o.trang_thai==='da_thanh_toan')warn+='\n⚠️ Sẽ xóa luôn Tài sản cố định đã tạo từ phiếu này.';
+  if(!confirm(warn))return;
+  try{
+    const{data:files}=await db.from('chi_phi_files').select('duong_dan').eq('chi_phi_id',id);
+    if(files?.length)await db.storage.from('hoa-don').remove(files.map(f=>f.duong_dan));
+    await db.from('dau_nhap').delete().eq('chi_phi_id',id);
+    await db.from('tai_san').delete().eq('chi_phi_id',id);
+    const{error}=await db.from('chi_phi').delete().eq('id',id); // chi_phi_files tự xóa theo (ON DELETE CASCADE)
+    if(error){toast('Lỗi: '+error.message,'error');return;}
+    toast('Đã xóa phiếu chi phí');closeModal();
+    pgChiPhi(document.getElementById('content'));
+  }catch(err){toast('Lỗi: '+err.message,'error');}
 }
 async function xemMotChungTu(path){
   const{data:su}=await db.storage.from('hoa-don').createSignedUrl(path,3600);
@@ -415,13 +442,15 @@ async function renderDuyetChiPhi(c){
 async function duyetChiPhi(id,role){
   if(role==='ceo'&&CU?.vai_tro!=='ceo'){toast('Chỉ CEO duyệt được mục này','error');return;}
   if(role==='thu_quy'&&CU?.vai_tro!=='thu_quy'){toast('Chỉ Thủ quỹ duyệt được mục này','error');return;}
-  const{data:cur}=await db.from('chi_phi').select('duyet_ceo_at,duyet_thu_quy_at').eq('id',id).single();
   const field=role==='ceo'?{duyet_ceo_at:new Date().toISOString(),duyet_ceo_by:CU?.id}:{duyet_thu_quy_at:new Date().toISOString(),duyet_thu_quy_by:CU?.id};
-  const willCeo=role==='ceo'?true:!!cur?.duyet_ceo_at;
-  const willTQ=role==='thu_quy'?true:!!cur?.duyet_thu_quy_at;
-  if(willCeo&&willTQ)field.trang_thai='da_duyet';
+  // Ghi nhận duyệt của vai trò này TRƯỚC (không phụ thuộc trạng thái đọc trước đó — tránh lệch nếu 2 người bấm gần cùng lúc)
   const{error}=await db.from('chi_phi').update(field).eq('id',id);
   if(error){toast('Lỗi: '+error.message,'error');return;}
+  // Đọc lại trạng thái mới nhất — chỉ chuyển "đã duyệt" khi CẢ HAI đã có, bất kể ai duyệt trước
+  const{data:fresh}=await db.from('chi_phi').select('duyet_ceo_at,duyet_thu_quy_at,trang_thai').eq('id',id).single();
+  if(fresh?.duyet_ceo_at&&fresh?.duyet_thu_quy_at&&fresh.trang_thai==='cho_duyet'){
+    await db.from('chi_phi').update({trang_thai:'da_duyet'}).eq('id',id);
+  }
   toast('Đã duyệt');renderChiPhiTab();
 }
 
