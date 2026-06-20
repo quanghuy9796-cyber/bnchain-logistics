@@ -297,51 +297,89 @@ async function uploadChiPhiFile(file,loai,maDeNghi){
   }catch(e){console.warn(e);return null;}
 }
 
-async function xemChiTietChiPhi(id){
-  const{data:o}=await db.from('chi_phi').select('*').eq('id',id).single();
-  if(!o){toast('Không tìm thấy phiếu','error');return;}
-  const{data:files}=await db.from('chi_phi_files').select('*').eq('chi_phi_id',id);
-  const fileList=files||[];
-  let previewHtml='<div style="height:160px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;background:var(--bg-soft,#f3f4f6);border-radius:var(--r);margin-bottom:12px"><i class="ti ti-file-off" style="margin-right:6px"></i>Chưa có chứng từ đính kèm</div>';
-  let fileLinksHtml='';
-  if(fileList.length){
-    const first=fileList[0];
-    const{data:su}=await db.storage.from('hoa-don').createSignedUrl(first.duong_dan,3600);
-    if(su?.signedUrl){
-      const isPdf=first.duong_dan.toLowerCase().endsWith('.pdf');
-      previewHtml=isPdf
-        ?`<iframe src="${su.signedUrl}" style="width:100%;height:280px;border:none;border-radius:var(--r);margin-bottom:12px"></iframe>`
-        :`<img src="${su.signedUrl}" style="width:100%;max-height:280px;object-fit:contain;border-radius:var(--r);margin-bottom:12px;background:var(--bg-soft,#f3f4f6)">`;
-    }
-    if(fileList.length>1){
-      fileLinksHtml=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-        ${fileList.map((f,i)=>`<button class="btn btn-xs ${i===0?'btn-teal':''}" onclick="xemMotChungTu('${f.duong_dan}')"><i class="ti ti-file"></i> ${f.ten_file||('File '+(i+1))}</button>`).join('')}
-      </div>`;
-    }
+function kvRow(label,value,opts={}){
+  if(value===undefined||value===null||value==='')return'';
+  return`<div style="display:flex;justify-content:space-between;margin-bottom:4px;gap:10px">
+    <span style="color:var(--text-muted);white-space:nowrap">${opts.icon?`<i class="ti ti-${opts.icon}"></i> `:''}${label}</span>
+    <span style="text-align:right;${opts.strong?'font-weight:600':''}${opts.color?`;color:${opts.color}`:''}">${value}</span>
+  </div>`;
+}
+// Tách "ghi chú | NCC:... | Phiếu:..." được gộp khi lưu phiếu Mua dầu nhập kho
+function parseDauNoiDung(noiDung){
+  const s=noiDung||'';
+  const ncc=(s.match(/NCC:([^|]*)/)||[])[1]?.trim()||'';
+  const phieu=(s.match(/Phiếu:([^|]*)/)||[])[1]?.trim()||'';
+  const ghiChu=s.split('|')[0]?.trim()||'';
+  return{ghiChu,ncc,phieu};
+}
+
+// Sinh các dòng thông tin riêng theo từng loại chi phí (xe/dầu/thầu/tài sản/khách)
+function renderChiTietRieng(o){
+  const meta=LOAI_CHI_PHI.find(l=>l.v===o.loai_chi_phi);
+  if(meta?.field==='dau'){
+    const{ghiChu,ncc,phieu}=parseDauNoiDung(o.noi_dung);
+    return{
+      rows:kvRow('Số lít mua',o.so_lit?fmt(o.so_lit)+' lít':'—')
+         +kvRow('Đơn giá nhập',o.don_gia?fmtM(o.don_gia):'—')
+         +kvRow('Nhà cung cấp',ncc||'—')
+         +kvRow('Số phiếu/hóa đơn',phieu||'—'),
+      ghiChu,
+    };
   }
+  if(meta?.field==='xe'){
+    return{rows:kvRow('Biển số xe',o.bien_kiem_soat||'—',{strong:true})+kvRow('Thầu phụ',o.ma_thau_phu?tenThauPhu(o.ma_thau_phu):'Xe nội bộ — không thu hồi'),ghiChu:o.noi_dung};
+  }
+  if(meta?.field==='thau'){
+    return{rows:kvRow('Thầu phụ',o.ma_thau_phu?tenThauPhu(o.ma_thau_phu):'—',{strong:true})+kvRow('Liên kết Công nợ',o.lien_ket_cong_no?'Đã liên kết':'Chưa liên kết (giai đoạn 1)'),ghiChu:o.noi_dung};
+  }
+  if(meta?.field==='taisan'){
+    return{rows:kvRow('Loại tài sản',o.loai_tai_san||'—')+kvRow('Biển số (nếu có)',o.bien_kiem_soat||'—')+kvRow('Thời gian khấu hao',(o.thoi_gian_khau_hao_thang||60)+' tháng'),ghiChu:o.noi_dung};
+  }
+  if(meta?.field==='khach'){
+    return{rows:kvRow('Khách hàng',o.ma_khach_hang||'(không chọn)'),ghiChu:o.noi_dung};
+  }
+  return{rows:'',ghiChu:o.noi_dung};
+}
+
+async function xemChiTietChiPhi(id){
+  // Mở modal ngay với khung rỗng để phản hồi tức thì, không chờ DB mới hiện gì — tránh cảm giác lag
   const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
   bg.innerHTML=`<div class="modal" style="width:560px">
-  <div class="modal-head"><h3><i class="ti ti-receipt-2" style="color:var(--teal)"></i> ${o.loai_chi_phi}${o.ma_de_nghi?` — ${o.ma_de_nghi}`:''}</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-  <div class="modal-body" style="display:block">
-    ${previewHtml}
-    ${fileLinksHtml}
-    <div style="background:var(--bg-soft,#f3f4f6);border-radius:var(--r);padding:10px 14px;font-size:12px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Ngày</span><strong>${fmtDate(o.ngay)}</strong></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Số tiền</span><strong class="text-orange">${fmtM(o.so_tien)}</strong></div>
-      ${o.bien_kiem_soat?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Biển số</span><strong>${o.bien_kiem_soat}</strong></div>`:''}
-      ${o.ma_thau_phu?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Thầu phụ</span><strong>${tenThauPhu(o.ma_thau_phu)}</strong></div>`:''}
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Diễn giải</span><span style="text-align:right">${o.noi_dung||'—'}</span></div>
-      <div style="border-top:1px dashed #d1d5db;margin:6px 0"></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)"><i class="ti ti-building-bank"></i> Thụ hưởng</span><strong>${o.ten_thu_huong||'—'}</strong></div>
-      ${o.so_tk_thu_huong?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Số TK</span><span>${o.so_tk_thu_huong}</span></div>`:''}
-      ${o.ngan_hang_thu_huong?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--text-muted)">Ngân hàng</span><span style="text-align:right">${o.ngan_hang_thu_huong}</span></div>`:''}
-      <div style="border-top:1px dashed #d1d5db;margin:6px 0"></div>
-      <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Trạng thái</span>${cpTrangThaiTag(o.trang_thai)}</div>
-    </div>
-  </div>
+  <div class="modal-head"><h3><i class="ti ti-receipt-2" style="color:var(--teal)"></i> Chi tiết phiếu chi phí</h3><button class="btn btn-sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  <div class="modal-body" style="display:block" id="cct-body"><div class="loading"><i class="ti ti-loader-2"></i> Đang tải...</div></div>
   <div class="modal-foot"><button class="btn" onclick="closeModal()">Đóng</button></div>
   </div>`;
   document.body.appendChild(bg);
+
+  const[{data:o},{data:files}]=await Promise.all([
+    db.from('chi_phi').select('*').eq('id',id).single(),
+    db.from('chi_phi_files').select('*').eq('chi_phi_id',id),
+  ]);
+  const body=document.getElementById('cct-body');
+  if(!body)return; // người dùng đã đóng modal trước khi tải xong
+  if(!o){body.innerHTML='<div class="empty"><i class="ti ti-alert-circle"></i>Không tìm thấy phiếu</div>';return;}
+  const fileList=files||[];
+  const{rows:riengRows,ghiChu}=renderChiTietRieng(o);
+  document.querySelector('#modal-bg .modal-head h3').innerHTML=`<i class="ti ti-receipt-2" style="color:var(--teal)"></i> ${o.loai_chi_phi}${o.ma_de_nghi?` — ${o.ma_de_nghi}`:''}`;
+  body.innerHTML=`
+    <div style="background:var(--bg-soft,#f3f4f6);border-radius:var(--r);padding:10px 14px;font-size:12px;margin-bottom:12px">
+      ${kvRow('Ngày',fmtDate(o.ngay))}
+      ${kvRow('Số tiền',fmtM(o.so_tien),{strong:true,color:'var(--orange,#d97706)'})}
+      ${riengRows}
+      ${kvRow('Diễn giải',ghiChu||'—')}
+      <div style="border-top:1px dashed #d1d5db;margin:6px 0"></div>
+      ${kvRow('Thụ hưởng',o.ten_thu_huong||'—',{icon:'building-bank',strong:true})}
+      ${kvRow('Số TK',o.so_tk_thu_huong)}
+      ${kvRow('Ngân hàng',o.ngan_hang_thu_huong)}
+      <div style="border-top:1px dashed #d1d5db;margin:6px 0"></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Trạng thái</span>${cpTrangThaiTag(o.trang_thai)}</div>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Chứng từ đính kèm (${fileList.length})</div>
+      ${fileList.length===0
+        ?`<div style="font-size:12px;color:var(--text-muted)"><i class="ti ti-file-off"></i> Chưa có chứng từ đính kèm</div>`
+        :`<div style="display:flex;gap:6px;flex-wrap:wrap">${fileList.map((f,i)=>`<button class="btn btn-xs" onclick="xemMotChungTu('${f.duong_dan}')"><i class="ti ti-file"></i> ${f.ten_file||('File '+(i+1))}</button>`).join('')}</div>`}
+    </div>`;
 }
 async function xemMotChungTu(path){
   const{data:su}=await db.storage.from('hoa-don').createSignedUrl(path,3600);
