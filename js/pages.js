@@ -958,23 +958,92 @@ async function xuatExcelBangKe(){
   toast(`✅ Đã tải ${fileName}`);
 }
 
-// ============ AI SCAN HÓA ĐƠN ============
+// ============ BẢNG KÊ TRẢ THẦU PHỤ (chọn thầu + tháng, giống Bảng kê thu khách) ============
 async function pgTraThau(c){
   if(!canSee(['ke_toan','ceo','thu_quy'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
-  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
-  const{data}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,hanh_trinh,ten_lai_xe,gia_cuoc_thau,thanh_toan_thau,ma_thau_phu,so_cont,locked,loai_phan_loai_xe,tra_thau_doi_lenh').neq('thanh_toan_thau','Đã trả').gt('gia_cuoc_thau',0).order('ngay',{ascending:false}).limit(500);
-  const list=data||[];
-  // Chi hộ trả thầu phát sinh (nhập qua tab Chi hộ của đơn) — PHẢI cộng vào số phải trả thầu,
-  // bất kể được nhập trước hay sau khi đơn có biển số/thầu phụ (join theo van_don_id, không snapshot)
-  let chiHoMap={};
-  if(list.length){
-    const{data:chiHoRows}=await db.from('chi_ho').select('van_don_id,tien_tra_thau,tien_tra_laixe').in('van_don_id',list.map(o=>o.id));
-    (chiHoRows||[]).forEach(r=>{
-      if(!chiHoMap[r.van_don_id])chiHoMap[r.van_don_id]={traThau:0,traLX:0};
-      chiHoMap[r.van_don_id].traThau+=(+r.tien_tra_thau||0);
-      chiHoMap[r.van_don_id].traLX+=(+r.tien_tra_laixe||0);
-    });
+  if(!TP||!TP.length){
+    const{data}=await db.from('thau_phu').select('*').eq('active',true).order('ten_cong_ty');
+    TP=data||[];
   }
+  const now=new Date();
+  const curY=now.getFullYear();
+  const thOpts=Array.from({length:6},(_,i)=>{
+    const d=new Date(curY,now.getMonth()-i,1);
+    const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    return`<option value="${v}" ${i===0?'selected':''}>Tháng ${d.getMonth()+1}/${d.getFullYear()}</option>`;
+  }).join('');
+  const tpOpts=TP.map(t=>`<option value="${t.ma_thau}|${t.ten_cong_ty}">${t.ten_cong_ty}</option>`).join('');
+
+  c.innerHTML=`
+  <div class="toolbar" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <select id="tt-thau" class="filter-sel" style="min-width:200px">
+      <option value="">-- Chọn thầu phụ --</option>${tpOpts}
+    </select>
+    <select id="tt-thang" class="filter-sel">${thOpts}</select>
+    <button class="btn btn-teal" onclick="loadBangKeThau()"><i class="ti ti-search"></i> Xem bảng kê</button>
+    <button class="btn" onclick="window.print()" id="tt-btn-in" style="display:none"><i class="ti ti-printer"></i> In</button>
+  </div>
+  <div id="tt-canhbao"></div>
+  <div id="tt-result" style="color:var(--text-muted);font-size:13px;padding:10px 0">
+    Chọn thầu phụ và tháng để xem bảng kê trả thầu.
+  </div>`;
+}
+
+async function loadBangKeThau(){
+  const tpVal=document.getElementById('tt-thau').value;
+  const thang=document.getElementById('tt-thang').value;
+  if(!tpVal){toast('Vui lòng chọn thầu phụ','error');return;}
+  const[maThau,tenThau]=tpVal.split('|',2);
+  const[y,m]=thang.split('-');
+  const res=document.getElementById('tt-result');
+  const canhbao=document.getElementById('tt-canhbao');
+  const btnIn=document.getElementById('tt-btn-in');
+  res.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
+  canhbao.innerHTML='';
+  btnIn.style.display='none';
+
+  const lastDay=new Date(parseInt(y),parseInt(m),0).getDate();
+  const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
+  const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+
+  // DEBUG — toàn bộ đơn của thầu trong tháng, KỂ CẢ đơn chưa khóa / chưa nhập cước thầu,
+  // dùng để phát hiện đơn bị "thiếu" khỏi bảng kê (nguyên nhân chính gây lệch số liệu)
+  const{data:debugAll}=await db.from('van_don').select('id,ma_don,locked,gia_cuoc_thau,thanh_toan_thau,ngay')
+    .eq('ma_thau_phu',maThau).gte('ngay',dateFrom).lte('ngay',dateTo);
+  console.log(`[BK Thầu DEBUG] Tổng đơn "${tenThau}" tháng ${thang} (chưa filter locked/cước):`,debugAll?.length||0);
+
+  // Bảng kê CHỈ tính đơn đã hoàn thành & khóa — đúng quy tắc báo cáo của hệ thống
+  const{data:orders}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,hanh_trinh,ten_lai_xe,gia_cuoc_thau,thanh_toan_thau,ma_thau_phu,so_cont,locked,loai_phan_loai_xe,tra_thau_doi_lenh')
+    .eq('ma_thau_phu',maThau).eq('locked',true)
+    .gte('ngay',dateFrom).lte('ngay',dateTo)
+    .order('ngay',{ascending:true});
+  const list=orders||[];
+
+  // Cảnh báo các chuyến trong tháng của thầu này nhưng CHƯA vào được bảng kê
+  // (lý do: chưa khóa đơn, hoặc đã khóa nhưng chưa nhập cước thầu = 0/null)
+  const thieu=(debugAll||[]).filter(o=>!list.some(x=>x.id===o.id));
+  if(thieu.length){
+    canhbao.innerHTML=`<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:var(--r);padding:8px 14px;margin-bottom:10px;font-size:12px;display:flex;align-items:center;gap:8px">
+      <i class="ti ti-alert-triangle" style="color:#d97706;font-size:16px"></i>
+      <span><strong style="color:#92400e">${thieu.length} chuyến của "${tenThau}" trong tháng ${m}/${y} chưa vào bảng kê</strong> —
+      ${thieu.slice(0,5).map(o=>`<span style="background:#fef9c3;border-radius:3px;padding:1px 4px">${o.ma_don}${!o.locked?' (chưa khóa)':(+o.gia_cuoc_thau||0)<=0?' (chưa có cước)':''}</span>`).join(' ')}
+      ${thieu.length>5?` và ${thieu.length-5} chuyến khác`:''}</span>
+    </div>`;
+  }
+
+  if(!list.length){
+    res.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có đơn đã khóa của thầu này trong tháng đã chọn</div>';
+    return;
+  }
+
+  // Chi hộ trả thầu phát sinh (join theo van_don_id, không snapshot)
+  let chiHoMap={};
+  const{data:chiHoRows}=await db.from('chi_ho').select('van_don_id,tien_tra_thau,tien_tra_laixe').in('van_don_id',list.map(o=>o.id));
+  (chiHoRows||[]).forEach(r=>{
+    if(!chiHoMap[r.van_don_id])chiHoMap[r.van_don_id]={traThau:0,traLX:0};
+    chiHoMap[r.van_don_id].traThau+=(+r.tien_tra_thau||0);
+    chiHoMap[r.van_don_id].traLX+=(+r.tien_tra_laixe||0);
+  });
   list.forEach(o=>{
     const ch0=chiHoMap[o.id]||{traThau:0,traLX:0};
     o._traThauThem=ch0.traThau;
@@ -982,72 +1051,55 @@ async function pgTraThau(c){
     o._traDL=+o.tra_thau_doi_lenh||0;
     o._thucTra=(+o.gia_cuoc_thau||0)+o._traThauThem+o._traDL-(o.loai_phan_loai_xe==='thau_thue_lai'?o._traLX:0);
   });
-  // Chi hộ chưa thu hồi (Dầu, Sửa xe, Trả nợ thầu...) — module Chi phí. Bọc try/catch vì bảng có thể chưa tồn tại nếu chưa chạy migration.
-  let chiPhiCH=[],dauXuatCH=[];
+
+  // Chi hộ chưa thu hồi (Dầu, Sửa xe, Trả nợ thầu...) — module Chi phí, riêng cho thầu này
+  let chThau={tong:0,items:[]};
   try{
     const[r1,r2]=await Promise.all([
-      db.from('chi_phi').select('id,ma_thau_phu,loai_chi_phi,so_tien,ngay').eq('can_kiem_soat',true).eq('trang_thai_thu_hoi','chua_thu_hoi').not('ma_thau_phu','is',null),
-      db.from('dau_xuat').select('id,ma_thau_phu,so_lit,thanh_tien,ngay_do').eq('trang_thai_thu_hoi','chua_thu_hoi').not('ma_thau_phu','is',null),
+      db.from('chi_phi').select('id,loai_chi_phi,so_tien,ngay').eq('ma_thau_phu',maThau).eq('can_kiem_soat',true).eq('trang_thai_thu_hoi','chua_thu_hoi'),
+      db.from('dau_xuat').select('id,so_lit,thanh_tien,ngay_do').eq('ma_thau_phu',maThau).eq('trang_thai_thu_hoi','chua_thu_hoi'),
     ]);
-    chiPhiCH=r1.data||[];dauXuatCH=r2.data||[];
-  }catch(err){console.warn('[pgTraThau] chưa có bảng chi_phi/dau_xuat — chạy migration trước:',err.message);}
-  // Group theo thầu phụ
-  const groups={};
-  list.forEach(o=>{
-    const k=o.ma_thau_phu||'Khác';
-    if(!groups[k])groups[k]=[];
-    groups[k].push(o);
-  });
-  // Group chi hộ chưa thu hồi theo thầu phụ
-  const chThau={};
-  chiPhiCH.forEach(o=>{
-    const k=o.ma_thau_phu;if(!chThau[k])chThau[k]={tong:0,items:[]};
-    chThau[k].tong+=(+o.so_tien||0);
-    chThau[k].items.push({id:o.id,nguon:'chi_phi',label:o.loai_chi_phi,tien:+o.so_tien||0,ngay:o.ngay});
-  });
-  dauXuatCH.forEach(o=>{
-    const k=o.ma_thau_phu;if(!chThau[k])chThau[k]={tong:0,items:[]};
-    chThau[k].tong+=(+o.thanh_tien||0);
-    chThau[k].items.push({id:o.id,nguon:'dau_xuat',label:`Dầu ${o.so_lit} lít`,tien:+o.thanh_tien||0,ngay:o.ngay_do});
-  });
-  const tongAll=list.reduce((s,o)=>s+o._thucTra,0);
-  c.innerHTML=`
+    (r1.data||[]).forEach(o=>{chThau.tong+=+o.so_tien||0;chThau.items.push({id:o.id,nguon:'chi_phi',label:o.loai_chi_phi,tien:+o.so_tien||0,ngay:o.ngay});});
+    (r2.data||[]).forEach(o=>{chThau.tong+=+o.thanh_tien||0;chThau.items.push({id:o.id,nguon:'dau_xuat',label:`Dầu ${o.so_lit} lít`,tien:+o.thanh_tien||0,ngay:o.ngay_do});});
+  }catch(err){console.warn('[loadBangKeThau] chưa có bảng chi_phi/dau_xuat — chạy migration trước:',err.message);}
+
+  const tong=list.reduce((s,o)=>s+o._thucTra,0);
+  const conPhaiTra=tong-chThau.tong;
+  const soDaTra=list.filter(o=>o.thanh_toan_thau==='Đã trả').length;
+
+  res.innerHTML=`
   <div class="stats-row stats-3" style="margin-bottom:14px">
-    <div class="stat-card"><div class="stat-lbl">Tổng phải trả thầu</div><div class="stat-val text-red">${fmt(Math.round(tongAll/1e6))}tr</div></div>
-    <div class="stat-card"><div class="stat-lbl">Số đơn chưa trả</div><div class="stat-val">${list.length}</div></div>
-    <div class="stat-card"><div class="stat-lbl">Số nhà thầu</div><div class="stat-val">${Object.keys(groups).length}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Tổng trả thầu kỳ này</div><div class="stat-val text-red">${fmtM(tong)}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Số chuyến</div><div class="stat-val">${list.length}</div><div class="stat-sub">${soDaTra} đã trả · ${list.length-soDaTra} chưa trả</div></div>
+    <div class="stat-card"><div class="stat-lbl">Còn phải trả (đã trừ chi hộ)</div><div class="stat-val text-red">${fmtM(conPhaiTra)}</div></div>
   </div>
-  ${Object.entries(groups).map(([tp,items])=>{
-    const tong=items.reduce((s,o)=>s+o._thucTra,0);
-    const ch=chThau[tp];
-    const conPhaiTra=tong-(ch?.tong||0);
-    return`<div class="bk-group">
+  <div class="bk-group">
     <div class="bk-group-header">
-      <div class="bk-group-title">${tp}</div>
+      <div class="bk-group-title">${tenThau} — Tháng ${m}/${y}</div>
       <div style="font-size:15px;font-weight:700;color:var(--danger)">${fmtM(tong)}</div>
     </div>
     <table class="tbl">
       <thead><tr><th>Mã đơn</th><th>Ngày</th><th>Khách hàng</th><th>Hành trình</th><th>Lái xe</th><th>Cước thầu</th><th>Trạng thái</th></tr></thead>
-      <tbody>${items.map(o=>`<tr>
+      <tbody>${list.map(o=>`<tr>
         <td style="color:var(--teal);font-weight:600">${o.ma_don}</td><td>${o.ngay}</td>
         <td>${o.ten_khach}</td><td>${o.hanh_trinh||'—'}</td><td>${o.ten_lai_xe||'—'}</td>
         <td class="text-red fw6">${fmtM(o._thucTra)}${(o._traThauThem>0||o._traDL>0||(o.loai_phan_loai_xe==='thau_thue_lai'&&o._traLX>0))?`<div style="font-size:10px;color:var(--text-muted);font-weight:400">Cước ${fmtM(o.gia_cuoc_thau)}${o._traThauThem>0?' + Chi hộ '+fmtM(o._traThauThem):''}${o._traDL>0?' + Đổi lệnh '+fmtM(o._traDL):''}${(o.loai_phan_loai_xe==='thau_thue_lai'&&o._traLX>0)?' − Lương LX '+fmtM(o._traLX):''}</div>`:''}</td>
         <td>${thuTag(o.thanh_toan_thau)}</td>
       </tr>`).join('')}</tbody>
     </table>
-    ${ch?`<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:10px 12px;margin-top:8px">
+    ${chThau.items.length?`<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:10px 12px;margin-top:8px">
       <div style="font-size:11px;font-weight:600;color:#92400e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px"><i class="ti ti-receipt-2"></i> Chi hộ chưa thu hồi (Dầu / Sửa xe / Trả nợ — module Chi phí)</div>
-      ${ch.items.map(it=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+      ${chThau.items.map(it=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
         <span>${it.label} · ${it.ngay||'—'}</span><span class="text-orange fw6">${fmtM(it.tien)}</span>
       </div>`).join('')}
       <div style="display:flex;justify-content:space-between;border-top:1px dashed #fde68a;margin-top:6px;padding-top:6px;font-size:12px;font-weight:700">
-        <span>Tổng chi hộ chưa thu hồi</span><span class="text-orange">${fmtM(ch.tong)}</span>
+        <span>Tổng chi hộ chưa thu hồi</span><span class="text-orange">${fmtM(chThau.tong)}</span>
       </div>
-      ${canSee(['ke_toan','ceo'])?`<button class="btn btn-xs btn-teal" style="margin-top:8px" onclick='xacNhanThuHoiThau(${JSON.stringify(tp)},${JSON.stringify(ch.items)})'><i class="ti ti-check"></i> Đánh dấu đã thu hồi</button>`:''}
+      ${canSee(['ke_toan','ceo'])?`<button class="btn btn-xs btn-teal" style="margin-top:8px" onclick='xacNhanThuHoiThau(${JSON.stringify(tenThau)},${JSON.stringify(chThau.items)})'><i class="ti ti-check"></i> Đánh dấu đã thu hồi</button>`:''}
     </div>`:''}
-    <div class="bk-total-row"><span>${ch?'Còn phải trả (đã trừ chi hộ)':'Tổng trả'} ${tp}</span><span style="color:var(--danger)">${fmtM(conPhaiTra)}</span></div>
-    </div>`;
-  }).join('')}`;
+    <div class="bk-total-row"><span>Còn phải trả (đã trừ chi hộ) ${tenThau}</span><span style="color:var(--danger)">${fmtM(conPhaiTra)}</span></div>
+  </div>`;
+  btnIn.style.display='inline-flex';
 }
 
 // Đánh dấu các khoản chi hộ (chi_phi + dau_xuat) của 1 thầu phụ là đã thu hồi (đã trừ vào kỳ trả thầu này)
@@ -1061,7 +1113,7 @@ async function xacNhanThuHoiThau(tenThau,items){
     if(idsChiPhi.length)await db.from('chi_phi').update({trang_thai_thu_hoi:'da_thu_hoi',thu_hoi_ky:ky}).in('id',idsChiPhi);
     if(idsDauXuat.length)await db.from('dau_xuat').update({trang_thai_thu_hoi:'da_thu_hoi',thu_hoi_ky:ky}).in('id',idsDauXuat);
     toast('Đã đánh dấu thu hồi');
-    pgTraThau(document.getElementById('content'));
+    loadBangKeThau();
   }catch(err){toast('Lỗi: '+err.message,'error');}
 }
 
