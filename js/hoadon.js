@@ -704,8 +704,24 @@ async function saveXuLyHD(hdId){
 }
 
 async function huyHD(id){
-  if(!confirm('Hủy hóa đơn này?'))return;
-  await db.from('hoa_don').update({trang_thai:'huy'}).eq('id',id);
-  toast('Đã hủy');
+  const{data:hd}=await db.from('hoa_don').select('storage_path,trang_thai,so_hd').eq('id',id).single();
+  if(hd?.trang_thai==='da_duyet'){
+    toast('HĐ này đã tạo chi hộ — vào tab Chi hộ của vận đơn, xóa chi phí tương ứng để dọn đúng dữ liệu','error');
+    return;
+  }
+  if(!confirm(`Hủy & xóa vĩnh viễn HĐ ${hd?.so_hd||'(không số)'}?\nFile trên Supabase Storage sẽ bị xóa, KHÔNG thể khôi phục!`))return;
+  try{
+    // Gỡ liên kết van_don nếu có (phòng trường hợp đã match nhưng chưa duyệt)
+    await db.from('hoa_don_van_don').delete().eq('hoa_don_id',id);
+    if(hd?.storage_path){
+      const{error:rmErr}=await db.storage.from('hoa-don').remove([hd.storage_path]);
+      if(rmErr)console.warn('Xóa file Storage lỗi (non-fatal):',rmErr.message);
+    }
+    const{error}=await db.from('hoa_don').delete().eq('id',id);
+    if(error){toast('Lỗi DB: '+error.message,'error');return;}
+    toast('Đã xóa hóa đơn & file Storage');
+  }catch(e){
+    toast('Lỗi: '+e.message,'error');return;
+  }
   pgHoaDon(document.getElementById('content'));
 }
