@@ -198,10 +198,6 @@ async function pgCongNo(c){
 // ==================== BẢNG KÊ ====================
 async function pgBangKe(c){
   if(!canSee(['ke_toan','ceo','thu_quy'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
-  if(!KH||!KH.length){
-    const{data}=await db.from('khach_hang').select('*').eq('active',true).order('ten_cong_ty',{ascending:true});
-    KH=data||[];
-  }
   const now=new Date();
   const curY=now.getFullYear();
   const thOpts=Array.from({length:6},(_,i)=>{
@@ -209,14 +205,11 @@ async function pgBangKe(c){
     const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     return`<option value="${v}" ${i===0?'selected':''}>Tháng ${d.getMonth()+1}/${d.getFullYear()}</option>`;
   }).join('');
-  const khopts=KH.map(k=>`<option value="${k.id}|${k.ten_cong_ty}">${k.ten_cong_ty}</option>`).join('');
 
   c.innerHTML=`
   <div class="toolbar" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
-    <select id="bk-kh" class="filter-sel" style="min-width:200px">
-      <option value="">-- Chọn khách hàng --</option>${khopts}
-    </select>
-    <select id="bk-thang" class="filter-sel">${thOpts}</select>
+    <select id="bk-kh" class="filter-sel" style="min-width:200px"><option value="">-- Đang tải khách hàng... --</option></select>
+    <select id="bk-thang" class="filter-sel" onchange="reloadKhDropdown()">${thOpts}</select>
     <button class="btn btn-teal" onclick="loadBangKe()"><i class="ti ti-search"></i> Xem bảng kê</button>
     <button class="btn btn-primary" onclick="xuatExcelBangKe()" id="btn-xuat-excel" style="display:none"><i class="ti ti-file-spreadsheet"></i> Xuất Excel</button>
     <button class="btn" onclick="window.print()" id="btn-in" style="display:none"><i class="ti ti-printer"></i> In</button>
@@ -225,6 +218,36 @@ async function pgBangKe(c){
   <div id="bk-result" style="color:var(--text-muted);font-size:13px;padding:10px 0">
     Chọn khách hàng và tháng để xem bảng kê.
   </div>`;
+  await reloadKhDropdown();
+}
+
+// Nạp lại dropdown khách hàng — CHỈ những khách có ít nhất 1 chuyến đã khóa trong tháng đang chọn
+// (đồng bộ đúng logic với dropdown thầu phụ ở trang Trả thầu phụ — cùng lấy trực tiếp từ Quản lý
+// vận đơn theo kỳ, không liệt kê toàn bộ khách trong Danh mục bất kể có dữ liệu hay không).
+async function reloadKhDropdown(){
+  const sel=document.getElementById('bk-kh');
+  const thang=document.getElementById('bk-thang')?.value;
+  if(!sel||!thang)return;
+  const[y,m]=thang.split('-');
+  const lastDay=new Date(+y,+m,0).getDate();
+  const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
+  const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  const dangChon=sel.value;
+  sel.innerHTML='<option value="">-- Đang tải... --</option>';
+  const{data}=await db.from('van_don').select('ten_khach').eq('locked',true)
+    .gte('ngay',dateFrom).lte('ngay',dateTo)
+    .not('ten_khach','is',null).neq('ten_khach','');
+  const seen=new Set();const khList=[];
+  (data||[]).forEach(o=>{
+    const raw=(o.ten_khach||'').trim();
+    if(!raw)return;
+    const norm=raw.toLowerCase();
+    if(!seen.has(norm)){seen.add(norm);khList.push(raw);}
+  });
+  khList.sort((a,b)=>a.localeCompare(b,'vi'));
+  sel.innerHTML=`<option value="">-- Chọn khách hàng (${khList.length} khách có chuyến kỳ này) --</option>`
+    +khList.map(k=>`<option value="${k}">${k}</option>`).join('');
+  if(khList.some(k=>k.toLowerCase()===dangChon.toLowerCase()))sel.value=dangChon;
 }
 
 async function loadBangKe(){
@@ -961,22 +984,6 @@ async function xuatExcelBangKe(){
 // ============ BẢNG KÊ TRẢ THẦU PHỤ (chọn thầu + tháng, giống Bảng kê thu khách) ============
 async function pgTraThau(c){
   if(!canSee(['ke_toan','ceo','thu_quy'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
-  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải danh sách thầu phụ...</div>';
-
-  // Lấy danh sách thầu phụ TRỰC TIẾP từ Quản lý vận đơn (cột ma_thau_phu) — không tham chiếu
-  // Danh mục Phương tiện & Lái xe nữa, vì danh mục đó đang có dữ liệu trùng/lệch (vd 1 công ty
-  // "TRỌNG KHÁNH" bị tách thành 2 mã khác nhau). Vận đơn là dữ liệu thực tế, gốc, đáng tin nhất.
-  const{data:rawList}=await db.from('van_don').select('ma_thau_phu').not('ma_thau_phu','is',null).neq('ma_thau_phu','');
-  const seen=new Set();
-  const thauList=[];
-  (rawList||[]).forEach(o=>{
-    const raw=(o.ma_thau_phu||'').trim();
-    if(!raw)return;
-    const norm=raw.toLowerCase();
-    if(!seen.has(norm)){seen.add(norm);thauList.push(raw);}
-  });
-  thauList.sort((a,b)=>a.localeCompare(b,'vi'));
-
   const now=new Date();
   const curY=now.getFullYear();
   const thOpts=Array.from({length:6},(_,i)=>{
@@ -984,14 +991,11 @@ async function pgTraThau(c){
     const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     return`<option value="${v}" ${i===0?'selected':''}>Tháng ${d.getMonth()+1}/${d.getFullYear()}</option>`;
   }).join('');
-  const tpOpts=thauList.map(t=>`<option value="${t}">${t}</option>`).join('');
 
   c.innerHTML=`
   <div class="toolbar" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
-    <select id="tt-thau" class="filter-sel" style="min-width:220px">
-      <option value="">-- Chọn thầu phụ --</option>${tpOpts}
-    </select>
-    <select id="tt-thang" class="filter-sel">${thOpts}</select>
+    <select id="tt-thau" class="filter-sel" style="min-width:220px"><option value="">-- Đang tải thầu phụ... --</option></select>
+    <select id="tt-thang" class="filter-sel" onchange="reloadThauDropdown()">${thOpts}</select>
     <button class="btn btn-teal" onclick="loadBangKeThau()"><i class="ti ti-search"></i> Xem bảng kê</button>
     <button class="btn" onclick="window.print()" id="tt-btn-in" style="display:none"><i class="ti ti-printer"></i> In</button>
   </div>
@@ -999,6 +1003,36 @@ async function pgTraThau(c){
   <div id="tt-result" style="color:var(--text-muted);font-size:13px;padding:10px 0">
     Chọn thầu phụ và tháng để xem bảng kê trả thầu.
   </div>`;
+  await reloadThauDropdown();
+}
+
+// Nạp lại dropdown thầu phụ — CHỈ những thầu có ít nhất 1 chuyến đã khóa trong tháng đang chọn
+// (khớp đúng quy tắc báo cáo: chỉ tính đơn locked=true), thay vì liệt kê toàn bộ thầu từng có
+// trong lịch sử như trước — tránh chọn nhầm thầu không có dữ liệu kỳ này.
+async function reloadThauDropdown(){
+  const sel=document.getElementById('tt-thau');
+  const thang=document.getElementById('tt-thang')?.value;
+  if(!sel||!thang)return;
+  const[y,m]=thang.split('-');
+  const lastDay=new Date(+y,+m,0).getDate();
+  const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
+  const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  const dangChon=sel.value;
+  sel.innerHTML='<option value="">-- Đang tải... --</option>';
+  const{data}=await db.from('van_don').select('ma_thau_phu').eq('locked',true)
+    .gte('ngay',dateFrom).lte('ngay',dateTo)
+    .not('ma_thau_phu','is',null).neq('ma_thau_phu','');
+  const seen=new Set();const thauList=[];
+  (data||[]).forEach(o=>{
+    const raw=(o.ma_thau_phu||'').trim();
+    if(!raw)return;
+    const norm=raw.toLowerCase();
+    if(!seen.has(norm)){seen.add(norm);thauList.push(raw);}
+  });
+  thauList.sort((a,b)=>a.localeCompare(b,'vi'));
+  sel.innerHTML=`<option value="">-- Chọn thầu phụ (${thauList.length} thầu có chuyến kỳ này) --</option>`
+    +thauList.map(t=>`<option value="${t}">${t}</option>`).join('');
+  if(thauList.some(t=>t.toLowerCase()===dangChon.toLowerCase()))sel.value=dangChon;
 }
 
 async function loadBangKeThau(){
