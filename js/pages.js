@@ -961,28 +961,21 @@ async function xuatExcelBangKe(){
 // ============ BẢNG KÊ TRẢ THẦU PHỤ (chọn thầu + tháng, giống Bảng kê thu khách) ============
 async function pgTraThau(c){
   if(!canSee(['ke_toan','ceo','thu_quy'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
-  if(!TP||!TP.length){
-    const{data}=await db.from('thau_phu').select('*').eq('active',true).order('ten_cong_ty');
-    TP=data||[];
-  }
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải danh sách thầu phụ...</div>';
 
-  // QUAN TRỌNG: lấy TẤT CẢ giá trị ma_thau_phu đã từng được gõ trong vận đơn (kể cả thầu ngoài công ty
-  // chưa khai báo ở Danh mục → Thầu phụ, ví dụ Tân Hoàng Kim, Khánh Huyền, Hoàng Gia BN...).
-  // Nếu chỉ lấy theo Danh mục thì các thầu này sẽ KHÔNG BAO GIỜ chọn được trong dropdown → mất hẳn khỏi bảng kê.
+  // Lấy danh sách thầu phụ TRỰC TIẾP từ Quản lý vận đơn (cột ma_thau_phu) — không tham chiếu
+  // Danh mục Phương tiện & Lái xe nữa, vì danh mục đó đang có dữ liệu trùng/lệch (vd 1 công ty
+  // "TRỌNG KHÁNH" bị tách thành 2 mã khác nhau). Vận đơn là dữ liệu thực tế, gốc, đáng tin nhất.
   const{data:rawList}=await db.from('van_don').select('ma_thau_phu').not('ma_thau_phu','is',null).neq('ma_thau_phu','');
-  const rawSet=new Set((rawList||[]).map(o=>(o.ma_thau_phu||'').trim()).filter(Boolean));
-
-  // Gộp danh mục chính thức (mã + tên công ty) với các tên thầu phụ gõ tay chưa có trong danh mục.
-  // So khớp không phân biệt hoa/thường & khoảng trắng dư để tránh tạo 2 dòng trùng cho cùng 1 thầu.
-  const merged=[]; // {key,label,inDanhMuc}
   const seen=new Set();
-  TP.forEach(t=>{merged.push({key:t.ma_thau,label:t.ten_cong_ty,inDanhMuc:true});seen.add(t.ma_thau.trim().toLowerCase());});
-  [...rawSet].sort((a,b)=>a.localeCompare(b,'vi')).forEach(raw=>{
+  const thauList=[];
+  (rawList||[]).forEach(o=>{
+    const raw=(o.ma_thau_phu||'').trim();
+    if(!raw)return;
     const norm=raw.toLowerCase();
-    if(!seen.has(norm)){merged.push({key:raw,label:raw,inDanhMuc:false});seen.add(norm);}
+    if(!seen.has(norm)){seen.add(norm);thauList.push(raw);}
   });
-  merged.sort((a,b)=>a.label.localeCompare(b.label,'vi'));
+  thauList.sort((a,b)=>a.localeCompare(b,'vi'));
 
   const now=new Date();
   const curY=now.getFullYear();
@@ -991,7 +984,7 @@ async function pgTraThau(c){
     const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     return`<option value="${v}" ${i===0?'selected':''}>Tháng ${d.getMonth()+1}/${d.getFullYear()}</option>`;
   }).join('');
-  const tpOpts=merged.map(t=>`<option value="${t.key}|${t.label}">${t.label}${!t.inDanhMuc?' ⚠️ (ngoài danh mục)':''}</option>`).join('');
+  const tpOpts=thauList.map(t=>`<option value="${t}">${t}</option>`).join('');
 
   c.innerHTML=`
   <div class="toolbar" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
@@ -1004,7 +997,7 @@ async function pgTraThau(c){
   </div>
   <div id="tt-canhbao"></div>
   <div id="tt-result" style="color:var(--text-muted);font-size:13px;padding:10px 0">
-    Chọn thầu phụ và tháng để xem bảng kê trả thầu. Thầu có ⚠️ là thầu <strong>ngoài công ty / ngoài danh mục chính thức</strong> (đang chỉ tồn tại theo tên gõ tay trong vận đơn) — nên vào <strong>Danh mục → Thầu phụ</strong> khai báo đầy đủ (mã, SĐT, số tài khoản) để quản lý chặt hơn.
+    Chọn thầu phụ và tháng để xem bảng kê trả thầu.
   </div>`;
 }
 
@@ -1012,7 +1005,7 @@ async function loadBangKeThau(){
   const tpVal=document.getElementById('tt-thau').value;
   const thang=document.getElementById('tt-thang').value;
   if(!tpVal){toast('Vui lòng chọn thầu phụ','error');return;}
-  const[maThau,tenThau]=tpVal.split('|',2);
+  const maThau=tpVal,tenThau=tpVal;
   const[y,m]=thang.split('-');
   const res=document.getElementById('tt-result');
   const canhbao=document.getElementById('tt-canhbao');
@@ -1020,6 +1013,7 @@ async function loadBangKeThau(){
   res.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   canhbao.innerHTML='';
   btnIn.style.display='none';
+
 
   const lastDay=new Date(parseInt(y),parseInt(m),0).getDate();
   const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
