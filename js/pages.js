@@ -965,6 +965,25 @@ async function pgTraThau(c){
     const{data}=await db.from('thau_phu').select('*').eq('active',true).order('ten_cong_ty');
     TP=data||[];
   }
+  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải danh sách thầu phụ...</div>';
+
+  // QUAN TRỌNG: lấy TẤT CẢ giá trị ma_thau_phu đã từng được gõ trong vận đơn (kể cả thầu ngoài công ty
+  // chưa khai báo ở Danh mục → Thầu phụ, ví dụ Tân Hoàng Kim, Khánh Huyền, Hoàng Gia BN...).
+  // Nếu chỉ lấy theo Danh mục thì các thầu này sẽ KHÔNG BAO GIỜ chọn được trong dropdown → mất hẳn khỏi bảng kê.
+  const{data:rawList}=await db.from('van_don').select('ma_thau_phu').not('ma_thau_phu','is',null).neq('ma_thau_phu','');
+  const rawSet=new Set((rawList||[]).map(o=>(o.ma_thau_phu||'').trim()).filter(Boolean));
+
+  // Gộp danh mục chính thức (mã + tên công ty) với các tên thầu phụ gõ tay chưa có trong danh mục.
+  // So khớp không phân biệt hoa/thường & khoảng trắng dư để tránh tạo 2 dòng trùng cho cùng 1 thầu.
+  const merged=[]; // {key,label,inDanhMuc}
+  const seen=new Set();
+  TP.forEach(t=>{merged.push({key:t.ma_thau,label:t.ten_cong_ty,inDanhMuc:true});seen.add(t.ma_thau.trim().toLowerCase());});
+  [...rawSet].sort((a,b)=>a.localeCompare(b,'vi')).forEach(raw=>{
+    const norm=raw.toLowerCase();
+    if(!seen.has(norm)){merged.push({key:raw,label:raw,inDanhMuc:false});seen.add(norm);}
+  });
+  merged.sort((a,b)=>a.label.localeCompare(b.label,'vi'));
+
   const now=new Date();
   const curY=now.getFullYear();
   const thOpts=Array.from({length:6},(_,i)=>{
@@ -972,11 +991,11 @@ async function pgTraThau(c){
     const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     return`<option value="${v}" ${i===0?'selected':''}>Tháng ${d.getMonth()+1}/${d.getFullYear()}</option>`;
   }).join('');
-  const tpOpts=TP.map(t=>`<option value="${t.ma_thau}|${t.ten_cong_ty}">${t.ten_cong_ty}</option>`).join('');
+  const tpOpts=merged.map(t=>`<option value="${t.key}|${t.label}">${t.label}${!t.inDanhMuc?' ⚠️ (ngoài danh mục)':''}</option>`).join('');
 
   c.innerHTML=`
   <div class="toolbar" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
-    <select id="tt-thau" class="filter-sel" style="min-width:200px">
+    <select id="tt-thau" class="filter-sel" style="min-width:220px">
       <option value="">-- Chọn thầu phụ --</option>${tpOpts}
     </select>
     <select id="tt-thang" class="filter-sel">${thOpts}</select>
@@ -985,7 +1004,7 @@ async function pgTraThau(c){
   </div>
   <div id="tt-canhbao"></div>
   <div id="tt-result" style="color:var(--text-muted);font-size:13px;padding:10px 0">
-    Chọn thầu phụ và tháng để xem bảng kê trả thầu.
+    Chọn thầu phụ và tháng để xem bảng kê trả thầu. Thầu có ⚠️ là thầu <strong>ngoài công ty / ngoài danh mục chính thức</strong> (đang chỉ tồn tại theo tên gõ tay trong vận đơn) — nên vào <strong>Danh mục → Thầu phụ</strong> khai báo đầy đủ (mã, SĐT, số tài khoản) để quản lý chặt hơn.
   </div>`;
 }
 
@@ -1006,30 +1025,61 @@ async function loadBangKeThau(){
   const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
-  // DEBUG — toàn bộ đơn của thầu trong tháng, KỂ CẢ đơn chưa khóa / chưa nhập cước thầu,
-  // dùng để phát hiện đơn bị "thiếu" khỏi bảng kê (nguyên nhân chính gây lệch số liệu)
+  // DEBUG — toàn bộ đơn của thầu trong tháng (so khớp KHÔNG phân biệt hoa/thường & khoảng trắng dư),
+  // KỂ CẢ đơn chưa khóa / chưa nhập cước thầu — dùng để phát hiện đơn "thiếu" khỏi bảng kê
   const{data:debugAll}=await db.from('van_don').select('id,ma_don,locked,gia_cuoc_thau,thanh_toan_thau,ngay')
-    .eq('ma_thau_phu',maThau).gte('ngay',dateFrom).lte('ngay',dateTo);
+    .ilike('ma_thau_phu',maThau.trim()).gte('ngay',dateFrom).lte('ngay',dateTo);
   console.log(`[BK Thầu DEBUG] Tổng đơn "${tenThau}" tháng ${thang} (chưa filter locked/cước):`,debugAll?.length||0);
 
   // Bảng kê CHỈ tính đơn đã hoàn thành & khóa — đúng quy tắc báo cáo của hệ thống
   const{data:orders}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,hanh_trinh,ten_lai_xe,gia_cuoc_thau,thanh_toan_thau,ma_thau_phu,so_cont,locked,loai_phan_loai_xe,tra_thau_doi_lenh')
-    .eq('ma_thau_phu',maThau).eq('locked',true)
+    .ilike('ma_thau_phu',maThau.trim()).eq('locked',true)
     .gte('ngay',dateFrom).lte('ngay',dateTo)
     .order('ngay',{ascending:true});
   const list=orders||[];
 
-  // Cảnh báo các chuyến trong tháng của thầu này nhưng CHƯA vào được bảng kê
+  let canhbaoHtml='';
+
+  // Cảnh báo 1: chuyến của thầu trong tháng nhưng CHƯA vào được bảng kê
   // (lý do: chưa khóa đơn, hoặc đã khóa nhưng chưa nhập cước thầu = 0/null)
   const thieu=(debugAll||[]).filter(o=>!list.some(x=>x.id===o.id));
   if(thieu.length){
-    canhbao.innerHTML=`<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:var(--r);padding:8px 14px;margin-bottom:10px;font-size:12px;display:flex;align-items:center;gap:8px">
+    canhbaoHtml+=`<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:var(--r);padding:8px 14px;margin-bottom:8px;font-size:12px;display:flex;align-items:center;gap:8px">
       <i class="ti ti-alert-triangle" style="color:#d97706;font-size:16px"></i>
       <span><strong style="color:#92400e">${thieu.length} chuyến của "${tenThau}" trong tháng ${m}/${y} chưa vào bảng kê</strong> —
       ${thieu.slice(0,5).map(o=>`<span style="background:#fef9c3;border-radius:3px;padding:1px 4px">${o.ma_don}${!o.locked?' (chưa khóa)':(+o.gia_cuoc_thau||0)<=0?' (chưa có cước)':''}</span>`).join(' ')}
       ${thieu.length>5?` và ${thieu.length-5} chuyến khác`:''}</span>
     </div>`;
   }
+
+  // Cảnh báo 2 — NGUYÊN NHÂN PHỔ BIẾN NHẤT GÂY "THIẾU NHIỀU CHUYẾN":
+  // ma_thau_phu là ô NHẬP TAY tự do (không ràng buộc với danh mục thầu phụ), nên OPS có thể gõ
+  // sai/thiếu/khác mã (kể cả khoảng trắng, viết tắt khác). Đối chiếu theo TÊN LÁI XE của các chuyến
+  // đã khớp đúng thầu này, để tìm các chuyến CÙNG LÁI XE nhưng đang bị gắn mã thầu phụ khác/trống.
+  const taiXeSet=[...new Set(list.map(o=>o.ten_lai_xe).filter(Boolean))];
+  let leak=[];
+  if(taiXeSet.length){
+    const{data:leakData}=await db.from('van_don').select('id,ma_don,ngay,ten_lai_xe,ma_thau_phu,gia_cuoc_thau')
+      .in('ten_lai_xe',taiXeSet).eq('locked',true)
+      .gte('ngay',dateFrom).lte('ngay',dateTo);
+    const maThauNorm=maThau.trim().toLowerCase();
+    leak=(leakData||[]).filter(o=>(o.ma_thau_phu||'').trim().toLowerCase()!==maThauNorm);
+  }
+  if(leak.length){
+    canhbaoHtml+=`<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--r);padding:8px 14px;margin-bottom:8px;font-size:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <i class="ti ti-alert-octagon" style="color:var(--danger);font-size:16px"></i>
+        <strong style="color:#991b1b">Phát hiện ${leak.length} chuyến CÙNG lái xe (${taiXeSet.join(', ')}) nhưng đang gắn mã thầu phụ khác/trống — rất có thể đây là phần bị "thiếu" anh đang thấy:</strong>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+      ${leak.slice(0,10).map(o=>`<span style="background:#fef2f2;border-radius:3px;padding:1px 5px">${o.ma_don} (${o.ma_thau_phu?'mã: "'+o.ma_thau_phu+'"':'chưa có mã thầu'})</span>`).join('')}
+      ${leak.length>10?`<span>và ${leak.length-10} chuyến khác</span>`:''}
+      </div>
+      <div style="margin-top:4px;color:#7f1d1d">→ Vào từng đơn này, mở tab "Xe & Lái xe", sửa lại đúng mã thầu phụ <strong>${maThau}</strong> rồi khóa đơn lại để vào đúng bảng kê.</div>
+    </div>`;
+  }
+
+  canhbao.innerHTML=canhbaoHtml;
 
   if(!list.length){
     res.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có đơn đã khóa của thầu này trong tháng đã chọn</div>';
