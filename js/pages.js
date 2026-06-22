@@ -1110,6 +1110,7 @@ async function loadBangKeThau(){
   const tong=list.reduce((s,o)=>s+o._thucTra,0);
   const conPhaiTra=tong-chThau.tong;
   const soDaTra=list.filter(o=>o.thanh_toan_thau==='Đã trả').length;
+  const coThauThueLai=list.some(o=>o.loai_phan_loai_xe==='thau_thue_lai');
 
   res.innerHTML=`
   <div class="stats-row stats-3" style="margin-bottom:14px">
@@ -1125,7 +1126,7 @@ async function loadBangKeThau(){
     <table class="tbl">
       <thead><tr>
         <th>Ngày</th><th>Mã đơn</th><th>Loại</th><th>Tuyến đường</th><th>Số cont</th><th>Loại cont</th><th>Loại chuyến</th><th>BKS</th>
-        <th>Cước thầu</th><th>Chi hộ trả thầu</th><th>Đổi lệnh</th><th>Trừ lương LX</th><th>Tổng phải trả</th><th>Trạng thái</th>
+        <th>Cước thầu</th><th>Chi hộ trả thầu</th><th>Đổi lệnh</th>${coThauThueLai?'<th>Trừ lương LX</th>':''}<th>Tổng phải trả</th><th>Trạng thái</th>
       </tr></thead>
       <tbody>${list.map(o=>{
         const traLX=(o.loai_phan_loai_xe==='thau_thue_lai'&&o._traLX>0)?o._traLX:0;
@@ -1141,7 +1142,7 @@ async function loadBangKeThau(){
         <td>${fmtM(o.gia_cuoc_thau)}</td>
         <td>${o._traThauThem>0?fmtM(o._traThauThem):'—'}</td>
         <td>${o._traDL>0?fmtM(o._traDL):'—'}</td>
-        <td>${traLX>0?'−'+fmtM(traLX):'—'}</td>
+        ${coThauThueLai?`<td>${traLX>0?'−'+fmtM(traLX):'—'}</td>`:''}
         <td class="text-red fw6">${fmtM(o._thucTra)}</td>
         <td>${thuTag(o.thanh_toan_thau)}</td>
       </tr>`;
