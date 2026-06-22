@@ -1026,7 +1026,7 @@ async function loadBangKeThau(){
   console.log(`[BK Thầu DEBUG] Tổng đơn "${tenThau}" tháng ${thang} (chưa filter locked/cước):`,debugAll?.length||0);
 
   // Bảng kê CHỈ tính đơn đã hoàn thành & khóa — đúng quy tắc báo cáo của hệ thống
-  const{data:orders}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,hanh_trinh,ten_lai_xe,gia_cuoc_thau,thanh_toan_thau,ma_thau_phu,so_cont,locked,loai_phan_loai_xe,tra_thau_doi_lenh')
+  const{data:orders}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,hanh_trinh,ten_lai_xe,gia_cuoc_thau,thanh_toan_thau,ma_thau_phu,so_cont,loai_cont,loai_hang,loai_chuyen,bien_kiem_soat,locked,loai_phan_loai_xe,tra_thau_doi_lenh')
     .ilike('ma_thau_phu',maThau.trim()).eq('locked',true)
     .gte('ngay',dateFrom).lte('ngay',dateTo)
     .order('ngay',{ascending:true});
@@ -1123,13 +1123,29 @@ async function loadBangKeThau(){
       <div style="font-size:15px;font-weight:700;color:var(--danger)">${fmtM(tong)}</div>
     </div>
     <table class="tbl">
-      <thead><tr><th>Mã đơn</th><th>Ngày</th><th>Khách hàng</th><th>Hành trình</th><th>Lái xe</th><th>Cước thầu</th><th>Trạng thái</th></tr></thead>
-      <tbody>${list.map(o=>`<tr>
-        <td style="color:var(--teal);font-weight:600">${o.ma_don}</td><td>${o.ngay}</td>
-        <td>${o.ten_khach}</td><td>${o.hanh_trinh||'—'}</td><td>${o.ten_lai_xe||'—'}</td>
-        <td class="text-red fw6">${fmtM(o._thucTra)}${(o._traThauThem>0||o._traDL>0||(o.loai_phan_loai_xe==='thau_thue_lai'&&o._traLX>0))?`<div style="font-size:10px;color:var(--text-muted);font-weight:400">Cước ${fmtM(o.gia_cuoc_thau)}${o._traThauThem>0?' + Chi hộ '+fmtM(o._traThauThem):''}${o._traDL>0?' + Đổi lệnh '+fmtM(o._traDL):''}${(o.loai_phan_loai_xe==='thau_thue_lai'&&o._traLX>0)?' − Lương LX '+fmtM(o._traLX):''}</div>`:''}</td>
+      <thead><tr>
+        <th>Ngày</th><th>Mã đơn</th><th>Loại</th><th>Tuyến đường</th><th>Số cont</th><th>Loại cont</th><th>Loại chuyến</th><th>BKS</th>
+        <th>Cước thầu</th><th>Chi hộ trả thầu</th><th>Đổi lệnh</th><th>Trừ lương LX</th><th>Tổng phải trả</th><th>Trạng thái</th>
+      </tr></thead>
+      <tbody>${list.map(o=>{
+        const traLX=(o.loai_phan_loai_xe==='thau_thue_lai'&&o._traLX>0)?o._traLX:0;
+        return`<tr>
+        <td>${o.ngay}</td>
+        <td style="color:var(--teal);font-weight:600">${o.ma_don}</td>
+        <td>${loaiTag(o.loai_hang)}</td>
+        <td>${o.hanh_trinh||'—'}</td>
+        <td>${o.so_cont||'—'}</td>
+        <td>${o.loai_cont||'—'}</td>
+        <td>${o.loai_chuyen||'—'}</td>
+        <td style="font-weight:600">${o.bien_kiem_soat||'—'}</td>
+        <td>${fmtM(o.gia_cuoc_thau)}</td>
+        <td>${o._traThauThem>0?fmtM(o._traThauThem):'—'}</td>
+        <td>${o._traDL>0?fmtM(o._traDL):'—'}</td>
+        <td>${traLX>0?'−'+fmtM(traLX):'—'}</td>
+        <td class="text-red fw6">${fmtM(o._thucTra)}</td>
         <td>${thuTag(o.thanh_toan_thau)}</td>
-      </tr>`).join('')}</tbody>
+      </tr>`;
+      }).join('')}</tbody>
     </table>
     ${chThau.items.length?`<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:10px 12px;margin-top:8px">
       <div style="font-size:11px;font-weight:600;color:#92400e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px"><i class="ti ti-receipt-2"></i> Chi hộ chưa thu hồi (Dầu / Sửa xe / Trả nợ — module Chi phí)</div>
