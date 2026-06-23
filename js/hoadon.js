@@ -113,15 +113,34 @@ async function taiMotHoaDon(url,fileName){
 }
 
 // ── 4. TRANG UPLOAD HÓA ĐƠN ─────────────────────────────────────────────────
+// ── Phân trang bảng "Đã xử lý gần đây" — tránh log quá dài ─────────────────
+let HD_DONE_LIST=[];
+let HD_DONE_PAGE=1;
+const HD_DONE_PAGE_SIZE=10;
+
+// Format timestamp đầy đủ ngày + giờ (created_at) — khác fmtDate (chỉ xử lý YYYY-MM-DD của ngay_hd)
+function fmtDateTime(ts){
+  if(!ts) return '—';
+  const d=new Date(ts);
+  if(isNaN(d.getTime())) return '—';
+  const dd=String(d.getDate()).padStart(2,'0');
+  const mm=String(d.getMonth()+1).padStart(2,'0');
+  const hh=String(d.getHours()).padStart(2,'0');
+  const mi=String(d.getMinutes()).padStart(2,'0');
+  return`${dd}/${mm}/${d.getFullYear()} ${hh}:${mi}`;
+}
+
 async function pgHoaDon(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   const[{data:cho},{data:daXong},{data:trungHuy}]=await Promise.all([
     db.from('hoa_don').select('*').eq('trang_thai','cho_xu_ly').order('created_at',{ascending:false}),
-    db.from('hoa_don').select('*').eq('trang_thai','da_duyet').order('created_at',{ascending:false}).limit(30),
+    db.from('hoa_don').select('*').eq('trang_thai','da_duyet').order('created_at',{ascending:false}).limit(200),
     db.from('hoa_don').select('*').eq('trang_thai','huy').ilike('ly_do_cho','Trùng với%').order('created_at',{ascending:false}).limit(15),
   ]);
   const choList=cho||[];
-  const doneList=daXong||[];
+  HD_DONE_LIST=daXong||[];
+  HD_DONE_PAGE=1;
+  const doneList=HD_DONE_LIST;
   const trungList=trungHuy||[];
 
   c.innerHTML=`
@@ -176,16 +195,59 @@ async function pgHoaDon(c){
     </table></div>
   </div>`:''}
 
-  ${doneList.length?`
-  <div>
-    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
-      <i class="ti ti-history"></i> Đã xử lý gần đây (${doneList.length})
+  ${doneList.length?'<div id="hd-done-wrap"></div>':''}
+
+  ${trungList.length?`
+  <div style="margin-top:14px">
+    <div style="font-size:12px;font-weight:600;color:#b45309;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+      <i class="ti ti-ban"></i> Đã tự động hủy do trùng (${trungList.length}) — không tính chi hộ
     </div>
     <div class="tbl-wrap"><table class="tbl">
-      <colgroup><col style="width:80px"><col style="width:90px"><col style="width:140px"><col style="width:100px"><col style="width:160px"><col style="width:120px"><col style="width:60px"></colgroup>
-      <thead><tr><th>Ngày HĐ</th><th>Số HĐ</th><th>Loại DV</th><th>Số tiền</th><th>Cont</th><th>Người upload</th><th>File</th></tr></thead>
+      <colgroup><col style="width:110px"><col style="width:80px"><col style="width:90px"><col style="width:140px"><col style="width:140px"><col style="width:110px"><col style="width:100px"><col style="width:160px"><col style="width:120px"></colgroup>
+      <thead><tr><th>Ngày upload</th><th>Ngày HĐ</th><th>Số HĐ</th><th>Đơn vị bán</th><th>Đơn vị mua</th><th>Số cont</th><th>Số tiền</th><th>Lý do hủy</th><th>Người upload</th></tr></thead>
       <tbody>
-      ${doneList.map(h=>`<tr>
+      ${trungList.map(h=>`<tr>
+        <td style="font-size:11px">${fmtDateTime(h.created_at)}</td>
+        <td>${h.ngay_hd||'—'}</td>
+        <td style="color:var(--teal)">${h.so_hd||'—'}</td>
+        <td style="font-size:11px">${h.ten_don_vi_xuat||'—'}</td>
+        <td style="font-size:11px">${h.ten_don_vi_mua||'—'}</td>
+        <td style="font-size:11px;font-family:monospace">${(h.so_cont_list||[]).join(', ')||'—'}</td>
+        <td class="text-orange fw6">${fmtM(h.tong_tien)}</td>
+        <td style="font-size:11px;color:#b45309">${h.ly_do_cho||'Trùng hóa đơn'}</td>
+        <td style="font-size:11px">${h.ten_nguoi_upload||'—'}</td>
+      </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>`:''}
+
+  ${!choList.length&&!doneList.length?'<div class="empty"><i class="ti ti-inbox"></i>Chưa có hóa đơn nào. Upload file để bắt đầu!</div>':''}`;
+
+  renderHdDoneTable();
+}
+
+// ── Render riêng bảng "Đã xử lý gần đây" — có phân trang, không re-fetch DB ──
+function renderHdDoneTable(){
+  const wrap=document.getElementById('hd-done-wrap');
+  if(!wrap) return;
+  const total=HD_DONE_LIST.length;
+  const totalPages=Math.max(1,Math.ceil(total/HD_DONE_PAGE_SIZE));
+  if(HD_DONE_PAGE>totalPages) HD_DONE_PAGE=totalPages;
+  if(HD_DONE_PAGE<1) HD_DONE_PAGE=1;
+  const start=(HD_DONE_PAGE-1)*HD_DONE_PAGE_SIZE;
+  const pageList=HD_DONE_LIST.slice(start,start+HD_DONE_PAGE_SIZE);
+
+  wrap.innerHTML=`
+  <div>
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+      <i class="ti ti-history"></i> Đã xử lý gần đây (${total})
+    </div>
+    <div class="tbl-wrap"><table class="tbl">
+      <colgroup><col style="width:110px"><col style="width:80px"><col style="width:90px"><col style="width:140px"><col style="width:100px"><col style="width:160px"><col style="width:120px"><col style="width:60px"></colgroup>
+      <thead><tr><th>Ngày upload</th><th>Ngày HĐ</th><th>Số HĐ</th><th>Loại DV</th><th>Số tiền</th><th>Cont</th><th>Người upload</th><th>File</th></tr></thead>
+      <tbody>
+      ${pageList.map(h=>`<tr>
+        <td style="font-size:11px">${fmtDateTime(h.created_at)}</td>
         <td>${h.ngay_hd||'—'}</td>
         <td style="color:var(--teal)">${h.so_hd||'—'}</td>
         <td>${h.loai_dv||'—'}</td>
@@ -196,31 +258,18 @@ async function pgHoaDon(c){
       </tr>`).join('')}
       </tbody>
     </table></div>
-  </div>`:''}
+    ${totalPages>1?`
+    <div style="display:flex;justify-content:center;align-items:center;gap:12px;margin-top:10px;font-size:12px;color:var(--text-muted)">
+      <button class="btn btn-xs" ${HD_DONE_PAGE<=1?'disabled':''} onclick="hdDoneGoPage(${HD_DONE_PAGE-1})"><i class="ti ti-chevron-left"></i> Trước</button>
+      <span>Trang ${HD_DONE_PAGE}/${totalPages}</span>
+      <button class="btn btn-xs" ${HD_DONE_PAGE>=totalPages?'disabled':''} onclick="hdDoneGoPage(${HD_DONE_PAGE+1})">Sau <i class="ti ti-chevron-right"></i></button>
+    </div>`:''}
+  </div>`;
+}
 
-  ${trungList.length?`
-  <div style="margin-top:14px">
-    <div style="font-size:12px;font-weight:600;color:#b45309;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
-      <i class="ti ti-ban"></i> Đã tự động hủy do trùng (${trungList.length}) — không tính chi hộ
-    </div>
-    <div class="tbl-wrap"><table class="tbl">
-      <colgroup><col style="width:80px"><col style="width:90px"><col style="width:140px"><col style="width:140px"><col style="width:100px"><col style="width:160px"><col style="width:120px"></colgroup>
-      <thead><tr><th>Ngày HĐ</th><th>Số HĐ</th><th>Đơn vị bán</th><th>Đơn vị mua</th><th>Số tiền</th><th>Lý do hủy</th><th>Người upload</th></tr></thead>
-      <tbody>
-      ${trungList.map(h=>`<tr>
-        <td>${h.ngay_hd||'—'}</td>
-        <td style="color:var(--teal)">${h.so_hd||'—'}</td>
-        <td style="font-size:11px">${h.ten_don_vi_xuat||'—'}</td>
-        <td style="font-size:11px">${h.ten_don_vi_mua||'—'}</td>
-        <td class="text-orange fw6">${fmtM(h.tong_tien)}</td>
-        <td style="font-size:11px;color:#b45309">${h.ly_do_cho||'Trùng hóa đơn'}</td>
-        <td style="font-size:11px">${h.ten_nguoi_upload||'—'}</td>
-      </tr>`).join('')}
-      </tbody>
-    </table></div>
-  </div>`:''}
-
-  ${!choList.length&&!doneList.length?'<div class="empty"><i class="ti ti-inbox"></i>Chưa có hóa đơn nào. Upload file để bắt đầu!</div>':''}`;
+function hdDoneGoPage(p){
+  HD_DONE_PAGE=p;
+  renderHdDoneTable();
 }
 
 function handleHDDrop(e){
