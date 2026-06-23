@@ -565,6 +565,9 @@ async function saveInfo(id){
     so_booking:loai!=='Nhập'?(document.getElementById('fi-booking')?.value||null):null,
     diem_lay:document.getElementById('fi-lay').value,
     diem_tra:document.getElementById('fi-tra').value,
+    // BUG FIX (23/06/2026): trước đây chỉ lưu diem_lay/diem_tra mà KHÔNG tính lại hanh_trinh,
+    // nên cột "Hành trình" ngoài danh sách vẫn hiện giá trị cũ dù đã sửa điểm lấy/trả hàng.
+    hanh_trinh:(document.getElementById('fi-lay').value||'')+(document.getElementById('fi-tra').value?' - '+document.getElementById('fi-tra').value:''),
     diem_tra_phat_sinh:document.getElementById('fi-traphat')?.value||null,
     ngay_yeu_cau:document.getElementById('fi-ycgiao')?.value||null,
     co_doi_lenh:document.getElementById('fi-doilenh').checked,
