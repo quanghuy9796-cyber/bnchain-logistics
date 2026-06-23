@@ -118,7 +118,7 @@ async function pgHoaDon(c){
   const[{data:cho},{data:daXong},{data:trungHuy}]=await Promise.all([
     db.from('hoa_don').select('*').eq('trang_thai','cho_xu_ly').order('created_at',{ascending:false}),
     db.from('hoa_don').select('*').eq('trang_thai','da_duyet').order('created_at',{ascending:false}).limit(30),
-    db.from('hoa_don').select('*').eq('trang_thai','huy').order('created_at',{ascending:false}).limit(15),
+    db.from('hoa_don').select('*').eq('trang_thai','huy').ilike('ly_do_cho','Trùng với%').order('created_at',{ascending:false}).limit(15),
   ]);
   const choList=cho||[];
   const doneList=daXong||[];
@@ -694,22 +694,64 @@ function xuLyTimVanDon(){
   }
 }
 
-async function saveXuLyHD(hdId){
+// ── Hiện UI chọn tay khi 1 cont khớp nhiều vận đơn mà không phân biệt được bằng đổi lệnh ──
+function renderXuLyChonTay(hdId,vdList,conts){
+  const found=document.getElementById('xuly-vd-found');
+  if(!found)return;
+  found.innerHTML=`
+  <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:8px 10px;margin-top:4px">
+    <div style="font-weight:600;color:#b45309;font-size:12px;margin-bottom:6px">
+      <i class="ti ti-alert-triangle"></i> Cont ${conts.join(', ')} khớp ${vdList.length} vận đơn khác nhau — không có đổi lệnh nào phân biệt được.
+      Tự chọn đúng vận đơn liên quan đến hóa đơn này (có thể tick nhiều nếu thật sự là 1 lô gộp):
+    </div>
+    ${vdList.map(v=>`
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 0;border-bottom:1px solid #fde68a;cursor:pointer">
+        <input type="checkbox" class="xuly-vd-pick" value="${v.id}">
+        <span style="flex:1">${v.ma_don} — ${v.ten_khach||'—'} — ${v.ngay||'—'} — cont: <strong>${v.so_cont}</strong>
+        ${(+v.phi_doi_lenh>0||+v.tra_thau_doi_lenh>0)?'<span style="color:var(--teal)">· có đổi lệnh</span>':''}</span>
+      </label>`).join('')}
+    <button class="btn btn-xs btn-primary" style="margin-top:8px" onclick="saveXuLyHD('${hdId}',[...document.querySelectorAll('.xuly-vd-pick:checked')].map(i=>i.value))">
+      <i class="ti ti-check"></i> Xác nhận lựa chọn & tạo chi hộ
+    </button>
+  </div>`;
+}
+
+async function saveXuLyHD(hdId,forcedVdIds=null){
   const conts=[...document.querySelectorAll('.xuly-cont-input')]
     .map(i=>i.value.trim().toUpperCase()).filter(v=>v.length>=6);
-  const gc=document.getElementById('xuly-gc').value;
+  const gc=document.getElementById('xuly-gc')?.value||'';
   if(!conts.length){toast('Vui lòng điền ít nhất 1 số cont','error');return;}
 
   const{data:hd}=await db.from('hoa_don').select('*').eq('id',hdId).single();
   if(!hd)return;
 
   // Tìm tất cả vận đơn khớp
-  const vdList=[];
+  let vdList=[];
   for(const cont of conts){
     const{data:vds}=await db.from('van_don').select('*').ilike('so_cont','%'+cont+'%');
     if(vds?.length) vdList.push(...vds.filter(v=>!vdList.find(x=>x.id===v.id)));
   }
   if(!vdList.length){toast('Không tìm thấy vận đơn nào khớp','error');return;}
+
+  if(forcedVdIds!==null){
+    if(!forcedVdIds.length){toast('Vui lòng tick ít nhất 1 vận đơn trước khi xác nhận','error');return;}
+    // OPS đã tự chọn tay từ bước cảnh báo mơ hồ — chỉ giữ đúng các VĐ được tick
+    vdList=vdList.filter(v=>forcedVdIds.includes(v.id));
+    if(!vdList.length){toast('Không có vận đơn nào được chọn','error');return;}
+  } else if(vdList.length>1){
+    // 1 cont nhưng khớp nhiều vận đơn khác nhau (cont tái sử dụng cho nhiều chuyến)
+    // → áp dụng cùng logic an toàn như matchContToVanDon(): ưu tiên vận đơn có đổi lệnh
+    const coDoiLenh=vdList.filter(v=>+v.phi_doi_lenh>0||+v.tra_thau_doi_lenh>0);
+    if(coDoiLenh.length===1){
+      // Chỉ 1 vận đơn có đổi lệnh → CHỈ ghi nhận đúng vận đơn đó, bỏ hẳn các vận đơn không liên quan
+      vdList=coDoiLenh;
+    } else {
+      // Không phân biệt được tự động (0 hoặc ≥2 đổi lệnh) → KHÔNG tự gán chính/tham chiếu
+      // Bắt OPS tự tick đúng vận đơn liên quan trước khi lưu
+      renderXuLyChonTay(hdId,vdList,conts);
+      return;
+    }
+  }
 
   // Tên file tải về đẹp: YYYY-MM_LoaiDV_CONT1-CONT2.pdf
   const displayName=buildDisplayName(hd.loai_dv,conts,hd.ngay_hd);
