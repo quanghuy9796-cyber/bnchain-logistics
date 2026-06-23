@@ -372,7 +372,7 @@ Trả về JSON ARRAY với đúng 1 phần tử (chỉ array thuần, không ma
 [{
   "so_hd": "số hóa đơn hoặc số biên lai",
   "ngay_hd": "ngày trên HĐ format YYYY-MM-DD",
-  "loai_dv": "Chỉ được chọn 1 trong: Nâng/hạ cont / Phí CSHT / Lưu ca / Phí cảng, bãi / Phí local charge / Chi phí khác. Quy tắc: (1) Bất kỳ dịch vụ nâng container, hạ container, nâng hàng, hạ hàng, nâng vỏ, hạ vỏ, nâng hạ cont → đều chọn Nâng/hạ cont. (2) CSHT / cơ sở hạ tầng → Phí CSHT. (3) Vệ sinh/sửa/rửa cont / lưu bãi / lưu cont → Phí cảng, bãi. (4) Local charge / phụ phí → Phí local charge. (5) Còn lại → Chi phí khác.",
+  "loai_dv": "Chỉ được chọn 1 trong: Nâng/hạ cont / Phí CSHT / Lưu ca / Phí cảng, bãi / Phí local charge / Chi phí khác. ƯU TIÊN KIỂM TRA TRƯỚC (chỉ áp dụng đúng 1 trường hợp đặc biệt này, không suy rộng cho trường hợp khác): Nếu tiêu đề là 'BIÊN LAI THU TIỀN PHÍ' về 'sử dụng công trình, kết cấu hạ tầng...khu vực cửa khẩu cảng biển' VÀ đơn vị thu là 'Cảng vụ Đường thủy nội địa Hải Phòng' (hoặc Cảng vụ tỉnh/thành khác tương tự) → LUÔN LUÔN là Phí CSHT, ngay cả khi dòng nội dung chỉ ghi 'Container 20/40 feet hàng khô/lạnh' không có chữ CSHT nào. Nếu không khớp trường hợp trên, áp dụng đúng theo từ khóa trong nội dung dịch vụ: (1) Bất kỳ dịch vụ nâng container, hạ container, nâng hàng, hạ hàng, nâng vỏ, hạ vỏ, nâng hạ cont → đều chọn Nâng/hạ cont. (2) CSHT / cơ sở hạ tầng → Phí CSHT. (3) Vệ sinh/sửa/rửa cont / lưu bãi / lưu cont → Phí cảng, bãi. (4) Local charge / phụ phí → Phí local charge. (5) Còn lại → Chi phí khác.",
   "tong_tien": số tiền VNĐ cuối cùng (số nguyên không dấu phẩy),
   "so_cont_list": ["POLU4510295"],
   "loai_cont": "20DC hoặc 40HC v.v",
@@ -539,7 +539,14 @@ function buildDisplayName(loaiDv, conts, ngayHd){
 }
 
 // Map loai_dv từ AI → loai_chi chuẩn của hệ thống
-function mapLoaiDv(loaiDv){
+function mapLoaiDv(loaiDv,tenDonViXuat){
+  // Lớp an toàn cứng theo đơn vị phát hành — mẫu "BIÊN LAI THU TIỀN PHÍ" của Cảng vụ Đường thủy nội địa (Hải Phòng hoặc tỉnh khác)
+  // LUÔN LUÔN là Phí CSHT, không phụ thuộc AI đọc đúng/sai loai_dv (dòng nội dung biên lai này thường không có từ khóa nào)
+  // Regex hẹp có chủ đích: chỉ khớp khi có CẢ 2 cụm "cảng vụ" + "đường thủy" cùng tên — tránh nhầm với công ty vận tải đường thủy tư nhân
+  if(tenDonViXuat){
+    const dvx=tenDonViXuat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(/cang vu.*duong thuy/.test(dvx)) return 'Phí CSHT';
+  }
   if(!loaiDv) return 'Chi phí khác';
   const v=loaiDv.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   // Tất cả dạng nâng/hạ cont → gộp thành 1 loại duy nhất cho bảng kê
@@ -579,7 +586,7 @@ async function saveHoaDon(hd,fileName,storagePath=null){
   if(hd.trang_thai==='da_khop'&&hd.van_don_matches?.length){
     const allConts=hd.van_don_matches.map(v=>v.so_cont);
     const allContsStr=allConts.join(', ');
-    const loaiChi=`${mapLoaiDv(hd.loai_dv)} + ${allContsStr}`;
+    const loaiChi=`${mapLoaiDv(hd.loai_dv,hd.ten_don_vi_xuat)} + ${allContsStr}`;
     for(let i=0;i<hd.van_don_matches.length;i++){
       const vd=hd.van_don_matches[i];
       const laChinh=i===0;
@@ -807,7 +814,7 @@ async function saveXuLyHD(hdId,forcedVdIds=null){
 
   // Tên chi hộ
   const contStr=conts.join(', ');
-  const loaiChi=`${mapLoaiDv(hd.loai_dv)} + ${contStr}`;
+  const loaiChi=`${mapLoaiDv(hd.loai_dv,hd.ten_don_vi_xuat)} + ${contStr}`;
 
   await db.from('hoa_don').update({
     trang_thai:'da_duyet',ly_do_cho:null,ai_ghi_chu:gc,
