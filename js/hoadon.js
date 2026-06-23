@@ -115,12 +115,14 @@ async function taiMotHoaDon(url,fileName){
 // ── 4. TRANG UPLOAD HÓA ĐƠN ─────────────────────────────────────────────────
 async function pgHoaDon(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
-  const[{data:cho},{data:daXong}]=await Promise.all([
+  const[{data:cho},{data:daXong},{data:trungHuy}]=await Promise.all([
     db.from('hoa_don').select('*').eq('trang_thai','cho_xu_ly').order('created_at',{ascending:false}),
     db.from('hoa_don').select('*').eq('trang_thai','da_duyet').order('created_at',{ascending:false}).limit(30),
+    db.from('hoa_don').select('*').eq('trang_thai','huy').order('created_at',{ascending:false}).limit(15),
   ]);
   const choList=cho||[];
   const doneList=daXong||[];
+  const trungList=trungHuy||[];
 
   c.innerHTML=`
   <div style="background:linear-gradient(135deg,var(--teal),var(--teal-dark));border-radius:var(--rl);padding:16px 20px;margin-bottom:16px;color:#fff">
@@ -196,6 +198,28 @@ async function pgHoaDon(c){
     </table></div>
   </div>`:''}
 
+  ${trungList.length?`
+  <div style="margin-top:14px">
+    <div style="font-size:12px;font-weight:600;color:#b45309;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+      <i class="ti ti-ban"></i> Đã tự động hủy do trùng (${trungList.length}) — không tính chi hộ
+    </div>
+    <div class="tbl-wrap"><table class="tbl">
+      <colgroup><col style="width:80px"><col style="width:90px"><col style="width:140px"><col style="width:140px"><col style="width:100px"><col style="width:160px"><col style="width:120px"></colgroup>
+      <thead><tr><th>Ngày HĐ</th><th>Số HĐ</th><th>Đơn vị bán</th><th>Đơn vị mua</th><th>Số tiền</th><th>Lý do hủy</th><th>Người upload</th></tr></thead>
+      <tbody>
+      ${trungList.map(h=>`<tr>
+        <td>${h.ngay_hd||'—'}</td>
+        <td style="color:var(--teal)">${h.so_hd||'—'}</td>
+        <td style="font-size:11px">${h.ten_don_vi_xuat||'—'}</td>
+        <td style="font-size:11px">${h.ten_don_vi_mua||'—'}</td>
+        <td class="text-orange fw6">${fmtM(h.tong_tien)}</td>
+        <td style="font-size:11px;color:#b45309">${h.ly_do_cho||'Trùng hóa đơn'}</td>
+        <td style="font-size:11px">${h.ten_nguoi_upload||'—'}</td>
+      </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>`:''}
+
   ${!choList.length&&!doneList.length?'<div class="empty"><i class="ti ti-inbox"></i>Chưa có hóa đơn nào. Upload file để bắt đầu!</div>':''}`;
 }
 
@@ -222,7 +246,7 @@ async function handleHDFiles(files){
     fileArr.push(...pages);
   }
 
-  const results={matched:[],pending:[]};
+  const results={matched:[],pending:[],trung:[]};
 
   for(let i=0;i<fileArr.length;i++){
     const file=fileArr[i];
@@ -240,6 +264,12 @@ async function handleHDFiles(files){
       const hdList=await processOneHD(file);
       for(const hdData of hdList){
         try{
+          if(hdData.is_trung){
+            // Trùng hóa đơn → KHÔNG upload Storage, KHÔNG tạo chi hộ — chỉ lưu record 'huy' để có vết kiểm tra
+            const saved=await saveHoaDon(hdData,file.name,null);
+            results.trung.push({...hdData,id:saved.id,file:file.name});
+            continue;
+          }
           // Lấy tên khách + cont từ kết quả AI (nếu đã khớp VĐ)
           const tenKhach=hdData.van_don_matches?.[0]?.ten_khach||null;
           const soContList=hdData.so_cont_list||[];
@@ -298,6 +328,7 @@ Trả về JSON ARRAY với đúng 1 phần tử (chỉ array thuần, không ma
   "so_cont_list": ["POLU4510295"],
   "loai_cont": "20DC hoặc 40HC v.v",
   "mst_khach": "mã số thuế đơn vị MUA",
+  "ten_don_vi_mua": "tên đơn vị MUA hàng/dịch vụ — lấy đúng tên công ty ghi ở phần 'Tên đơn vị' trong khối Người mua hàng/Đơn vị mua, KHÔNG nhầm với đơn vị bán",
   "ten_don_vi_xuat": "tên đơn vị BÁN hóa đơn",
   "ghi_chu": "thông tin thêm quan trọng",
   "confidence": "cao / trung_binh / thap"
@@ -334,16 +365,45 @@ Lưu ý: số cont thường sau "Công-te-nơ số:" hoặc trong tên DV như 
 
   const resultList=[];
   for(const ai of aiList){
+    // Kiểm tra trùng TRƯỚC khi khớp cont — nếu trùng thì hủy luôn, không upload, không tạo chi hộ
+    const trung=await checkHoaDonTrung(ai.so_hd,ai.ngay_hd,ai.ten_don_vi_mua);
+    if(trung){
+      resultList.push({
+        so_hd:ai.so_hd||null,ngay_hd:ai.ngay_hd||null,loai_dv:ai.loai_dv||null,
+        tong_tien:ai.tong_tien||0,so_cont_list:ai.so_cont_list||[],
+        mst_khach:ai.mst_khach||null,ten_don_vi_mua:ai.ten_don_vi_mua||null,
+        ten_don_vi_xuat:ai.ten_don_vi_xuat||null,
+        ai_confidence:ai.confidence||'trung_binh',ai_ghi_chu:ai.ghi_chu||null,
+        trang_thai:'huy',
+        ly_do_cho:`Trùng với HĐ đã ghi nhận trước (Số HĐ ${ai.so_hd||'?'} · Ngày ${ai.ngay_hd||'?'} · ${ai.ten_don_vi_mua||'?'}, mã HĐ cũ: ${trung.id}) — tự động hủy, không tạo chi hộ.`,
+        is_trung:true,
+      });
+      continue;
+    }
     const matched=await matchContToVanDon(ai);
     resultList.push({
       so_hd:ai.so_hd||null,ngay_hd:ai.ngay_hd||null,loai_dv:ai.loai_dv||null,
       tong_tien:ai.tong_tien||0,so_cont_list:ai.so_cont_list||[],
-      mst_khach:ai.mst_khach||null,ten_don_vi_xuat:ai.ten_don_vi_xuat||null,
+      mst_khach:ai.mst_khach||null,ten_don_vi_mua:ai.ten_don_vi_mua||null,
+      ten_don_vi_xuat:ai.ten_don_vi_xuat||null,
       ai_confidence:ai.confidence||'trung_binh',ai_ghi_chu:ai.ghi_chu||null,
       ...matched,
     });
   }
   return resultList;
+}
+
+// ── 6b. KIỂM TRA TRÙNG HÓA ĐƠN (3 tiêu chí: Số HĐ + Ngày HĐ + Đơn vị mua) ──
+// Trả về record hoa_don trùng (nếu có, trang_thai khác 'huy') hoặc null
+async function checkHoaDonTrung(soHd,ngayHd,tenDonViMua){
+  if(!soHd||!ngayHd||!tenDonViMua) return null; // thiếu dữ liệu thì không đủ cơ sở kết luận trùng
+  const{data}=await db.from('hoa_don')
+    .select('id,so_hd,ngay_hd,ten_don_vi_mua,trang_thai')
+    .eq('so_hd',soHd).eq('ngay_hd',ngayHd)
+    .ilike('ten_don_vi_mua',tenDonViMua.trim())
+    .neq('trang_thai','huy')
+    .limit(1);
+  return data&&data.length?data[0]:null;
 }
 
 // ── 7. KHỚP CONT VỚI VẬN ĐƠN ────────────────────────────────────────────────
@@ -457,6 +517,7 @@ async function saveHoaDon(hd,fileName,storagePath=null){
     so_hd:hd.so_hd,ngay_hd:hd.ngay_hd,loai_dv:hd.loai_dv,
     tong_tien:hd.tong_tien,so_cont_list:hd.so_cont_list,
     mst_khach:hd.mst_khach,ten_don_vi_xuat:hd.ten_don_vi_xuat,
+    ten_don_vi_mua:hd.ten_don_vi_mua,
     trang_thai:trangThai,ly_do_cho:hd.ly_do_cho||null,
     ai_confidence:hd.ai_confidence,ai_ghi_chu:hd.ai_ghi_chu,
     nguoi_upload:CU?.id,ten_nguoi_upload:CU?.ho_ten,
@@ -491,7 +552,7 @@ async function saveHoaDon(hd,fileName,storagePath=null){
         la_tham_chieu:!laChinh,
         so_tien_hd_goc:laChinh?null:hd.tong_tien,
         ghi_chu:laChinh
-          ?`HĐ ${hd.so_hd||''} | ${hd.ten_don_vi_xuat||''}`
+          ?`HĐ ${hd.so_hd||''} | Bán: ${hd.ten_don_vi_xuat||'—'} | Mua: ${hd.ten_don_vi_mua||'—'}`
           :`Tiền ghi nhận tại: ${hd.van_don_matches[0].so_cont}`,
       });
     }
@@ -505,7 +566,7 @@ function showHDResults(results){
   if(!ra) return;
   ra.style.display='block';
   ra.innerHTML=`
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+  <div style="display:grid;grid-template-columns:${results.trung.length?'1fr 1fr 1fr':'1fr 1fr'};gap:12px;margin-bottom:12px">
     <div class="stat-card" style="border-color:var(--success)">
       <div class="stat-lbl">✅ Tự động vào chi hộ</div>
       <div class="stat-val text-green">${results.matched.length}</div>
@@ -516,12 +577,25 @@ function showHDResults(results){
       <div class="stat-val text-red">${results.pending.length}</div>
       <div class="stat-sub">Xem queue bên dưới</div>
     </div>
+    ${results.trung.length?`
+    <div class="stat-card" style="border-color:#f59e0b">
+      <div class="stat-lbl">🚫 Trùng — đã tự hủy</div>
+      <div class="stat-val" style="color:#b45309">${results.trung.length}</div>
+      <div class="stat-sub">Không tạo chi hộ, không lưu file</div>
+    </div>`:''}
   </div>
   ${results.matched.length?`
   <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--r);padding:10px 14px;margin-bottom:10px">
     <div style="font-size:11px;font-weight:600;color:var(--success);margin-bottom:6px">ĐÃ TẠO CHI HỘ TỰ ĐỘNG</div>
     ${results.matched.map(h=>`<div style="font-size:12px;padding:3px 0;border-bottom:1px solid #d1fae5">
       📄 ${h.file} → ${h.loai_dv||'?'} | ${fmtM(h.tong_tien)} | Cont: ${(h.so_cont_list||[]).join(', ')||'?'}
+    </div>`).join('')}
+  </div>`:''}
+  ${results.trung.length?`
+  <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:10px 14px;margin-bottom:10px">
+    <div style="font-size:11px;font-weight:600;color:#b45309;margin-bottom:6px">🚫 PHÁT HIỆN TRÙNG — ĐÃ TỰ ĐỘNG HỦY (không tạo chi hộ, không lưu file)</div>
+    ${results.trung.map(h=>`<div style="font-size:12px;padding:3px 0;border-bottom:1px solid #fde68a">
+      📄 ${h.file} — HĐ ${h.so_hd||'?'} · ${h.ngay_hd||'?'} · Bán: ${h.ten_don_vi_xuat||'?'} · Mua: ${h.ten_don_vi_mua||'?'} | ${fmtM(h.tong_tien)}
     </div>`).join('')}
   </div>`:''}
   ${results.pending.length?`
@@ -558,7 +632,7 @@ async function xuLyHD(id){
     <div style="background:var(--bg);border-radius:var(--r);padding:10px 14px;margin-bottom:12px;font-size:12px">
       <div style="font-weight:600;font-size:13px;margin-bottom:4px">${hd.loai_dv||'Không rõ loại'} — <span class="text-orange">${fmtM(hd.tong_tien)}</span></div>
       <div style="display:flex;gap:16px;color:var(--text-muted)">
-        <span>📅 ${hd.ngay_hd||'—'}</span><span>🏢 ${hd.ten_don_vi_xuat||'—'}</span>
+        <span>📅 ${hd.ngay_hd||'—'}</span><span>🏢 Bán: ${hd.ten_don_vi_xuat||'—'}</span>${hd.ten_don_vi_mua?`<span>🧾 Mua: ${hd.ten_don_vi_mua}</span>`:''}
       </div>
       <div style="color:var(--danger);margin-top:6px;font-size:11px"><i class="ti ti-alert-circle"></i> ${hd.ly_do_cho||'Chưa khớp cont'}</div>
     </div>
@@ -693,7 +767,7 @@ async function saveXuLyHD(hdId){
       la_tham_chieu:!laChinh,
       so_tien_hd_goc:laChinh?null:hd.tong_tien,
       ghi_chu:laChinh
-        ?`HĐ ${hd.so_hd||''} | ${hd.ten_don_vi_xuat||''}${gc?' | '+gc:''}`
+        ?`HĐ ${hd.so_hd||''} | Bán: ${hd.ten_don_vi_xuat||'—'} | Mua: ${hd.ten_don_vi_mua||'—'}${gc?' | '+gc:''}`
         :`Tiền ghi nhận tại: ${vdList[0].so_cont}`,
     });
   }
