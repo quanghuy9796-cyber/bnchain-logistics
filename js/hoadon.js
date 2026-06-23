@@ -374,7 +374,7 @@ Trả về JSON ARRAY với đúng 1 phần tử (chỉ array thuần, không ma
   "ngay_hd": "ngày trên HĐ format YYYY-MM-DD",
   "loai_dv": "Chỉ được chọn 1 trong: Nâng/hạ cont / Phí CSHT / Lưu ca / Phí cảng, bãi / Phí local charge / Chi phí khác. ƯU TIÊN KIỂM TRA TRƯỚC (chỉ áp dụng đúng 1 trường hợp đặc biệt này, không suy rộng cho trường hợp khác): Nếu tiêu đề là 'BIÊN LAI THU TIỀN PHÍ' về 'sử dụng công trình, kết cấu hạ tầng...khu vực cửa khẩu cảng biển' VÀ đơn vị thu là 'Cảng vụ Đường thủy nội địa Hải Phòng' (hoặc Cảng vụ tỉnh/thành khác tương tự) → LUÔN LUÔN là Phí CSHT, ngay cả khi dòng nội dung chỉ ghi 'Container 20/40 feet hàng khô/lạnh' không có chữ CSHT nào. Nếu không khớp trường hợp trên, áp dụng đúng theo từ khóa trong nội dung dịch vụ: (1) Bất kỳ dịch vụ nâng container, hạ container, nâng hàng, hạ hàng, nâng vỏ, hạ vỏ, nâng hạ cont → đều chọn Nâng/hạ cont. (2) CSHT / cơ sở hạ tầng → Phí CSHT. (3) Vệ sinh/sửa/rửa cont / lưu bãi / lưu cont → Phí cảng, bãi. (4) Local charge / phụ phí → Phí local charge. (5) Còn lại → Chi phí khác.",
   "tong_tien": số tiền VNĐ cuối cùng (số nguyên không dấu phẩy),
-  "so_cont_list": ["POLU4510295"],
+  "so_cont_list": ["liệt kê ĐẦY ĐỦ TẤT CẢ số cont xuất hiện trên toàn bộ hóa đơn — nhiều hóa đơn ghi NHIỀU cont gộp chung 1 dòng dịch vụ, phân tách bằng dấu phẩy (ví dụ dòng ghi 'CBHU7010511, FFAU6662331' với Số lượng=2 nghĩa là dòng đó tính cho CẢ 2 cont, PHẢI lấy đủ cả 2, không chỉ lấy số đầu tiên). Nếu hóa đơn có nhiều dòng, mỗi dòng có thể có cont khác nhau hoặc trùng nhau — duyệt hết toàn bộ các dòng để không bỏ sót cont nào. Ví dụ: ['POLU4510295']"],
   "loai_cont": "20DC hoặc 40HC v.v",
   "mst_khach": "mã số thuế đơn vị MUA",
   "ten_don_vi_mua": "tên đơn vị MUA hàng/dịch vụ — lấy đúng tên công ty ghi ở phần 'Tên đơn vị' trong khối Người mua hàng/Đơn vị mua, KHÔNG nhầm với đơn vị bán",
@@ -382,7 +382,8 @@ Trả về JSON ARRAY với đúng 1 phần tử (chỉ array thuần, không ma
   "ghi_chu": "thông tin thêm quan trọng",
   "confidence": "cao / trung_binh / thap"
 }]
-Lưu ý: số cont thường sau "Công-te-nơ số:" hoặc trong tên DV như POLU4510295-40HC-GP`;
+Lưu ý: số cont thường sau "Công-te-nơ số:" hoặc trong tên DV như POLU4510295-40HC-GP.
+QUAN TRỌNG: nếu 1 dòng dịch vụ ghi nhiều số cont cách nhau bằng dấu phẩy (ví dụ "CBHU7010511, FFAU6662331") thì so_cont_list PHẢI có đủ tất cả các cont đó — đếm số cont trong so_cont_list phải khớp với cột Số lượng của dòng đó. Kiểm tra lại 2 lần trước khi trả kết quả, tuyệt đối không bỏ sót cont nào.`;
 
   const response=await fetch(PROXY_URL,{
     method:'POST',
