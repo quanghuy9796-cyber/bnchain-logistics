@@ -457,6 +457,17 @@ async function checkHoaDonTrung(soHd,ngayHd,tenDonViMua){
 }
 
 // ── 7. KHỚP CONT VỚI VẬN ĐƠN ────────────────────────────────────────────────
+// ── Helper dùng chung: lọc 1 nhóm vận đơn khớp cùng 1 cont theo đổi lệnh ───
+// Trả về resolved=true nếu phân biệt được đúng 1 (hoặc vốn chỉ có 1); resolved=false nếu vẫn mơ hồ
+// reason: 'single' (chỉ có 1, không cần lọc) | 'doi_lenh' (lọc đổi lệnh ra đúng 1) | 'none' (không ai đổi lệnh) | 'multiple' (≥2 đổi lệnh, vẫn mơ hồ)
+function resolveVdByDoiLenh(vds){
+  if(vds.length<=1) return{resolved:true,list:vds,reason:'single'};
+  const coDoiLenh=vds.filter(v=>+v.phi_doi_lenh>0||+v.tra_thau_doi_lenh>0);
+  if(coDoiLenh.length===1) return{resolved:true,list:coDoiLenh,reason:'doi_lenh'};
+  if(coDoiLenh.length===0) return{resolved:false,list:vds,reason:'none'};
+  return{resolved:false,list:coDoiLenh,reason:'multiple'};
+}
+
 async function matchContToVanDon(ai){
   const conts=ai.so_cont_list||[];
 
@@ -477,50 +488,74 @@ async function matchContToVanDon(ai){
     return{trang_thai:'cho_xu_ly',ly_do_cho:`Số cont ${conts.join(', ')} chưa có trong hệ thống.`,so_cont_list:conts};
   }
 
-  // ── Trường hợp: 1 HĐ nhiều cont — kiểm tra xem các cont có cùng 1 khách không
+  // ── Trường hợp: 1 HĐ nhiều cont — lọc đổi lệnh theo TỪNG cont riêng trước, rồi mới xét cùng/khác khách ──
   if(conts.length>1){
-    const khachSet=new Set(vds.map(v=>v.ten_khach).filter(Boolean));
-    if(khachSet.size<=1){
-      // Cùng 1 khách → logic cũ, ghi tất cả
-      return{trang_thai:'da_khop',van_don_matches:vds,so_cont_list:conts};
+    // Cont nào hoàn toàn không khớp VĐ nào trong hệ thống → luôn bắt xử lý tay, không tự đoán
+    const contsKhongTon=conts.filter(c=>!vds.some(v=>v.so_cont===c));
+    if(contsKhongTon.length){
+      return{
+        trang_thai:'cho_xu_ly',
+        ly_do_cho:`Số cont ${contsKhongTon.join(', ')} chưa có trong hệ thống (trong tổng số ${conts.length} cont của HĐ). Cần xử lý tay.`,
+        so_cont_list:conts,
+      };
     }
-    // Nhiều khách khác nhau trong 1 HĐ nhiều cont → xử lý tay
+
+    const resolvedList=[];
+    const contMoHo=[]; // các cont vẫn mơ hồ dù đã lọc đổi lệnh
+    for(const cont of conts){
+      const vdsOfCont=vds.filter(v=>v.so_cont===cont);
+      const r=resolveVdByDoiLenh(vdsOfCont);
+      if(r.resolved){
+        for(const v of r.list) if(!resolvedList.find(x=>x.id===v.id)) resolvedList.push(v);
+      } else {
+        contMoHo.push({cont,list:r.list,reason:r.reason});
+      }
+    }
+
+    if(contMoHo.length){
+      // Còn cont không phân biệt được vận đơn dù đã lọc đổi lệnh → bắt buộc xử lý tay
+      const detail=contMoHo.map(m=>{
+        const names=m.list.map(v=>`${v.ma_don}/${v.ten_khach||'?'}`).join(', ');
+        return m.reason==='none'
+          ?`${m.cont} khớp ${m.list.length} VĐ (${names}) — không ai tick đổi lệnh`
+          :`${m.cont} có ${m.list.length} VĐ đều tick đổi lệnh (${names})`;
+      }).join('; ');
+      return{
+        trang_thai:'cho_xu_ly',
+        ly_do_cho:`HĐ gồm ${conts.length} cont — không phân biệt được vận đơn cho: ${detail}. Cần xử lý tay để phân bổ đúng.`,
+        so_cont_list:conts,
+      };
+    }
+
+    const khachSet=new Set(resolvedList.map(v=>v.ten_khach).filter(Boolean));
+    if(khachSet.size<=1){
+      // Sau khi lọc đổi lệnh, tất cả cont đều quy về đúng 1 khách → ghi tất cả như logic cũ
+      return{trang_thai:'da_khop',van_don_matches:resolvedList,so_cont_list:conts};
+    }
+    // Đã lọc đổi lệnh nhưng vẫn thực sự thuộc nhiều khách khác nhau → đúng là case cần tách tay, không phải do trùng cont
     return{
       trang_thai:'cho_xu_ly',
-      ly_do_cho:`HĐ gồm ${conts.length} cont thuộc ${khachSet.size} khách khác nhau (${[...khachSet].join(', ')}). Cần xử lý tay để phân bổ đúng.`,
+      ly_do_cho:`HĐ gồm ${conts.length} cont thuộc ${khachSet.size} khách khác nhau thật (${[...khachSet].join(', ')}) — đã lọc đổi lệnh nhưng vẫn không quy về 1 khách. Cần xử lý tay để phân bổ đúng.`,
       so_cont_list:conts,
     };
   }
 
-  // ── Trường hợp: 1 cont — kiểm tra số VĐ khớp
-  if(vds.length===1){
-    // Chỉ 1 VĐ → ghi nhận bình thường
-    return{trang_thai:'da_khop',van_don_matches:vds,so_cont_list:conts};
+  // ── Trường hợp: 1 cont — kiểm tra số VĐ khớp ──
+  const r=resolveVdByDoiLenh(vds);
+  if(r.resolved){
+    return{trang_thai:'da_khop',van_don_matches:r.list,so_cont_list:conts};
   }
-
-  // 1 cont nhưng khớp nhiều VĐ (nhiều khách khác nhau)
-  const coDoiLenh=vds.filter(v=>+v.phi_doi_lenh>0||+v.tra_thau_doi_lenh>0);
-
-  if(coDoiLenh.length===1){
-    // Chỉ 1 khách có đổi lệnh → ghi nhận vào khách đó
-    return{trang_thai:'da_khop',van_don_matches:coDoiLenh,so_cont_list:conts};
-  }
-
-  if(coDoiLenh.length===0){
-    // Không ai có đổi lệnh → chuyển xử lý tay, OPS tự chọn
-    const khachNames=vds.map(v=>`${v.ma_don}/${v.ten_khach||'?'}`).join(', ');
+  const khachNames=r.list.map(v=>`${v.ma_don}/${v.ten_khach||'?'}`).join(', ');
+  if(r.reason==='none'){
     return{
       trang_thai:'cho_xu_ly',
-      ly_do_cho:`Cont ${conts[0]} khớp ${vds.length} VĐ (${khachNames}) — không có khách nào tick đổi lệnh. Chọn VĐ phù hợp.`,
+      ly_do_cho:`Cont ${conts[0]} khớp ${r.list.length} VĐ (${khachNames}) — không có khách nào tick đổi lệnh. Chọn VĐ phù hợp.`,
       so_cont_list:conts,
     };
   }
-
-  // Cả 2 (hoặc nhiều hơn) đều có đổi lệnh → xử lý tay bắt buộc
-  const khachNames=coDoiLenh.map(v=>`${v.ma_don}/${v.ten_khach||'?'}`).join(', ');
   return{
     trang_thai:'cho_xu_ly',
-    ly_do_cho:`Cont ${conts[0]} có ${coDoiLenh.length} VĐ đều có đổi lệnh (${khachNames}). OPS cần chọn đúng khách chịu phí.`,
+    ly_do_cho:`Cont ${conts[0]} có ${r.list.length} VĐ đều có đổi lệnh (${khachNames}). OPS cần chọn đúng khách chịu phí.`,
     so_cont_list:conts,
   };
 }
@@ -797,11 +832,11 @@ async function saveXuLyHD(hdId,forcedVdIds=null){
     if(!vdList.length){toast('Không có vận đơn nào được chọn','error');return;}
   } else if(vdList.length>1){
     // 1 cont nhưng khớp nhiều vận đơn khác nhau (cont tái sử dụng cho nhiều chuyến)
-    // → áp dụng cùng logic an toàn như matchContToVanDon(): ưu tiên vận đơn có đổi lệnh
-    const coDoiLenh=vdList.filter(v=>+v.phi_doi_lenh>0||+v.tra_thau_doi_lenh>0);
-    if(coDoiLenh.length===1){
-      // Chỉ 1 vận đơn có đổi lệnh → CHỈ ghi nhận đúng vận đơn đó, bỏ hẳn các vận đơn không liên quan
-      vdList=coDoiLenh;
+    // → áp dụng cùng helper an toàn dùng chung với matchContToVanDon(): ưu tiên vận đơn có đổi lệnh
+    const r=resolveVdByDoiLenh(vdList);
+    if(r.resolved){
+      // Phân biệt được đúng 1 vận đơn liên quan → CHỈ ghi nhận đúng vận đơn đó, bỏ hẳn các vận đơn không liên quan
+      vdList=r.list;
     } else {
       // Không phân biệt được tự động (0 hoặc ≥2 đổi lệnh) → KHÔNG tự gán chính/tham chiếu
       // Bắt OPS tự tick đúng vận đơn liên quan trước khi lưu
