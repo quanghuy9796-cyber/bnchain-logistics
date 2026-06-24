@@ -221,33 +221,34 @@ async function pgBangKe(c){
   await reloadKhDropdown();
 }
 
-// Nạp lại dropdown khách hàng — CHỈ những khách có ít nhất 1 chuyến đã khóa trong tháng đang chọn
-// (đồng bộ đúng logic với dropdown thầu phụ ở trang Trả thầu phụ — cùng lấy trực tiếp từ Quản lý
-// vận đơn theo kỳ, không liệt kê toàn bộ khách trong Danh mục bất kể có dữ liệu hay không).
+// Nạp lại dropdown khách hàng — liệt kê khách có chuyến locked tính đến cuối tháng đang chọn,
+// kèm số đếm "(X chưa chốt)" để kế toán biết ngay khách nào còn việc cần xử lý ở Bảng kê.
 async function reloadKhDropdown(){
   const sel=document.getElementById('bk-kh');
   const thang=document.getElementById('bk-thang')?.value;
   if(!sel||!thang)return;
   const[y,m]=thang.split('-');
   const lastDay=new Date(+y,+m,0).getDate();
-  const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
   const dangChon=sel.value;
   sel.innerHTML='<option value="">-- Đang tải... --</option>';
-  const{data}=await db.from('van_don').select('ten_khach').eq('locked',true)
-    .gte('ngay',dateFrom).lte('ngay',dateTo)
+  const{data}=await db.from('van_don').select('ten_khach,trang_thai_bang_ke,trang_thai_p2').eq('locked',true)
+    .lte('ngay',dateTo)
     .not('ten_khach','is',null).neq('ten_khach','');
-  const seen=new Set();const khList=[];
+  const map={};
   (data||[]).forEach(o=>{
     const raw=(o.ten_khach||'').trim();
     if(!raw)return;
     const norm=raw.toLowerCase();
-    if(!seen.has(norm)){seen.add(norm);khList.push(raw);}
+    if(!map[norm])map[norm]={name:raw,chuaChot:0};
+    const p1Open=o.trang_thai_bang_ke!=='da_chot';
+    const p2Open=o.trang_thai_p2!=='da_chot';
+    if(p1Open||p2Open)map[norm].chuaChot++;
   });
-  khList.sort((a,b)=>a.localeCompare(b,'vi'));
+  const khList=Object.values(map).sort((a,b)=>a.name.localeCompare(b.name,'vi'));
   sel.innerHTML=`<option value="">-- Chọn khách hàng (${khList.length} khách có chuyến kỳ này) --</option>`
-    +khList.map(k=>`<option value="${k}">${k}</option>`).join('');
-  if(khList.some(k=>k.toLowerCase()===dangChon.toLowerCase()))sel.value=dangChon;
+    +khList.map(k=>`<option value="${k.name}">${k.name}${k.chuaChot>0?` (${k.chuaChot} chưa chốt)`:''}</option>`).join('');
+  if(khList.some(k=>k.name.toLowerCase()===dangChon.toLowerCase()))sel.value=dangChon;
 }
 
 async function loadBangKe(){
@@ -261,43 +262,33 @@ async function loadBangKe(){
   res.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   canhbao.innerHTML='';
 
+  const canChot=canSee(['ke_toan','ceo']);
+  const hienDaChot=document.getElementById('bk-hien-da-chot')?.checked||false;
   const lastDay=new Date(parseInt(y),parseInt(m),0).getDate(); // ngày cuối tháng đúng
-  const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
-  // DEBUG
-  const{data:debugOrders}=await db.from('van_don').select('id,ma_don,locked,trang_thai,ten_khach,ngay')
-    .ilike('ten_khach',khName.trim())
-    .gte('ngay',dateFrom).lte('ngay',dateTo);
-  console.log(`[BK DEBUG] Tổng đơn khách "${khName}" tháng ${thang} (chưa filter locked):`, debugOrders?.length||0);
-  if(debugOrders?.length) console.log('[BK DEBUG] Sample locked values:', debugOrders.slice(0,3).map(o=>({ma_don:o.ma_don,locked:o.locked,type:typeof o.locked,trang_thai:o.trang_thai})));
-
-  // Load đơn: tất cả đơn locked=true của khách trong tháng theo ngày chạy
+  // Load TẤT CẢ đơn locked=true của khách tính đến cuối tháng đang xem (KHÔNG chặn đầu tháng nữa)
+  // — chuyến chưa chốt cước (P1) hoặc chưa chốt chi hộ có HĐ (P2) từ kỳ trước sẽ tự kéo dồn vào đây (v2.8)
   const{data:orders}=await db.from('van_don').select('*')
     .ilike('ten_khach',khName.trim()).eq('locked',true)
-    .gte('ngay',dateFrom).lte('ngay',dateTo)
+    .lte('ngay',dateTo)
     .order('ngay',{ascending:true}).order('so_bill',{ascending:true});
-  console.log(`[BK DEBUG] Sau filter locked=true:`, orders?.length||0);
 
-  const list=orders||[];
+  const allOrders=orders||[];
+  // Giữ lại: (1) còn việc chưa chốt ở P1 hoặc P2 (luôn hiện, mọi kỳ cũ); (2) đã chốt nhưng ĐÚNG kỳ đang xem + đang bật "Hiện cả đã chốt"
+  const list=allOrders.filter(o=>{
+    const p1Open=o.trang_thai_bang_ke!=='da_chot';
+    const p2Open=o.trang_thai_p2!=='da_chot';
+    if(p1Open||p2Open)return true;
+    return hienDaChot&&(o.ky_chot_cuoc===thang||o.ky_chot_p2===thang);
+  });
   if(!list.length){
     res.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có đơn nào trong kỳ này</div>';
     return;
   }
-
-  // Cảnh báo chuyến chưa chốt trong tháng
-  const{data:chuaChot}=await db.from('van_don').select('id,ma_don,so_cont,ngay')
-    .eq('ten_khach',khName).eq('locked',true)
-    .eq('trang_thai_bang_ke','chua_chot')
-    .gte('ngay',dateFrom).lte('ngay',dateTo);
-  if(chuaChot?.length){
-    canhbao.innerHTML=`<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:var(--r);padding:8px 14px;margin-bottom:10px;font-size:12px;display:flex;align-items:center;gap:8px">
-      <i class="ti ti-alert-triangle" style="color:#d97706;font-size:16px"></i>
-      <span><strong style="color:#92400e">${chuaChot.length} chuyến chưa vào bảng kê</strong> trong tháng ${m}/${y} — 
-      ${chuaChot.slice(0,3).map(o=>`<span style="background:#fef9c3;border-radius:3px;padding:1px 4px">${o.ma_don}</span>`).join(' ')}
-      ${chuaChot.length>3?`và ${chuaChot.length-3} chuyến khác`:''}</span>
-    </div>`;
-  }
+  // Tách riêng theo từng phần — 1 chuyến có thể chỉ còn việc ở P1 hoặc chỉ còn ở P2, độc lập nhau
+  const listP1=list.filter(o=>o.trang_thai_bang_ke!=='da_chot'||(hienDaChot&&o.ky_chot_cuoc===thang));
+  const idsP2Open=new Set(list.filter(o=>o.trang_thai_p2!=='da_chot'||(hienDaChot&&o.ky_chot_p2===thang)).map(o=>o.id));
 
   // Load chi_ho
   const ids=list.map(o=>o.id);
@@ -308,17 +299,17 @@ async function loadBangKe(){
     chiHoMap[ch.van_don_id].push(ch);
   });
 
-  // Tách P1 / P2
-  const chiHoP2=(chiHoAll||[]).filter(c=>c.hoa_don_khach);
-  const chiHoP1=(chiHoAll||[]).filter(c=>!c.hoa_don_khach);
+  // Tách P1 / P2 — CHỈ giữ chi hộ thuộc đúng tập đang hiện ở mỗi phần (P1/P2 độc lập trạng thái)
+  const idsP1=new Set(listP1.map(o=>o.id));
+  const chiHoP2=(chiHoAll||[]).filter(c=>c.hoa_don_khach&&idsP2Open.has(c.van_don_id));
+  const chiHoP1=(chiHoAll||[]).filter(c=>!c.hoa_don_khach&&idsP1.has(c.van_don_id));
 
-  // Tách chuyến chuyển kỳ
-  const chuyenChuyenKy=list.filter(o=>o.ky_goc&&o.ky_goc!==thang);
-  const listChinh=list.filter(o=>!o.ky_goc||o.ky_goc===thang);
+  // Chuyến "chuyển kỳ" (để tái dùng sheet Excel đã có sẵn) — tính trực tiếp từ ngày chạy thực tế
+  const chuyenChuyenKy=listP1.filter(o=>(o.ngay||'').slice(0,7)!==thang);
 
-  // Tính tổng
-  const tongCuoc=list.reduce((s,o)=>s+(+o.gia_cuoc_khach||0),0);
-  const tongDV=list.reduce((s,o)=>s+(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0),0);
+  // Tính tổng — dựa trên đúng tập đang hiện của Phần 1
+  const tongCuoc=listP1.reduce((s,o)=>s+(+o.gia_cuoc_khach||0),0);
+  const tongDV=listP1.reduce((s,o)=>s+(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0),0);
   const tongP1=chiHoP1.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
   const tongP2=chiHoP2.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
   const VAT_RATE=0.08;
@@ -326,12 +317,12 @@ async function loadBangKe(){
   const vatP1=Math.round(tongTruocVAT*VAT_RATE);
   const tongPhaiThu=tongTruocVAT+vatP1+tongP2;
   // Flags ẩn/hiện cột động
-  const coTK=list.some(o=>+o.phi_to_khai>0);
+  const coTK=listP1.some(o=>+o.phi_to_khai>0);
   const coLachHuyenCH=chiHoP1.some(c=>c.loai_chi?.includes('Lạch Huyện'));
 
-  // Gom theo bill/booking
+  // Gom theo bill/booking — chỉ các chuyến Phần 1 còn hiện
   const groups={};
-  list.forEach(o=>{
+  listP1.forEach(o=>{
     const key=o.so_bill||o.so_booking||o.ma_don;
     if(!groups[key])groups[key]=[];
     groups[key].push(o);
@@ -354,8 +345,14 @@ async function loadBangKe(){
       const chP1=ch.filter(c=>!c.hoa_don_khach);
       const phiDV=(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0);
       const tongDong=(+o.gia_cuoc_khach||0)+chP1.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)+phiDV;
-      const kyGocNote=o.ky_goc&&o.ky_goc!==thang?`<span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:0 4px;font-size:10px;margin-left:3px">Từ ${o.ky_goc.split('-')[1]}/${o.ky_goc.split('-')[0]}</span>`:'';
-      p1Rows+=`<tr>
+      const kyGocThuc=(o.ngay||'').slice(0,7);
+      const kyGocNote=kyGocThuc&&kyGocThuc!==thang?`<span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:0 4px;font-size:10px;margin-left:3px">Từ T${kyGocThuc.split('-')[1]}/${kyGocThuc.split('-')[0]}</span>`:'';
+      const daChotP1=o.trang_thai_bang_ke==='da_chot';
+      const ctrlP1=!canChot?'':daChotP1
+        ?`<button class="btn-xs" onclick="huyChotP1('${o.id}')" title="Hủy chốt cước"><i class="ti ti-arrow-back-up"></i></button>`
+        :`<input type="checkbox" class="bk-p1-chk" value="${o.id}" checked>`;
+      p1Rows+=`<tr${daChotP1?' style="opacity:.6"':''}>
+        ${canChot?`<td>${ctrlP1}</td>`:''}
         <td>${stt}${items.length>1?'.'+( i+1):''}</td>
         <td style="font-size:11px">${fmtDate(o.ngay)}</td>
         <td style="color:var(--teal);font-size:11px;font-weight:600">${o.ma_don}${kyGocNote}</td>
@@ -382,7 +379,7 @@ async function loadBangKe(){
       },0);
       const subCuoc=items.reduce((s,o)=>s+(+o.gia_cuoc_khach||0),0);
       p1Rows+=`<tr style="background:#f5f9fb;font-style:italic;font-size:11px">
-        <td colspan="8" style="color:var(--text-muted)">Cộng ${items[0].loai_hang==='Nhập'?'Bill':'Booking'}: ${bill}</td>
+        <td colspan="${canChot?9:8}" style="color:var(--text-muted)">Cộng ${items[0].loai_hang==='Nhập'?'Bill':'Booking'}: ${bill}</td>
         <td class="fw6">${fmt(subCuoc)}</td>
         <td></td><td></td>
         <td colspan="${chiHoTypes.length}"></td>
@@ -392,17 +389,16 @@ async function loadBangKe(){
     }
   });
 
-  // PHẦN 2 — gom theo số cont, mỗi cont 1 dòng
-  // Group chi hộ P2 theo van_don_id
+  // PHẦN 2 — gom theo số cont, mỗi cont 1 dòng (trạng thái chốt độc lập với Phần 1)
   const p2ByCont={};
   chiHoP2.forEach(c=>{
     const o=list.find(x=>x.id===c.van_don_id);
     const key=o?.so_cont||c.ma_don||c.van_don_id;
-    if(!p2ByCont[key])p2ByCont[key]={cont:key,items:[]};
+    if(!p2ByCont[key])p2ByCont[key]={cont:key,items:[],order:o};
     p2ByCont[key].items.push(c);
   });
   let p2Rows='';
-  Object.entries(p2ByCont).forEach(([cont,{items}],i)=>{
+  Object.entries(p2ByCont).forEach(([cont,{items,order}],i)=>{
     const csht=items.find(c=>c.loai_chi?.includes('CSHT')||c.loai_chi?.includes('Hạ tầng')||c.loai_chi?.includes('Phí CSHT'));
     // Gộp tất cả nâng/hạ cont vào 1 nhóm (cột 1 nâng/hạ)
     const nangHa=items.filter(c=>c!==csht&&(
@@ -415,7 +411,12 @@ async function loadBangKe(){
     const khacTien=khac.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
     const nangHaTien=nangHa.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
     const nangHaHD=nangHa.map(c=>c.chung_tu||'').filter(Boolean).join(', ');
-    p2Rows+=`<tr>
+    const daChotP2=order?.trang_thai_p2==='da_chot';
+    const ctrlP2=!canChot?'':daChotP2
+      ?`<button class="btn-xs" onclick="huyChotP2('${order.id}')" title="Hủy chốt chi hộ"><i class="ti ti-arrow-back-up"></i></button>`
+      :`<input type="checkbox" class="bk-p2-chk" value="${order?.id||''}" checked>`;
+    p2Rows+=`<tr${daChotP2?' style="opacity:.6"':''}>
+      ${canChot?`<td>${ctrlP2}</td>`:''}
       <td>${i+1}</td>
       <td style="font-weight:600;font-family:monospace;font-size:11px">${cont}</td>
       <td style="font-size:11px">${csht?fmt(csht.tien_thu_khach||csht.so_tien):'—'}</td>
@@ -430,38 +431,25 @@ async function loadBangKe(){
     </tr>`;
   });
 
-  // CHUYỂN KỲ — sheet phụ
-  let chuyenKySection='';
-  if(chuyenChuyenKy.length){
-    chuyenKySection=`
-    <div style="margin-top:20px">
-      <div style="background:#f59e0b;color:#fff;padding:8px 12px;border-radius:var(--r) var(--r) 0 0;font-size:12px;font-weight:600">
-        <i class="ti ti-arrow-right-circle"></i> CHUYẾN CHUYỂN KỲ (${chuyenChuyenKy.length})
-        <span style="font-weight:400;opacity:.8;margin-left:8px">— Các chuyến từ kỳ trước chuyển sang tháng ${m}/${y}</span>
-      </div>
-      <div class="tbl-wrap" style="border-radius:0 0 var(--r) var(--r)">
-      <table class="tbl">
-        <thead><tr><th>Mã đơn</th><th>Ngày chạy</th><th>Số cont</th><th>Hành trình</th><th>Kỳ gốc</th><th>Lý do chuyển</th></tr></thead>
-        <tbody>${chuyenChuyenKy.map(o=>`<tr>
-          <td style="color:var(--teal);font-weight:600">${o.ma_don}</td>
-          <td>${o.ngay}</td>
-          <td style="font-family:monospace">${o.so_cont||'—'}</td>
-          <td style="font-size:11px">${o.hanh_trinh||'—'}</td>
-          <td><span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 6px;font-size:11px">T${o.ky_goc?.split('-')[1]}/${o.ky_goc?.split('-')[0]}</span></td>
-          <td style="font-size:11px;color:var(--text-muted)">${o.ly_do_chuyen_ky||'—'}</td>
-        </tr>`).join('')}</tbody>
-      </table>
-      </div>
-    </div>`;
-  }
-
   // Lưu data vào window để xuất Excel
-  window.BK_DATA={list,chiHoAll:chiHoAll||[],groups,chiHoTypes,chiHoP1,chiHoP2,chuyenChuyenKy,khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongTruocVAT,vatP1,tongPhaiThu,coTK,coLachHuyenCH};
+  window.BK_DATA={list,listAll:list,listP1,chiHoAll:chiHoAll||[],groups,chiHoTypes,chiHoP1,chiHoP2,chuyenChuyenKy,khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongTruocVAT,vatP1,tongPhaiThu,coTK,coLachHuyenCH};
 
   // Build HTML
-  const colP1=`<col style="width:28px"><col style="width:76px"><col style="width:100px"><col style="width:48px"><col style="width:90px"><col style="width:52px"><col style="width:140px"><col style="width:68px"><col style="width:78px"><col style="width:68px">${coTK?'<col style="width:68px">':''}${chiHoTypes.map(()=>'<col style="width:72px">').join('')}<col style="width:80px"><col style="width:100px">`;
+  const colP1=`${canChot?'<col style="width:26px">':''}<col style="width:28px"><col style="width:76px"><col style="width:100px"><col style="width:48px"><col style="width:90px"><col style="width:52px"><col style="width:140px"><col style="width:68px"><col style="width:78px"><col style="width:68px">${coTK?'<col style="width:68px">':''}${chiHoTypes.map(()=>'<col style="width:72px">').join('')}<col style="width:80px"><col style="width:100px">`;
+
+  const toolbarChot=`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+    <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="bk-hien-da-chot" ${hienDaChot?'checked':''} onchange="loadBangKe()"> Hiện cả chuyến/cont đã chốt (kỳ T${m}/${y})
+    </label>
+    ${canChot?`<div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-teal btn-sm" onclick="chotBangKeP1()"><i class="ti ti-checkbox"></i> Chốt cước đã chọn (P1)</button>
+      ${chiHoP2.length?`<button class="btn btn-teal btn-sm" onclick="chotBangKeP2()"><i class="ti ti-checkbox"></i> Chốt chi hộ đã chọn (P2)</button>`:''}
+    </div>`:''}
+  </div>`;
 
   const html=`
+  ${toolbarChot}
   <div id="print-area">
   <!-- HEADER -->
   <div style="text-align:center;margin-bottom:16px">
@@ -469,7 +457,7 @@ async function loadBangKe(){
     <div style="font-size:11px;color:var(--text-muted)">215 Đường Nguyễn Phong Sắc, Phương Liễu, Bắc Ninh | MST: 2301342748</div>
     <div style="font-size:14px;font-weight:700;margin-top:8px;text-transform:uppercase">BẢNG KÊ KIÊM BIÊN BẢN XÁC NHẬN KHỐI LƯỢNG DỊCH VỤ</div>
     <div style="font-size:13px;font-weight:600">THÁNG ${m}/${y}</div>
-    <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Khách hàng: <strong>${khName}</strong> | ${list.length} chuyến</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Khách hàng: <strong>${khName}</strong> | ${listP1.length} chuyến (P1) · ${Object.keys(p2ByCont).length} cont (P2)</div>
   </div>
 
   <!-- PHẦN 1 -->
@@ -483,6 +471,7 @@ async function loadBangKe(){
       <colgroup>${colP1}</colgroup>
       <thead>
         <tr>
+          ${canChot?'<th></th>':''}
           <th>STT</th><th>Ngày</th><th>Mã đơn</th><th>Loại</th>
           <th>Số cont</th><th>Loại cont</th><th>Tuyến đường</th><th>BKS</th>
           <th>Cước</th><th>Đổi lệnh</th>${coTK?'<th>Tờ khai</th>':''}
@@ -492,10 +481,10 @@ async function loadBangKe(){
       </thead>
       <tbody>${p1Rows}
         <tr style="background:#e8f4f7;font-weight:700;font-size:12px">
-          <td colspan="8">CỘNG PHẦN 1</td>
+          <td colspan="${canChot?9:8}">CỘNG PHẦN 1</td>
           <td class="text-blue">${fmt(tongCuoc)}</td>
-          <td>${fmt(list.reduce((s,o)=>s+(+o.phi_doi_lenh||0),0))}</td>
-          ${coTK?`<td>${fmt(list.reduce((s,o)=>s+(+o.phi_to_khai||0),0))}</td>`:''}
+          <td>${fmt(listP1.reduce((s,o)=>s+(+o.phi_doi_lenh||0),0))}</td>
+          ${coTK?`<td>${fmt(listP1.reduce((s,o)=>s+(+o.phi_to_khai||0),0))}</td>`:''}
           ${chiHoTypes.map(type=>{
             const s=chiHoP1.filter(c=>c.loai_chi===type).reduce((a,c)=>a+(+(c.tien_thu_khach||c.so_tien)||0),0);
             return`<td>${fmt(s)}</td>`;
@@ -518,6 +507,7 @@ async function loadBangKe(){
     <div class="tbl-wrap" style="border-radius:0 0 var(--r) var(--r)">
     <table class="tbl">
       <colgroup>
+        ${canChot?'<col style="width:26px">':''}
         <col style="width:30px"><col style="width:110px"><col style="width:80px">
         <col style="width:90px"><col style="width:80px">
         <col style="width:90px"><col style="width:80px">
@@ -526,6 +516,7 @@ async function loadBangKe(){
       </colgroup>
       <thead>
         <tr>
+          ${canChot?'<th rowspan="2"></th>':''}
           <th rowspan="2">STT</th>
           <th rowspan="2">Số cont</th>
           <th colspan="2" style="text-align:center;background:#fef3c7;color:#92400e">CSHT</th>
@@ -543,7 +534,7 @@ async function loadBangKe(){
       </thead>
       <tbody>${p2Rows}
         <tr style="background:#fff3e6;font-weight:700;font-size:12px">
-          <td colspan="10">TỔNG CHI HỘ CÓ HÓA ĐƠN</td>
+          <td colspan="${canChot?11:10}">TỔNG CHI HỘ CÓ HÓA ĐƠN</td>
           <td style="color:var(--primary)">${fmtM(tongP2)}</td>
         </tr>
       </tbody>
@@ -554,7 +545,7 @@ async function loadBangKe(){
   <!-- TỔNG CỘNG — theo đúng form file mẫu -->
   <div style="background:var(--sidebar-bg);border-radius:var(--rl);padding:16px 20px;color:#fff;margin-bottom:16px">
     <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px">
-      <div style="font-size:11px;opacity:.6">TỔNG CỘNG — ${khName} — Tháng ${m}/${y} — ${list.length} chuyến</div>
+      <div style="font-size:11px;opacity:.6">TỔNG CỘNG — ${khName} — Tháng ${m}/${y} — ${listP1.length} chuyến</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 200px;gap:4px;font-size:13px">
       <div style="opacity:.8">Tổng cước + phát sinh (chưa VAT)</div>
@@ -583,8 +574,6 @@ async function loadBangKe(){
       <div style="border-top:1px solid #ccc;padding-top:6px;color:var(--text-muted)">Người lập bảng kê</div>
     </div>
   </div>
-
-  ${chuyenKySection}
   </div>`;
 
   res.innerHTML=html;
@@ -593,12 +582,58 @@ async function loadBangKe(){
   document.getElementById('btn-xuat-excel').style.display='';
   document.getElementById('btn-in').style.display='';
 
-  // Đánh dấu trang_thai_bang_ke = cho_khach cho các đơn chưa chốt
-  const chuaChot2=list.filter(o=>!o.trang_thai_bang_ke||o.trang_thai_bang_ke==='chua_chot');
+  // Đánh dấu trang_thai_bang_ke = cho_khach cho các đơn Phần 1 chưa chốt
+  const chuaChot2=listP1.filter(o=>!o.trang_thai_bang_ke||o.trang_thai_bang_ke==='chua_chot');
   if(chuaChot2.length){
     await db.from('van_don').update({trang_thai_bang_ke:'cho_khach',ky_thanh_toan:thang})
       .in('id',chuaChot2.map(o=>o.id));
   }
+}
+
+// ===== CHỐT / HỦY CHỐT BẢNG KÊ KHÁCH (v2.8) =====
+// Phần 1 (Cước + phí phát sinh không HĐ) — chốt theo TỪNG CHUYẾN, tick sẵn mặc định, bỏ tick chuyến dispute
+async function chotBangKeP1(){
+  const checked=[...document.querySelectorAll('.bk-p1-chk:checked')].map(c=>c.value);
+  if(!checked.length){toast('Chưa chọn chuyến nào để chốt','error');return;}
+  const thang=document.getElementById('bk-thang').value;
+  if(!confirm(`Xác nhận khách đã chốt CƯỚC cho ${checked.length} chuyến đã chọn?`))return;
+  const{error}=await db.from('van_don').update({
+    trang_thai_bang_ke:'da_chot',ky_chot_cuoc:thang,ngay_chot_cuoc:new Date().toISOString()
+  }).in('id',checked);
+  if(error){toast('Lỗi chốt bảng kê: '+error.message,'error');return;}
+  toast(`✅ Đã chốt cước ${checked.length} chuyến`,'success');
+  await loadBangKe();
+}
+async function huyChotP1(id){
+  if(!confirm('Hủy chốt cước chuyến này? Chuyến sẽ quay lại danh sách chưa chốt.'))return;
+  const{error}=await db.from('van_don').update({
+    trang_thai_bang_ke:'chua_chot',ky_chot_cuoc:null,ngay_chot_cuoc:null
+  }).eq('id',id);
+  if(error){toast('Lỗi hủy chốt: '+error.message,'error');return;}
+  toast('Đã hủy chốt cước','success');
+  await loadBangKe();
+}
+// Phần 2 (Chi hộ có HĐ — Nâng/hạ, CSHT) — chốt theo TỪNG CONT, độc lập hoàn toàn với Phần 1
+async function chotBangKeP2(){
+  const checked=[...document.querySelectorAll('.bk-p2-chk:checked')].map(c=>c.value).filter(Boolean);
+  if(!checked.length){toast('Chưa chọn cont nào để chốt','error');return;}
+  const thang=document.getElementById('bk-thang').value;
+  if(!confirm(`Xác nhận chốt CHI HỘ CÓ HĐ (Phần 2) cho ${checked.length} cont đã chọn?`))return;
+  const{error}=await db.from('van_don').update({
+    trang_thai_p2:'da_chot',ky_chot_p2:thang,ngay_chot_p2:new Date().toISOString()
+  }).in('id',checked);
+  if(error){toast('Lỗi chốt Phần 2: '+error.message,'error');return;}
+  toast(`✅ Đã chốt chi hộ ${checked.length} cont`,'success');
+  await loadBangKe();
+}
+async function huyChotP2(id){
+  if(!confirm('Hủy chốt chi hộ (Phần 2) cho cont này? Cont sẽ quay lại danh sách chưa chốt.'))return;
+  const{error}=await db.from('van_don').update({
+    trang_thai_p2:'chua_chot',ky_chot_p2:null,ngay_chot_p2:null
+  }).eq('id',id);
+  if(error){toast('Lỗi hủy chốt: '+error.message,'error');return;}
+  toast('Đã hủy chốt chi hộ','success');
+  await loadBangKe();
 }
 
 async function xuatExcelBangKe(){
@@ -616,7 +651,7 @@ async function xuatExcelBangKe(){
     });
   }
 
-  const{list,chiHoAll,chiHoTypes,chiHoP1,chiHoP2,groups,chuyenChuyenKy,
+  const{list,listAll,chiHoAll,chiHoTypes,chiHoP1,chiHoP2,groups,chuyenChuyenKy,
         khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongTruocVAT,vatP1,tongPhaiThu,coTK}=window.BK_DATA;
 
   const chiHoMapLocal={};
@@ -750,7 +785,8 @@ async function xuatExcelBangKe(){
       const ch=(chiHoMapLocal[o.id]||[]).filter(c=>!c.hoa_don_khach);
       const phiDV=(+o.phi_doi_lenh||0)+(+o.phi_to_khai||0);
       const tongDong=(+o.gia_cuoc_khach||0)+ch.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0)+phiDV;
-      const kyNote=o.ky_goc&&o.ky_goc!==thang?`[T${o.ky_goc.split('-')[1]}] `:'';
+      const kyGocThucExcel=(o.ngay||'').slice(0,7);
+      const kyNote=kyGocThucExcel&&kyGocThucExcel!==thang?`[T${kyGocThucExcel.split('-')[1]}] `:'';
       const dStyle=cs({sz:9,bg:bgRow});
       const numStyle=cs({sz:9,bg:bgRow,align:'right',fmt:fmtNum0});
       const ctrStyle=cs({sz:9,bg:bgRow,align:'center'});
@@ -835,7 +871,7 @@ async function xuatExcelBangKe(){
 
     const p2ByCont={};
     chiHoP2.forEach(c=>{
-      const o=list.find(x=>x.id===c.van_don_id);
+      const o=(listAll||list).find(x=>x.id===c.van_don_id);
       const key=o?.so_cont||c.ma_don||c.van_don_id;
       if(!p2ByCont[key])p2ByCont[key]=[];
       p2ByCont[key].push(c);
@@ -963,10 +999,13 @@ async function xuatExcelBangKe(){
     const wsCK=XLSX.utils.aoa_to_sheet([
       [`CHUYẾN CHUYỂN KỲ — THÁNG ${m}/${y}`],
       ['Mã đơn','Ngày chạy','Số cont','Hành trình','Kỳ gốc','Lý do chuyển'],
-      ...chuyenChuyenKy.map(o=>[o.ma_don,fmtDate(o.ngay),o.so_cont||'',
+      ...chuyenChuyenKy.map(o=>{
+        const kg=(o.ngay||'').slice(0,7);
+        return[o.ma_don,fmtDate(o.ngay),o.so_cont||'',
         o.hanh_trinh||'',
-        o.ky_goc?`T${o.ky_goc.split('-')[1]}/${o.ky_goc.split('-')[0]}`:'',
-        o.ly_do_chuyen_ky||''])
+        kg?`T${kg.split('-')[1]}/${kg.split('-')[0]}`:'',
+        '']; // lý do chuyển: chưa thu thập, để trống
+      })
     ]);
     wsCK['!cols']=[{wch:16},{wch:12},{wch:14},{wch:35},{wch:10},{wch:30}];
     XLSX.utils.book_append_sheet(WB,wsCK,'Chuyển kỳ');
