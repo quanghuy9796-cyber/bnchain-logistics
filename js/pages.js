@@ -261,11 +261,11 @@ async function reloadKhDropdown(){
 }
 
 // Khung checkbox "Hiện cả đã chốt" — DÙNG CHUNG ở mọi nơi cần hiện (tránh viết lặp 2 bản khác nhau dễ lệch UI)
-function renderHienDaChotBar(hienDaChot,m,y){
+function renderHienDaChotBar(hienDaChot,m,y,label='Hiện cả chuyến/cont đã chốt',inputId='bk-hien-da-chot',onchangeFn='loadBangKe()'){
   return `<div style="display:inline-flex;align-items:center;gap:8px;background:#f5f7f8;border:1px solid var(--border);border-radius:var(--r);padding:7px 12px;margin:0 0 12px 0">
     <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-muted);margin:0;white-space:nowrap">
-      <input type="checkbox" id="bk-hien-da-chot" ${hienDaChot?'checked':''} onchange="loadBangKe()" style="margin:0">
-      <span>Hiện cả chuyến/cont đã chốt (kỳ T${m}/${y})</span>
+      <input type="checkbox" id="${inputId}" ${hienDaChot?'checked':''} onchange="${onchangeFn}" style="margin:0">
+      <span>${label} (kỳ T${m}/${y})</span>
     </label>
   </div>`;
 }
@@ -1084,33 +1084,32 @@ async function pgTraThau(c){
   await reloadThauDropdown();
 }
 
-// Nạp lại dropdown thầu phụ — CHỈ những thầu có ít nhất 1 chuyến đã khóa trong tháng đang chọn
-// (khớp đúng quy tắc báo cáo: chỉ tính đơn locked=true), thay vì liệt kê toàn bộ thầu từng có
-// trong lịch sử như trước — tránh chọn nhầm thầu không có dữ liệu kỳ này.
+// Nạp lại dropdown thầu phụ — kéo dồn đến cuối tháng đang chọn (giống bảng kê khách), kèm đếm
+// "(X chưa chốt)" cạnh tên thầu dựa trên trang_thai_chot_thau (chốt trả thầu — ĐỘC LẬP với chốt khách)
 async function reloadThauDropdown(){
   const sel=document.getElementById('tt-thau');
   const thang=document.getElementById('tt-thang')?.value;
   if(!sel||!thang)return;
   const[y,m]=thang.split('-');
   const lastDay=new Date(+y,+m,0).getDate();
-  const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
   const dangChon=sel.value;
   sel.innerHTML='<option value="">-- Đang tải... --</option>';
-  const{data}=await db.from('van_don').select('ma_thau_phu').eq('locked',true)
-    .gte('ngay',dateFrom).lte('ngay',dateTo)
+  const{data}=await db.from('van_don').select('ma_thau_phu,trang_thai_chot_thau').eq('locked',true)
+    .lte('ngay',dateTo)
     .not('ma_thau_phu','is',null).neq('ma_thau_phu','');
-  const seen=new Set();const thauList=[];
+  const map={};
   (data||[]).forEach(o=>{
     const raw=(o.ma_thau_phu||'').trim();
     if(!raw)return;
     const norm=raw.toLowerCase();
-    if(!seen.has(norm)){seen.add(norm);thauList.push(raw);}
+    if(!map[norm])map[norm]={name:raw,chuaChot:0};
+    if(o.trang_thai_chot_thau!=='da_chot')map[norm].chuaChot++;
   });
-  thauList.sort((a,b)=>a.localeCompare(b,'vi'));
+  const thauList=Object.values(map).sort((a,b)=>a.name.localeCompare(b.name,'vi'));
   sel.innerHTML=`<option value="">-- Chọn thầu phụ (${thauList.length} thầu có chuyến kỳ này) --</option>`
-    +thauList.map(t=>`<option value="${t}">${t}</option>`).join('');
-  if(thauList.some(t=>t.toLowerCase()===dangChon.toLowerCase()))sel.value=dangChon;
+    +thauList.map(t=>`<option value="${t.name}">${t.name}${t.chuaChot>0?` (${t.chuaChot} chưa chốt)`:''}</option>`).join('');
+  if(thauList.some(t=>t.name.toLowerCase()===dangChon.toLowerCase()))sel.value=dangChon;
 }
 
 async function loadBangKeThau(){
@@ -1122,33 +1121,43 @@ async function loadBangKeThau(){
   const res=document.getElementById('tt-result');
   const canhbao=document.getElementById('tt-canhbao');
   const btnIn=document.getElementById('tt-btn-in');
+  // QUAN TRỌNG: đọc checkbox "Hiện cả đã chốt" TRƯỚC khi xóa res.innerHTML (cùng bug đã gặp ở bảng kê khách)
+  const hienDaChotThau=document.getElementById('tt-hien-da-chot')?.checked||false;
+  const canChot=canSee(['ke_toan','ceo']);
   res.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   canhbao.innerHTML='';
   btnIn.style.display='none';
-
 
   const lastDay=new Date(parseInt(y),parseInt(m),0).getDate();
   const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
-  // DEBUG — toàn bộ đơn của thầu trong tháng (so khớp KHÔNG phân biệt hoa/thường & khoảng trắng dư),
-  // KỂ CẢ đơn chưa khóa / chưa nhập cước thầu — dùng để phát hiện đơn "thiếu" khỏi bảng kê
+  // DEBUG — toàn bộ đơn của thầu TRONG ĐÚNG THÁNG đang chọn (kể cả chưa khóa/chưa cước)
+  // — dùng để phát hiện đơn "thiếu" dữ liệu, KHÔNG liên quan đến việc đã chốt trả thầu hay chưa
   const{data:debugAll}=await db.from('van_don').select('id,ma_don,locked,gia_cuoc_thau,thanh_toan_thau,ngay')
     .ilike('ma_thau_phu',maThau.trim()).gte('ngay',dateFrom).lte('ngay',dateTo);
   console.log(`[BK Thầu DEBUG] Tổng đơn "${tenThau}" tháng ${thang} (chưa filter locked/cước):`,debugAll?.length||0);
 
-  // Bảng kê CHỈ tính đơn đã hoàn thành & khóa — đúng quy tắc báo cáo của hệ thống
-  const{data:orders}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,hanh_trinh,ten_lai_xe,gia_cuoc_thau,thanh_toan_thau,ma_thau_phu,so_cont,loai_cont,loai_hang,loai_chuyen,bien_kiem_soat,locked,loai_phan_loai_xe,tra_thau_doi_lenh')
+  // Bảng kê chính — KÉO DỒN giống bảng kê khách: lấy mọi chuyến đã khóa của thầu tính đến cuối
+  // tháng đang xem; chuyến nào CHƯA chốt trả thầu (cước thầu + phát sinh) sẽ tự trôi sang kỳ sau
+  const{data:orders}=await db.from('van_don').select('id,ma_don,ngay,ten_khach,hanh_trinh,ten_lai_xe,gia_cuoc_thau,thanh_toan_thau,ma_thau_phu,so_cont,loai_cont,loai_hang,loai_chuyen,bien_kiem_soat,locked,loai_phan_loai_xe,tra_thau_doi_lenh,trang_thai_chot_thau,ky_chot_thau,trang_thai_bang_ke,ky_chot_cuoc')
     .ilike('ma_thau_phu',maThau.trim()).eq('locked',true)
-    .gte('ngay',dateFrom).lte('ngay',dateTo)
+    .lte('ngay',dateTo)
     .order('ngay',{ascending:true});
-  const list=orders||[];
+  const allOrders=orders||[];
+
+  // Giữ lại: còn chưa chốt trả thầu (mọi kỳ cũ); hoặc đã chốt nhưng ĐÚNG kỳ đang xem + đang bật "Hiện cả đã chốt"
+  const list=allOrders.filter(o=>{
+    if(o.trang_thai_chot_thau!=='da_chot')return true;
+    return hienDaChotThau&&o.ky_chot_thau===thang;
+  });
+  const hasOpenThau=list.some(o=>o.trang_thai_chot_thau!=='da_chot'); // còn dòng chưa chốt thật thì mới cần hiện nút Chốt
 
   let canhbaoHtml='';
 
-  // Cảnh báo 1: chuyến của thầu trong tháng nhưng CHƯA vào được bảng kê
-  // (lý do: chưa khóa đơn, hoặc đã khóa nhưng chưa nhập cước thầu = 0/null)
-  const thieu=(debugAll||[]).filter(o=>!list.some(x=>x.id===o.id));
+  // Cảnh báo 1: chuyến của thầu TRONG ĐÚNG THÁNG nhưng chưa khóa/chưa nhập cước — đối chiếu với
+  // allOrders (chưa lọc theo chốt) để KHÔNG báo nhầm các chuyến đã chốt trả thầu kỳ trước (đúng ý, không phải thiếu)
+  const thieu=(debugAll||[]).filter(o=>!allOrders.some(x=>x.id===o.id));
   if(thieu.length){
     canhbaoHtml+=`<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:var(--r);padding:8px 14px;margin-bottom:8px;font-size:12px;display:flex;align-items:center;gap:8px">
       <i class="ti ti-alert-triangle" style="color:#d97706;font-size:16px"></i>
@@ -1158,11 +1167,8 @@ async function loadBangKeThau(){
     </div>`;
   }
 
-  // Cảnh báo 2 — NGUYÊN NHÂN PHỔ BIẾN NHẤT GÂY "THIẾU NHIỀU CHUYẾN":
-  // ma_thau_phu là ô NHẬP TAY tự do (không ràng buộc với danh mục thầu phụ), nên OPS có thể gõ
-  // sai/thiếu/khác mã (kể cả khoảng trắng, viết tắt khác). Đối chiếu theo TÊN LÁI XE của các chuyến
-  // đã khớp đúng thầu này, để tìm các chuyến CÙNG LÁI XE nhưng đang bị gắn mã thầu phụ khác/trống.
-  const taiXeSet=[...new Set(list.map(o=>o.ten_lai_xe).filter(Boolean))];
+  // Cảnh báo 2 — đối chiếu lái xe để bắt lỗi gõ sai mã thầu, dựa trên allOrders (mọi kỳ, không chỉ tháng này)
+  const taiXeSet=[...new Set(allOrders.map(o=>o.ten_lai_xe).filter(Boolean))];
   let leak=[];
   if(taiXeSet.length){
     const{data:leakData}=await db.from('van_don').select('id,ma_don,ngay,ten_lai_xe,ma_thau_phu,gia_cuoc_thau')
@@ -1187,8 +1193,14 @@ async function loadBangKeThau(){
 
   canhbao.innerHTML=canhbaoHtml;
 
+  const toggleBar=renderHienDaChotBar(hienDaChotThau,m,y,'Hiện cả chuyến đã chốt trả thầu','tt-hien-da-chot','loadBangKeThau()');
+
+  if(!allOrders.length){
+    res.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có đơn đã khóa của thầu này trong kỳ này</div>';
+    return;
+  }
   if(!list.length){
-    res.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có đơn đã khóa của thầu này trong tháng đã chọn</div>';
+    res.innerHTML=toggleBar+`<div class="empty"><i class="ti ti-inbox"></i>Tất cả ${allOrders.length} chuyến của thầu này đã chốt trả thầu xong — tick "Hiện cả đã chốt trả thầu" ở trên để xem lại</div>`;
     return;
   }
 
@@ -1225,6 +1237,7 @@ async function loadBangKeThau(){
   const coThauThueLai=list.some(o=>o.loai_phan_loai_xe==='thau_thue_lai');
 
   res.innerHTML=`
+  ${toggleBar}
   <div class="stats-row stats-3" style="margin-bottom:14px">
     <div class="stat-card"><div class="stat-lbl">Tổng trả thầu kỳ này</div><div class="stat-val text-red">${fmtM(tong)}</div></div>
     <div class="stat-card"><div class="stat-lbl">Số chuyến</div><div class="stat-val">${list.length}</div><div class="stat-sub">${soDaTra} đã trả · ${list.length-soDaTra} chưa trả</div></div>
@@ -1237,12 +1250,22 @@ async function loadBangKeThau(){
     </div>
     <table class="tbl">
       <thead><tr>
+        ${canChot?'<th></th>':''}
         <th>Ngày</th><th>Mã đơn</th><th>Loại</th><th>Tuyến đường</th><th>Số cont</th><th>Loại cont</th><th>Loại chuyến</th><th>BKS</th>
-        <th>Cước thầu</th><th>Chi hộ trả thầu</th><th>Đổi lệnh</th>${coThauThueLai?'<th>Trừ lương LX</th>':''}<th>Tổng phải trả</th><th>Trạng thái</th>
+        <th>Cước thầu</th><th>Chi hộ trả thầu</th><th>Đổi lệnh</th>${coThauThueLai?'<th>Trừ lương LX</th>':''}<th>Tổng phải trả</th><th>Khách</th><th>Trạng thái</th>
       </tr></thead>
       <tbody>${list.map(o=>{
         const traLX=(o.loai_phan_loai_xe==='thau_thue_lai'&&o._traLX>0)?o._traLX:0;
-        return`<tr>
+        const daChotThau=o.trang_thai_chot_thau==='da_chot';
+        const ctrl=!canChot?'':daChotThau
+          ?`<button class="btn-xs" onclick="huyChotTraThau('${o.id}')" title="Hủy chốt trả thầu"><i class="ti ti-arrow-back-up"></i></button>`
+          :`<input type="checkbox" class="tt-chk" value="${o.id}" checked>`;
+        const daChotKhach=o.trang_thai_bang_ke==='da_chot';
+        const khachTag=daChotKhach
+          ?`<span style="background:#dcfce7;color:#166534;border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap">Đã chốt${o.ky_chot_cuoc?' T'+o.ky_chot_cuoc.split('-')[1]:''}</span>`
+          :`<span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap">Chưa chốt</span>`;
+        return`<tr${daChotThau?' style="opacity:.6"':''}>
+        ${canChot?`<td>${ctrl}</td>`:''}
         <td>${o.ngay}</td>
         <td style="color:var(--teal);font-weight:600">${o.ma_don}</td>
         <td>${loaiTag(o.loai_hang)}</td>
@@ -1256,10 +1279,15 @@ async function loadBangKeThau(){
         <td>${o._traDL>0?fmtM(o._traDL):'—'}</td>
         ${coThauThueLai?`<td>${traLX>0?'−'+fmtM(traLX):'—'}</td>`:''}
         <td class="text-red fw6">${fmtM(o._thucTra)}</td>
+        <td>${khachTag}</td>
         <td>${thuTag(o.thanh_toan_thau)}</td>
       </tr>`;
       }).join('')}</tbody>
     </table>
+    ${(canChot&&hasOpenThau)?`<div style="background:#fdecea;border-radius:0 0 var(--r) var(--r);padding:8px 12px;display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--text-muted)">Mặc định tick hết — bỏ tick chuyến nào còn cần xem lại trước khi chốt trả thầu</span>
+      <button class="btn btn-teal btn-sm" onclick="chotTraThau()"><i class="ti ti-checkbox"></i> Chốt trả thầu đã chọn</button>
+    </div>`:''}
     ${chThau.items.length?`<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:10px 12px;margin-top:8px">
       <div style="font-size:11px;font-weight:600;color:#92400e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px"><i class="ti ti-receipt-2"></i> Chi hộ chưa thu hồi (Dầu / Sửa xe / Trả nợ — module Chi phí)</div>
       ${chThau.items.map(it=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
@@ -1273,6 +1301,32 @@ async function loadBangKeThau(){
     <div class="bk-total-row"><span>Còn phải trả (đã trừ chi hộ) ${tenThau}</span><span style="color:var(--danger)">${fmtM(conPhaiTra)}</span></div>
   </div>`;
   btnIn.style.display='inline-flex';
+}
+
+// ===== CHỐT / HỦY CHỐT TRẢ THẦU PHỤ (v2.8) — cước thầu + phát sinh (chi hộ trả thầu, đổi lệnh, trừ lương LX)
+// ĐỘC LẬP hoàn toàn với trạng thái chốt khách (trang_thai_bang_ke) — chốt khách chỉ là note tham khảo ở đây
+async function chotTraThau(){
+  const checked=[...document.querySelectorAll('.tt-chk:checked')].map(c=>c.value);
+  if(!checked.length){toast('Chưa chọn chuyến nào để chốt','error');return;}
+  const thang=document.getElementById('tt-thang').value;
+  if(!confirm(`Xác nhận chốt TRẢ THẦU (cước + phát sinh) cho ${checked.length} chuyến đã chọn?`))return;
+  const{error}=await db.from('van_don').update({
+    trang_thai_chot_thau:'da_chot',ky_chot_thau:thang,ngay_chot_thau:new Date().toISOString()
+  }).in('id',checked);
+  if(error){toast('Lỗi chốt trả thầu: '+error.message,'error');return;}
+  toast(`✅ Đã chốt trả thầu ${checked.length} chuyến`,'success');
+  await reloadThauDropdown();
+  await loadBangKeThau();
+}
+async function huyChotTraThau(id){
+  if(!confirm('Hủy chốt trả thầu cho chuyến này? Chuyến sẽ quay lại danh sách chưa chốt.'))return;
+  const{error}=await db.from('van_don').update({
+    trang_thai_chot_thau:'chua_chot',ky_chot_thau:null,ngay_chot_thau:null
+  }).eq('id',id);
+  if(error){toast('Lỗi hủy chốt: '+error.message,'error');return;}
+  toast('Đã hủy chốt trả thầu','success');
+  await reloadThauDropdown();
+  await loadBangKeThau();
 }
 
 // Đánh dấu các khoản chi hộ (chi_phi + dau_xuat) của 1 thầu phụ là đã thu hồi (đã trừ vào kỳ trả thầu này)
