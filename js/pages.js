@@ -259,11 +259,13 @@ async function loadBangKe(){
   const[y,m]=thang.split('-');
   const res=document.getElementById('bk-result');
   const canhbao=document.getElementById('bk-canhbao');
+  // QUAN TRỌNG: đọc checkbox "Hiện cả đã chốt" TRƯỚC khi xóa res.innerHTML — checkbox này nằm
+  // bên trong #bk-result nên nếu xóa trước sẽ luôn đọc ra null/false (bug v2.8 đã gặp khi test)
+  const hienDaChot=document.getElementById('bk-hien-da-chot')?.checked||false;
   res.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   canhbao.innerHTML='';
 
   const canChot=canSee(['ke_toan','ceo']);
-  const hienDaChot=document.getElementById('bk-hien-da-chot')?.checked||false;
   const lastDay=new Date(parseInt(y),parseInt(m),0).getDate(); // ngày cuối tháng đúng
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
@@ -606,6 +608,7 @@ async function chotBangKeP1(){
   }).in('id',checked);
   if(error){toast('Lỗi chốt bảng kê: '+error.message,'error');return;}
   toast(`✅ Đã chốt cước ${checked.length} chuyến`,'success');
+  await reloadKhDropdown();
   await loadBangKe();
 }
 async function huyChotP1(id){
@@ -615,6 +618,7 @@ async function huyChotP1(id){
   }).eq('id',id);
   if(error){toast('Lỗi hủy chốt: '+error.message,'error');return;}
   toast('Đã hủy chốt cước','success');
+  await reloadKhDropdown();
   await loadBangKe();
 }
 // Phần 2 (Chi hộ có HĐ — Nâng/hạ, CSHT) — chốt theo TỪNG CONT, độc lập hoàn toàn với Phần 1
@@ -628,6 +632,7 @@ async function chotBangKeP2(){
   }).in('id',checked);
   if(error){toast('Lỗi chốt Phần 2: '+error.message,'error');return;}
   toast(`✅ Đã chốt chi hộ ${checked.length} cont`,'success');
+  await reloadKhDropdown();
   await loadBangKe();
 }
 async function huyChotP2(id){
@@ -637,6 +642,7 @@ async function huyChotP2(id){
   }).eq('id',id);
   if(error){toast('Lỗi hủy chốt: '+error.message,'error');return;}
   toast('Đã hủy chốt chi hộ','success');
+  await reloadKhDropdown();
   await loadBangKe();
 }
 
