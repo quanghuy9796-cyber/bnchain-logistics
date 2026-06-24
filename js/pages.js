@@ -307,7 +307,12 @@ async function loadBangKe(){
     return hienDaChot&&(o.ky_chot_cuoc===thang||o.ky_chot_p2===thang);
   });
   if(!list.length){
-    res.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có đơn nào trong kỳ này</div>';
+    const toggleOnly=`<div style="margin-bottom:10px">
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="bk-hien-da-chot" ${hienDaChot?'checked':''} onchange="loadBangKe()"> Hiện cả chuyến/cont đã chốt (kỳ T${m}/${y})
+      </label>
+    </div>`;
+    res.innerHTML=toggleOnly+`<div class="empty"><i class="ti ti-inbox"></i>Tất cả ${allOrders.length} chuyến/cont của khách trong kỳ này đã chốt xong — tick "Hiện cả đã chốt" ở trên để xem lại</div>`;
     return;
   }
   // Tách riêng theo từng phần — 1 chuyến có thể chỉ còn việc ở P1 hoặc chỉ còn ở P2, độc lập nhau
