@@ -260,6 +260,16 @@ async function reloadKhDropdown(){
   if(khList.some(k=>k.name.toLowerCase()===dangChon.toLowerCase()))sel.value=dangChon;
 }
 
+// Khung checkbox "Hiện cả đã chốt" — DÙNG CHUNG ở mọi nơi cần hiện (tránh viết lặp 2 bản khác nhau dễ lệch UI)
+function renderHienDaChotBar(hienDaChot,m,y){
+  return `<div style="display:inline-flex;align-items:center;gap:8px;background:#f5f7f8;border:1px solid var(--border);border-radius:var(--r);padding:7px 12px;margin:0 0 12px 0">
+    <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-muted);margin:0;white-space:nowrap">
+      <input type="checkbox" id="bk-hien-da-chot" ${hienDaChot?'checked':''} onchange="loadBangKe()" style="margin:0">
+      <span>Hiện cả chuyến/cont đã chốt (kỳ T${m}/${y})</span>
+    </label>
+  </div>`;
+}
+
 async function loadBangKe(){
   const khVal=document.getElementById('bk-kh').value;
   const thang=document.getElementById('bk-thang').value;
@@ -307,12 +317,7 @@ async function loadBangKe(){
     return hienDaChot&&(o.ky_chot_cuoc===thang||o.ky_chot_p2===thang);
   });
   if(!list.length){
-    const toggleOnly=`<div style="margin-bottom:10px">
-      <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="checkbox" id="bk-hien-da-chot" ${hienDaChot?'checked':''} onchange="loadBangKe()"> Hiện cả chuyến/cont đã chốt (kỳ T${m}/${y})
-      </label>
-    </div>`;
-    res.innerHTML=toggleOnly+`<div class="empty"><i class="ti ti-inbox"></i>Tất cả ${allOrders.length} chuyến/cont của khách trong kỳ này đã chốt xong — tick "Hiện cả đã chốt" ở trên để xem lại</div>`;
+    res.innerHTML=renderHienDaChotBar(hienDaChot,m,y)+`<div class="empty"><i class="ti ti-inbox"></i>Tất cả ${allOrders.length} chuyến/cont của khách trong kỳ này đã chốt xong — tick "Hiện cả đã chốt" ở trên để xem lại</div>`;
     return;
   }
   // Tách riêng theo từng phần — 1 chuyến có thể chỉ còn việc ở P1 hoặc chỉ còn ở P2, độc lập nhau
@@ -468,12 +473,7 @@ async function loadBangKe(){
   // Build HTML
   const colP1=`${canChot?'<col style="width:26px">':''}<col style="width:28px"><col style="width:76px"><col style="width:100px"><col style="width:48px"><col style="width:90px"><col style="width:52px"><col style="width:140px"><col style="width:68px"><col style="width:78px"><col style="width:68px">${coTK?'<col style="width:68px">':''}${chiHoTypes.map(()=>'<col style="width:72px">').join('')}<col style="width:80px"><col style="width:100px">`;
 
-  const toolbarChot=`
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-    <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
-      <input type="checkbox" id="bk-hien-da-chot" ${hienDaChot?'checked':''} onchange="loadBangKe()"> Hiện cả chuyến/cont đã chốt (kỳ T${m}/${y})
-    </label>
-  </div>`;
+  const toolbarChot=renderHienDaChotBar(hienDaChot,m,y);
 
   const html=`
   ${toolbarChot}
