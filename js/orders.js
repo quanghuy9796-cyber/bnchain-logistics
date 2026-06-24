@@ -1182,10 +1182,6 @@ function openAddChiHo(vdId,maDon){
         <option>Công nhân bốc xếp</option>
         <option>Cao tốc / Vé đường</option>
         <option>Nâng/hạ cont</option>
-        <option>Nâng hàng</option>
-        <option>Nâng vỏ</option>
-        <option>Hạ hàng</option>
-        <option>Hạ vỏ</option>
         <option>Phí CSHT</option>
         <option>Phí cảng, bãi</option>
         <option>Phí local charge</option>
