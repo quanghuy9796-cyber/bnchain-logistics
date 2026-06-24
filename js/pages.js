@@ -1155,6 +1155,18 @@ async function loadBangKeThau(){
 
   let canhbaoHtml='';
 
+  // Cảnh báo 0 (MỚI, đặt đầu tiên — nổi bật nhất) — tổng hợp chuyến khách CHƯA chốt cước trong bảng kê này.
+  // Chỉ là note tham khảo cho kế toán cân nhắc, KHÔNG chặn việc chốt trả thầu.
+  const chuaChotKhach=list.filter(o=>o.trang_thai_bang_ke!=='da_chot');
+  if(chuaChotKhach.length){
+    canhbaoHtml+=`<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--r);padding:8px 14px;margin-bottom:8px;font-size:12px;display:flex;align-items:center;gap:8px">
+      <i class="ti ti-alert-triangle" style="color:#dc2626;font-size:18px"></i>
+      <span><strong style="color:#991b1b">${chuaChotKhach.length}/${list.length} chuyến trong bảng kê này — KHÁCH CHƯA CHỐT CƯỚC</strong> — cân nhắc trước khi trả thầu:
+      ${chuaChotKhach.slice(0,6).map(o=>`<span style="background:#fef2f2;border-radius:3px;padding:1px 5px;font-weight:600">${o.ma_don}</span>`).join(' ')}
+      ${chuaChotKhach.length>6?` và ${chuaChotKhach.length-6} chuyến khác`:''}</span>
+    </div>`;
+  }
+
   // Cảnh báo 1: chuyến của thầu TRONG ĐÚNG THÁNG nhưng chưa khóa/chưa nhập cước — đối chiếu với
   // allOrders (chưa lọc theo chốt) để KHÔNG báo nhầm các chuyến đã chốt trả thầu kỳ trước (đúng ý, không phải thiếu)
   const thieu=(debugAll||[]).filter(o=>!allOrders.some(x=>x.id===o.id));
@@ -1252,7 +1264,7 @@ async function loadBangKeThau(){
       <thead><tr>
         ${canChot?'<th></th>':''}
         <th>Ngày</th><th>Mã đơn</th><th>Loại</th><th>Tuyến đường</th><th>Số cont</th><th>Loại cont</th><th>Loại chuyến</th><th>BKS</th>
-        <th>Cước thầu</th><th>Chi hộ trả thầu</th><th>Đổi lệnh</th>${coThauThueLai?'<th>Trừ lương LX</th>':''}<th>Tổng phải trả</th><th>Khách</th><th>Trạng thái</th>
+        <th>Cước thầu</th><th>Chi hộ trả thầu</th><th>Đổi lệnh</th>${coThauThueLai?'<th>Trừ lương LX</th>':''}<th>Tổng phải trả</th><th>Khách đã chốt?</th>
       </tr></thead>
       <tbody>${list.map(o=>{
         const traLX=(o.loai_phan_loai_xe==='thau_thue_lai'&&o._traLX>0)?o._traLX:0;
@@ -1261,10 +1273,13 @@ async function loadBangKeThau(){
           ?`<button class="btn-xs" onclick="huyChotTraThau('${o.id}')" title="Hủy chốt trả thầu"><i class="ti ti-arrow-back-up"></i></button>`
           :`<input type="checkbox" class="tt-chk" value="${o.id}" checked>`;
         const daChotKhach=o.trang_thai_bang_ke==='da_chot';
+        // Tag "Khách" làm nổi bật hơn — đậm, có icon, đổi sang đỏ (đúng tông cảnh báo tiền) khi chưa chốt
         const khachTag=daChotKhach
-          ?`<span style="background:#dcfce7;color:#166534;border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap">Đã chốt${o.ky_chot_cuoc?' T'+o.ky_chot_cuoc.split('-')[1]:''}</span>`
-          :`<span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap">Chưa chốt</span>`;
-        return`<tr${daChotThau?' style="opacity:.6"':''}>
+          ?`<span style="background:#dcfce7;color:#166534;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:700;white-space:nowrap;display:inline-flex;align-items:center;gap:4px"><i class="ti ti-check" style="font-size:13px"></i>Đã chốt${o.ky_chot_cuoc?' T'+o.ky_chot_cuoc.split('-')[1]:''}</span>`
+          :`<span style="background:#fee2e2;color:#991b1b;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:700;white-space:nowrap;display:inline-flex;align-items:center;gap:4px"><i class="ti ti-alert-triangle" style="font-size:13px"></i>CHƯA CHỐT</span>`;
+        // Dòng nào khách chưa chốt → viền trái đỏ + nền hồng nhạt để nổi bật ngay cả khi không nhìn vào cột Khách
+        const trStyle=`${daChotThau?'opacity:.6;':''}${!daChotKhach?'background:#fffafa;border-left:3px solid #ef4444;':''}`;
+        return`<tr${trStyle?` style="${trStyle}"`:''}>
         ${canChot?`<td>${ctrl}</td>`:''}
         <td>${o.ngay}</td>
         <td style="color:var(--teal);font-weight:600">${o.ma_don}</td>
@@ -1280,7 +1295,6 @@ async function loadBangKeThau(){
         ${coThauThueLai?`<td>${traLX>0?'−'+fmtM(traLX):'—'}</td>`:''}
         <td class="text-red fw6">${fmtM(o._thucTra)}</td>
         <td>${khachTag}</td>
-        <td>${thuTag(o.thanh_toan_thau)}</td>
       </tr>`;
       }).join('')}</tbody>
     </table>
