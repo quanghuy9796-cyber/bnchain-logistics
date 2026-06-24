@@ -442,10 +442,6 @@ async function loadBangKe(){
     <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
       <input type="checkbox" id="bk-hien-da-chot" ${hienDaChot?'checked':''} onchange="loadBangKe()"> Hiện cả chuyến/cont đã chốt (kỳ T${m}/${y})
     </label>
-    ${canChot?`<div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-teal btn-sm" onclick="chotBangKeP1()"><i class="ti ti-checkbox"></i> Chốt cước đã chọn (P1)</button>
-      ${chiHoP2.length?`<button class="btn btn-teal btn-sm" onclick="chotBangKeP2()"><i class="ti ti-checkbox"></i> Chốt chi hộ đã chọn (P2)</button>`:''}
-    </div>`:''}
   </div>`;
 
   const html=`
@@ -466,7 +462,7 @@ async function loadBangKe(){
       <span><i class="ti ti-truck"></i> PHẦN 1: CƯỚC VẬN CHUYỂN & PHÍ PHÁT SINH</span>
       <span>${fmtM(tongCuoc+tongDV+tongP1)}</span>
     </div>
-    <div class="tbl-wrap" style="border-radius:0 0 var(--r) var(--r)">
+    <div class="tbl-wrap" style="${canChot?'border-radius:0':'border-radius:0 0 var(--r) var(--r)'}">
     <table class="tbl">
       <colgroup>${colP1}</colgroup>
       <thead>
@@ -495,6 +491,10 @@ async function loadBangKe(){
       </tbody>
     </table>
     </div>
+    ${canChot?`<div style="background:#eaf4f4;border-radius:0 0 var(--r) var(--r);padding:8px 12px;display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--text-muted)">Mặc định tick hết — bỏ tick chuyến nào khách còn dispute trước khi chốt</span>
+      <button class="btn btn-teal btn-sm" onclick="chotBangKeP1()"><i class="ti ti-checkbox"></i> Chốt cước đã chọn (Phần 1)</button>
+    </div>`:''}
   </div>
 
   <!-- PHẦN 2 — gộp vào bảng chính theo từng cont, giống file mẫu -->
@@ -504,7 +504,7 @@ async function loadBangKe(){
       <span><i class="ti ti-receipt"></i> PHẦN 2: CHI HỘ CÓ HÓA ĐƠN (Nâng / Hạ / CSHT)</span>
       <span>${fmtM(tongP2)}</span>
     </div>
-    <div class="tbl-wrap" style="border-radius:0 0 var(--r) var(--r)">
+    <div class="tbl-wrap" style="${canChot?'border-radius:0':'border-radius:0 0 var(--r) var(--r)'}">
     <table class="tbl">
       <colgroup>
         ${canChot?'<col style="width:26px">':''}
@@ -540,6 +540,10 @@ async function loadBangKe(){
       </tbody>
     </table>
     </div>
+    ${canChot?`<div style="background:#eef3ea;border-radius:0 0 var(--r) var(--r);padding:8px 12px;display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--text-muted)">Cont nào chưa đủ hóa đơn cứ để chưa chốt — tự trôi sang kỳ sau</span>
+      <button class="btn btn-teal btn-sm" onclick="chotBangKeP2()"><i class="ti ti-checkbox"></i> Chốt chi hộ đã chọn (Phần 2)</button>
+    </div>`:''}
   </div>`:''}
 
   <!-- TỔNG CỘNG — theo đúng form file mẫu -->
