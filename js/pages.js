@@ -232,17 +232,26 @@ async function reloadKhDropdown(){
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
   const dangChon=sel.value;
   sel.innerHTML='<option value="">-- Đang tải... --</option>';
-  const{data}=await db.from('van_don').select('ten_khach,trang_thai_bang_ke,trang_thai_p2').eq('locked',true)
+  const{data}=await db.from('van_don').select('id,ten_khach,trang_thai_bang_ke,trang_thai_p2').eq('locked',true)
     .lte('ngay',dateTo)
     .not('ten_khach','is',null).neq('ten_khach','');
+  const allOrders=data||[];
+  const allIds=allOrders.map(o=>o.id);
+  // Phải biết đơn nào THỰC SỰ có chi hộ Phần 2 (có HĐ) — đơn không có thì P2 là "không áp dụng",
+  // không được tính là chưa chốt (cùng gốc bug với loadBangKe — xem ghi chú ở đó)
+  let idsWithP2=new Set();
+  if(allIds.length){
+    const{data:chP2}=await db.from('chi_ho').select('van_don_id').in('van_don_id',allIds).eq('hoa_don_khach',true).eq('la_tham_chieu',false);
+    idsWithP2=new Set((chP2||[]).map(c=>c.van_don_id));
+  }
   const map={};
-  (data||[]).forEach(o=>{
+  allOrders.forEach(o=>{
     const raw=(o.ten_khach||'').trim();
     if(!raw)return;
     const norm=raw.toLowerCase();
     if(!map[norm])map[norm]={name:raw,chuaChot:0};
     const p1Open=o.trang_thai_bang_ke!=='da_chot';
-    const p2Open=o.trang_thai_p2!=='da_chot';
+    const p2Open=idsWithP2.has(o.id)&&o.trang_thai_p2!=='da_chot';
     if(p1Open||p2Open)map[norm].chuaChot++;
   });
   const khList=Object.values(map).sort((a,b)=>a.name.localeCompare(b.name,'vi'));
@@ -277,10 +286,23 @@ async function loadBangKe(){
     .order('ngay',{ascending:true}).order('so_bill',{ascending:true});
 
   const allOrders=orders||[];
-  // Giữ lại: (1) còn việc chưa chốt ở P1 hoặc P2 (luôn hiện, mọi kỳ cũ); (2) đã chốt nhưng ĐÚNG kỳ đang xem + đang bật "Hiện cả đã chốt"
+  if(!allOrders.length){
+    res.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có đơn nào trong kỳ này</div>';
+    return;
+  }
+
+  // Lấy TRƯỚC chi_ho của TOÀN BỘ allOrders (chưa lọc) — để biết đúng đơn nào THỰC SỰ có
+  // chi hộ Phần 2 (có HĐ). Đơn không hề có chi hộ HĐ thì Phần 2 là "không áp dụng", KHÔNG được
+  // coi là "còn chưa chốt" — nếu không sẽ bị kẹt vĩnh viễn vì trang_thai_p2 mặc định là chua_chot
+  // và không có dòng nào ở Phần 2 để mà tick chốt (bug đã gặp khi CEO test C P WORLD).
+  const allIds=allOrders.map(o=>o.id);
+  const{data:chiHoBroad}=await db.from('chi_ho').select('*').in('van_don_id',allIds).eq('la_tham_chieu',false).order('ngay_chi',{ascending:true});
+  const idsWithP2=new Set((chiHoBroad||[]).filter(c=>c.hoa_don_khach).map(c=>c.van_don_id));
+
+  // Giữ lại: (1) còn việc chưa chốt ở P1 hoặc P2 (P2 chỉ tính khi đơn thực có chi hộ HĐ); (2) đã chốt nhưng ĐÚNG kỳ đang xem + đang bật "Hiện cả đã chốt"
   const list=allOrders.filter(o=>{
     const p1Open=o.trang_thai_bang_ke!=='da_chot';
-    const p2Open=o.trang_thai_p2!=='da_chot';
+    const p2Open=idsWithP2.has(o.id)&&o.trang_thai_p2!=='da_chot';
     if(p1Open||p2Open)return true;
     return hienDaChot&&(o.ky_chot_cuoc===thang||o.ky_chot_p2===thang);
   });
@@ -290,11 +312,12 @@ async function loadBangKe(){
   }
   // Tách riêng theo từng phần — 1 chuyến có thể chỉ còn việc ở P1 hoặc chỉ còn ở P2, độc lập nhau
   const listP1=list.filter(o=>o.trang_thai_bang_ke!=='da_chot'||(hienDaChot&&o.ky_chot_cuoc===thang));
-  const idsP2Open=new Set(list.filter(o=>o.trang_thai_p2!=='da_chot'||(hienDaChot&&o.ky_chot_p2===thang)).map(o=>o.id));
+  const hasOpenP1=listP1.some(o=>o.trang_thai_bang_ke!=='da_chot'); // còn dòng chưa chốt thật thì mới cần hiện nút Chốt
+  const idsP2Open=new Set(list.filter(o=>(idsWithP2.has(o.id)&&o.trang_thai_p2!=='da_chot')||(hienDaChot&&o.ky_chot_p2===thang)).map(o=>o.id));
 
-  // Load chi_ho
-  const ids=list.map(o=>o.id);
-  const{data:chiHoAll}=await db.from('chi_ho').select('*').in('van_don_id',ids).eq('la_tham_chieu',false).order('ngay_chi',{ascending:true});
+  // Lọc chi_ho từ tập đã fetch sẵn (chiHoBroad) theo đúng các đơn còn hiện trong list — KHÔNG fetch lại DB
+  const idsSet=new Set(list.map(o=>o.id));
+  const chiHoAll=(chiHoBroad||[]).filter(c=>idsSet.has(c.van_don_id));
   const chiHoMap={};
   (chiHoAll||[]).forEach(ch=>{
     if(!chiHoMap[ch.van_don_id])chiHoMap[ch.van_don_id]=[];
@@ -432,6 +455,7 @@ async function loadBangKe(){
       <td class="text-orange fw6">${fmtM(tongCont)}</td>
     </tr>`;
   });
+  const hasOpenP2=Object.values(p2ByCont).some(({order})=>order?.trang_thai_p2!=='da_chot'); // còn cont chưa chốt thật thì mới cần hiện nút Chốt
 
   // Lưu data vào window để xuất Excel
   window.BK_DATA={list,listAll:list,listP1,chiHoAll:chiHoAll||[],groups,chiHoTypes,chiHoP1,chiHoP2,chuyenChuyenKy,khName,thang,m,y,tongCuoc,tongDV,tongP1,tongP2,tongTruocVAT,vatP1,tongPhaiThu,coTK,coLachHuyenCH};
@@ -464,7 +488,7 @@ async function loadBangKe(){
       <span><i class="ti ti-truck"></i> PHẦN 1: CƯỚC VẬN CHUYỂN & PHÍ PHÁT SINH</span>
       <span>${fmtM(tongCuoc+tongDV+tongP1)}</span>
     </div>
-    <div class="tbl-wrap" style="${canChot?'border-radius:0':'border-radius:0 0 var(--r) var(--r)'}">
+    <div class="tbl-wrap" style="${(canChot&&hasOpenP1)?'border-radius:0':'border-radius:0 0 var(--r) var(--r)'}">
     <table class="tbl">
       <colgroup>${colP1}</colgroup>
       <thead>
@@ -493,7 +517,7 @@ async function loadBangKe(){
       </tbody>
     </table>
     </div>
-    ${canChot?`<div style="background:#eaf4f4;border-radius:0 0 var(--r) var(--r);padding:8px 12px;display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap">
+    ${(canChot&&hasOpenP1)?`<div style="background:#eaf4f4;border-radius:0 0 var(--r) var(--r);padding:8px 12px;display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="font-size:11px;color:var(--text-muted)">Mặc định tick hết — bỏ tick chuyến nào khách còn dispute trước khi chốt</span>
       <button class="btn btn-teal btn-sm" onclick="chotBangKeP1()"><i class="ti ti-checkbox"></i> Chốt cước đã chọn (Phần 1)</button>
     </div>`:''}
@@ -506,7 +530,7 @@ async function loadBangKe(){
       <span><i class="ti ti-receipt"></i> PHẦN 2: CHI HỘ CÓ HÓA ĐƠN (Nâng / Hạ / CSHT)</span>
       <span>${fmtM(tongP2)}</span>
     </div>
-    <div class="tbl-wrap" style="${canChot?'border-radius:0':'border-radius:0 0 var(--r) var(--r)'}">
+    <div class="tbl-wrap" style="${(canChot&&hasOpenP2)?'border-radius:0':'border-radius:0 0 var(--r) var(--r)'}">
     <table class="tbl">
       <colgroup>
         ${canChot?'<col style="width:26px">':''}
@@ -542,7 +566,7 @@ async function loadBangKe(){
       </tbody>
     </table>
     </div>
-    ${canChot?`<div style="background:#eef3ea;border-radius:0 0 var(--r) var(--r);padding:8px 12px;display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap">
+    ${(canChot&&hasOpenP2)?`<div style="background:#eef3ea;border-radius:0 0 var(--r) var(--r);padding:8px 12px;display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="font-size:11px;color:var(--text-muted)">Cont nào chưa đủ hóa đơn cứ để chưa chốt — tự trôi sang kỳ sau</span>
       <button class="btn btn-teal btn-sm" onclick="chotBangKeP2()"><i class="ti ti-checkbox"></i> Chốt chi hộ đã chọn (Phần 2)</button>
     </div>`:''}
