@@ -32,7 +32,7 @@ function _renderOrdersUI(c){
   ORDERS.forEach(o=>counts[o.trang_thai]=(counts[o.trang_thai]||0)+1);
   const sq=ORDER_SEARCH.trim().toLowerCase();
   _filteredOrders=ORDERS.filter(o=>{
-    const mq=!sq||(o.ma_don?.toLowerCase().includes(sq)||o.ten_khach?.toLowerCase().includes(sq)||o.so_bill?.toLowerCase().includes(sq)||o.so_booking?.toLowerCase().includes(sq)||o.so_cont?.toLowerCase().includes(sq)||o.bien_kiem_soat?.toLowerCase().includes(sq));
+    const mq=!sq||(o.ma_don?.toLowerCase().includes(sq)||o.ten_khach?.toLowerCase().includes(sq)||o.so_bill?.toLowerCase().includes(sq)||o.so_booking?.toLowerCase().includes(sq)||o.so_cont?.toLowerCase().includes(sq)||o.bien_kiem_soat?.toLowerCase().includes(sq)||o.ma_thau_phu?.toLowerCase().includes(sq));
     return mq&&(!ORDER_LOAI||o.loai_hang===ORDER_LOAI)&&(ORDER_FILTER==='all'||o.trang_thai===ORDER_FILTER);
   });
   const totalPages=Math.max(1,Math.ceil(_filteredOrders.length/ORDER_PAGE_SIZE));
@@ -50,7 +50,7 @@ function _renderOrdersUI(c){
   </div>
   <div class="toolbar">
     ${canSee(['nhan_vien','quan_ly','ke_toan','ceo'])?`<button class="btn btn-primary" onclick="openForm()"><i class="ti ti-plus"></i> Thêm vận đơn</button>`:''}
-    <input class="search-inp" placeholder="Tìm mã đơn, bill, booking, cont, biển số..." value="${ORDER_SEARCH}" oninput="clearTimeout(window._searchT);window._searchT=setTimeout(()=>{ORDER_SEARCH=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))},300)">
+    <input class="search-inp" placeholder="Tìm mã đơn, bill, booking, cont, biển số, thầu..." value="${ORDER_SEARCH}" oninput="clearTimeout(window._searchT);window._searchT=setTimeout(()=>{ORDER_SEARCH=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))},600)">
     <select class="filter-sel" onchange="ORDER_LOAI=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
       <option value="">Tất cả loại</option>
       <option value="Xuất" ${ORDER_LOAI==='Xuất'?'selected':''}>Xuất</option>
