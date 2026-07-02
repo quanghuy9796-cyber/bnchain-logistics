@@ -1415,7 +1415,7 @@ async function loadBaoCao(){
   const tongThu=tongCuocKH+tongCH+tongDV;
   const loiNhuan=tongThu-tongTraThauThuc;
   const tongKH=list.filter(o=>o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép').length;
-  const tiLeKH=list.length?Math.round(tongKH/list.length*100):0;
+  const tongThuong=list.length-tongKH;const tiLeKH=tongThuong>0?Math.round(tongKH/tongThuong*100):0;
 
   // Group khách hàng
   const khMap={};
@@ -1559,12 +1559,12 @@ async function loadBaoCao(){
       ${khBarChart(xeArr)}
       <div style="margin-top:8px">
         ${xeArr.map(([k,v])=>{
-          const tl=v.so>0?Math.round(v.kh/v.so*100):0;
+          const tl=v.thuong>0?Math.round(v.kh/v.thuong*100):0;
           const mau=tl>=50?'var(--success)':tl>=30?'var(--warning)':'var(--danger)';
           return`<div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:3px 0;border-bottom:1px solid var(--border)">
             <span class="text-blue">${k}</span>
             <span style="display:flex;gap:6px;align-items:center">
-              <span style="font-size:10px;color:var(--text-muted)">${v.kh}KH/${v.so}ch</span>
+              <span style="font-size:10px;color:var(--text-muted)">${v.kh}KH/${v.thuong}ch</span>
               <span style="font-weight:700;color:${mau}">${tl}%</span>
             </span>
           </div>`;
@@ -1587,7 +1587,7 @@ async function loadBaoCao(){
       <thead><tr><th>Biển số</th><th>Thầu phụ</th><th>Chuyến</th><th>Cước khách</th><th>Cước thầu</th><th>TB/chuyến</th><th>Thường</th><th>KH/KG</th><th>Tỉ lệ KH</th></tr></thead>
       <tbody>
       ${xeArr.map(([k,v])=>{
-        const tl=v.so>0?Math.round(v.kh/v.so*100):0;
+        const tl=v.thuong>0?Math.round(v.kh/v.thuong*100):0;
         const mau=tl>=50?'var(--success)':tl>=30?'var(--warning)':'var(--danger)';
         const tb=v.so>0?Math.round(v.cuoc/v.so):0;
         return`<tr>
@@ -1608,7 +1608,7 @@ async function loadBaoCao(){
         const tongCuocThauXe=xeArr.reduce((s,[,v])=>s+v.cuoc,0);
         const tongThuongXe=xeArr.reduce((s,[,v])=>s+v.thuong,0);
         const tongKHXe=xeArr.reduce((s,[,v])=>s+v.kh,0);
-        const tiLeKHXe=tongSo>0?Math.round(tongKHXe/tongSo*100):0;
+        const tiLeKHXe=tongThuongXe>0?Math.round(tongKHXe/tongThuongXe*100):0;
         return`<tr style="background:#f5f9fb;font-weight:600">
         <td colspan="2">Tổng cộng</td>
         <td>${tongSo}</td>
