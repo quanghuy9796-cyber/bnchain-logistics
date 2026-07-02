@@ -1415,7 +1415,7 @@ async function loadBaoCao(){
   const tongThu=tongCuocKH+tongCH+tongDV;
   const loiNhuan=tongThu-tongTraThauThuc;
   const tongKH=list.filter(o=>o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép').length;
-  const tiLeKH=list.length?Math.round(tongKH/list.length*100):0;
+  const tongThuong=list.length-tongKH;const tiLeKH=tongThuong>0?Math.round(tongKH/tongThuong*100):0;
 
   // Group khách hàng
   const khMap={};
@@ -1469,28 +1469,31 @@ async function loadBaoCao(){
     return`<svg viewBox="0 0 ${W} ${H}" width="100%" style="overflow:visible">${base}${bars}${vals}${labels}</svg>`;
   }
 
-  // Biểu đồ tỉ lệ kết hợp theo xe (stacked bar)
+  // Biểu đồ KH/KG: thanh=Thường, xanh=KH, xám=Thường−KH
   function khBarChart(items){
-    const W=460,H=180,pad={t:10,b:40,l:10,r:10};
+    const W=460,H=200,pad={t:28,b:40,l:10,r:10};
     const chartW=W-pad.l-pad.r;
     const chartH=H-pad.t-pad.b;
     const bw=Math.min(50,Math.floor(chartW/items.length)-8);
     const gap=(chartW-bw*items.length)/(items.length+1);
+    const maxThuong=Math.max(...items.map(([,v])=>v.thuong),1);
     let bars='',labels='',tileLabels='';
     items.forEach(([bien,v],i)=>{
       const x=pad.l+gap+(bw+gap)*i;
-      const tiLe=v.so>0?Math.round(v.kh/v.so*100):0;
-      const khH=Math.round(tiLe/100*chartH);
-      const thuongH=chartH-khH;
-      // stacked: thường (bottom, gray), kết hợp (top, green)
-      if(thuongH>0)bars+=`<rect x="${x}" y="${pad.t+khH}" width="${bw}" height="${thuongH}" rx="0" fill="#e2e8f0"/>`;
-      if(khH>0)bars+=`<rect x="${x}" y="${pad.t}" width="${bw}" height="${khH}" rx="4" fill="var(--success)" opacity=".85"/>`;
-      // top: rounded corners for full bar
-      if(khH===0)bars+=`<rect x="${x}" y="${pad.t}" width="${bw}" height="${chartH}" rx="4" fill="#e2e8f0"/>`;
-      if(khH===chartH)bars+=`<rect x="${x}" y="${pad.t}" width="${bw}" height="${chartH}" rx="4" fill="var(--success)" opacity=".85"/>`;
-      // % label
+      const tiLe=v.thuong>0?Math.round(v.kh/v.thuong*100):0;
+      const totalBarH=Math.max(8,Math.round(v.thuong/maxThuong*chartH));
+      const barTop=pad.t+chartH-totalBarH;
+      const khH=Math.min(v.thuong>0?Math.round(v.kh/v.thuong*totalBarH):0,totalBarH);
+      const remH=totalBarH-khH;
+      bars+=`<rect x="${x}" y="${barTop}" width="${bw}" height="${totalBarH}" rx="4" fill="#e2e8f0"/>`;
+      if(khH>0){
+        bars+=`<rect x="${x}" y="${barTop}" width="${bw}" height="${khH}" rx="4" fill="var(--success)" opacity=".85"/>`;
+        if(remH>0&&khH>4)bars+=`<rect x="${x}" y="${barTop+4}" width="${bw}" height="${Math.max(khH-4,1)}" rx="0" fill="var(--success)" opacity=".85"/>`;
+      }
+      if(khH>20)bars+=`<text x="${x+bw/2}" y="${barTop+khH/2+4}" text-anchor="middle" font-size="10" fill="white" font-weight="700" font-family="Segoe UI,sans-serif">${v.kh}</text>`;
+      if(remH>20&&v.thuong-v.kh>0)bars+=`<text x="${x+bw/2}" y="${barTop+khH+remH/2+4}" text-anchor="middle" font-size="10" fill="#94a3b8" font-family="Segoe UI,sans-serif">${v.thuong-v.kh}</text>`;
       const mau=tiLe>=50?'var(--success)':tiLe>=30?'var(--warning)':'var(--danger)';
-      tileLabels+=`<text x="${x+bw/2}" y="${pad.t-2}" text-anchor="middle" font-size="10" fill="${mau}" font-weight="600" font-family="Segoe UI,sans-serif">${tiLe}%</text>`;
+      tileLabels+=`<text x="${x+bw/2}" y="${barTop-5}" text-anchor="middle" font-size="10" fill="${mau}" font-weight="600" font-family="Segoe UI,sans-serif">${tiLe}%</text>`;
       const short=bien.length>8?bien.slice(0,8)+'…':bien;
       labels+=`<text x="${x+bw/2}" y="${H-pad.b+14}" text-anchor="middle" font-size="10" fill="var(--text)" font-family="Segoe UI,sans-serif">${short}</text>`;
     });
@@ -1559,19 +1562,19 @@ async function loadBaoCao(){
       ${khBarChart(xeArr)}
       <div style="margin-top:8px">
         ${xeArr.map(([k,v])=>{
-          const tl=v.so>0?Math.round(v.kh/v.so*100):0;
+          const tl=v.thuong>0?Math.round(v.kh/v.thuong*100):0;
           const mau=tl>=50?'var(--success)':tl>=30?'var(--warning)':'var(--danger)';
           return`<div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:3px 0;border-bottom:1px solid var(--border)">
             <span class="text-blue">${k}</span>
             <span style="display:flex;gap:6px;align-items:center">
-              <span style="font-size:10px;color:var(--text-muted)">${v.kh}KH/${v.so}ch</span>
+              <span style="font-size:10px;color:var(--text-muted)">${v.kh}KH/${v.thuong}ch</span>
               <span style="font-weight:700;color:${mau}">${tl}%</span>
             </span>
           </div>`;
         }).join('')}
         <div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--text-muted)">
-          <span><span style="display:inline-block;width:8px;height:8px;background:var(--success);border-radius:2px;opacity:.85;margin-right:3px"></span>Kết hợp / Kẹp ghép</span>
-          <span><span style="display:inline-block;width:8px;height:8px;background:#e2e8f0;border-radius:2px;margin-right:3px"></span>Thường</span>
+          <span><span style="display:inline-block;width:8px;height:8px;background:var(--success);border-radius:2px;opacity:.85;margin-right:3px"></span>KH/KG</span>
+          <span><span style="display:inline-block;width:8px;height:8px;background:#e2e8f0;border-radius:2px;margin-right:3px"></span>Thường còn lại</span>
         </div>
       </div>
     </div>
@@ -1587,7 +1590,7 @@ async function loadBaoCao(){
       <thead><tr><th>Biển số</th><th>Thầu phụ</th><th>Chuyến</th><th>Cước khách</th><th>Cước thầu</th><th>TB/chuyến</th><th>Thường</th><th>KH/KG</th><th>Tỉ lệ KH</th></tr></thead>
       <tbody>
       ${xeArr.map(([k,v])=>{
-        const tl=v.so>0?Math.round(v.kh/v.so*100):0;
+        const tl=v.thuong>0?Math.round(v.kh/v.thuong*100):0;
         const mau=tl>=50?'var(--success)':tl>=30?'var(--warning)':'var(--danger)';
         const tb=v.so>0?Math.round(v.cuoc/v.so):0;
         return`<tr>
@@ -1608,7 +1611,7 @@ async function loadBaoCao(){
         const tongCuocThauXe=xeArr.reduce((s,[,v])=>s+v.cuoc,0);
         const tongThuongXe=xeArr.reduce((s,[,v])=>s+v.thuong,0);
         const tongKHXe=xeArr.reduce((s,[,v])=>s+v.kh,0);
-        const tiLeKHXe=tongSo>0?Math.round(tongKHXe/tongSo*100):0;
+        const tiLeKHXe=tongThuongXe>0?Math.round(tongKHXe/tongThuongXe*100):0;
         return`<tr style="background:#f5f9fb;font-weight:600">
         <td colspan="2">Tổng cộng</td>
         <td>${tongSo}</td>
