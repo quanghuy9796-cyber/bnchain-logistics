@@ -1469,34 +1469,43 @@ async function loadBaoCao(){
     return`<svg viewBox="0 0 ${W} ${H}" width="100%" style="overflow:visible">${base}${bars}${vals}${labels}</svg>`;
   }
 
-  // Biểu đồ tỉ lệ kết hợp theo xe (stacked bar)
+  // Biểu đồ tỉ lệ kết hợp theo xe
+  // Thanh = Thường (chuẩn), xanh = KH fill vào trong, xám = Thường còn lại (Thường−KH)
   function khBarChart(items){
-    const W=460,H=180,pad={t:10,b:40,l:10,r:10};
+    const W=460,H=200,pad={t:28,b:40,l:10,r:10};
     const chartW=W-pad.l-pad.r;
     const chartH=H-pad.t-pad.b;
     const bw=Math.min(50,Math.floor(chartW/items.length)-8);
     const gap=(chartW-bw*items.length)/(items.length+1);
+    const maxThuong=Math.max(...items.map(([,v])=>v.thuong),1);
     let bars='',labels='',tileLabels='';
     items.forEach(([bien,v],i)=>{
       const x=pad.l+gap+(bw+gap)*i;
-      const tiLeBar=v.so>0?Math.round(v.kh/v.so*100):0;     // tỉ lệ bar: KH/tổng (chiều cao xanh vs xám)
-      const tiLe=v.thuong>0?Math.round(v.kh/v.thuong*100):0; // label: KH/Thường
-      const khH=Math.round(tiLeBar/100*chartH);
-      const thuongH=chartH-khH;
-      // stacked: thường (bottom, gray), kết hợp (top, green)
-      if(thuongH>0)bars+=`<rect x="${x}" y="${pad.t+khH}" width="${bw}" height="${thuongH}" rx="0" fill="#e2e8f0"/>`;
-      if(khH>0)bars+=`<rect x="${x}" y="${pad.t}" width="${bw}" height="${khH}" rx="4" fill="var(--success)" opacity=".85"/>`;
-      // top: rounded corners for full bar
-      if(khH===0)bars+=`<rect x="${x}" y="${pad.t}" width="${bw}" height="${chartH}" rx="4" fill="#e2e8f0"/>`;
-      if(khH===chartH)bars+=`<rect x="${x}" y="${pad.t}" width="${bw}" height="${chartH}" rx="4" fill="var(--success)" opacity=".85"/>`;
-      // % label
+      const tiLe=v.thuong>0?Math.round(v.kh/v.thuong*100):0;
+      // Chiều cao bar ∝ Thường count (scale theo max)
+      const totalBarH=Math.max(8,Math.round(v.thuong/maxThuong*chartH));
+      const barTop=pad.t+chartH-totalBarH; // canh đáy
+      // KH fill từ trên xuống (capped tại totalBarH)
+      const khH=Math.min(v.thuong>0?Math.round(v.kh/v.thuong*totalBarH):0,totalBarH);
+      const remH=totalBarH-khH; // phần Thường còn lại
+      // 1. Nền xám = toàn bộ Thường (rounded)
+      bars+=\`<rect x="\${x}" y="\${barTop}" width="\${bw}" height="\${totalBarH}" rx="4" fill="#e2e8f0"/>\`;
+      // 2. Phủ xanh = KH trips (từ trên, rounded top)
+      if(khH>0){
+        bars+=\`<rect x="\${x}" y="\${barTop}" width="\${bw}" height="\${khH}" rx="4" fill="var(--success)" opacity=".85"/>\`;
+        // Xóa bo tròn đáy xanh (để lộ xám bên dưới sạch)
+        if(remH>0&&khH>4)bars+=\`<rect x="\${x}" y="\${barTop+4}" width="\${bw}" height="\${Math.max(khH-4,1)}" rx="0" fill="var(--success)" opacity=".85"/>\`;
+      }
+      // Số bên trong thanh
+      if(khH>20)bars+=\`<text x="\${x+bw/2}" y="\${barTop+khH/2+4}" text-anchor="middle" font-size="10" fill="white" font-weight="700" font-family="Segoe UI,sans-serif">\${v.kh}</text>\`;
+      if(remH>20&&v.thuong-v.kh>0)bars+=\`<text x="\${x+bw/2}" y="\${barTop+khH+remH/2+4}" text-anchor="middle" font-size="10" fill="#94a3b8" font-family="Segoe UI,sans-serif">\${v.thuong-v.kh}</text>\`;
       const mau=tiLe>=50?'var(--success)':tiLe>=30?'var(--warning)':'var(--danger)';
-      tileLabels+=`<text x="${x+bw/2}" y="${pad.t-2}" text-anchor="middle" font-size="10" fill="${mau}" font-weight="600" font-family="Segoe UI,sans-serif">${tiLe}%</text>`;
+      tileLabels+=\`<text x="\${x+bw/2}" y="\${barTop-5}" text-anchor="middle" font-size="10" fill="\${mau}" font-weight="600" font-family="Segoe UI,sans-serif">\${tiLe}%</text>\`;
       const short=bien.length>8?bien.slice(0,8)+'…':bien;
-      labels+=`<text x="${x+bw/2}" y="${H-pad.b+14}" text-anchor="middle" font-size="10" fill="var(--text)" font-family="Segoe UI,sans-serif">${short}</text>`;
+      labels+=\`<text x="\${x+bw/2}" y="\${H-pad.b+14}" text-anchor="middle" font-size="10" fill="var(--text)" font-family="Segoe UI,sans-serif">\${short}</text>\`;
     });
-    const base=`<line x1="${pad.l}" y1="${pad.t+chartH}" x2="${W-pad.r}" y2="${pad.t+chartH}" stroke="var(--border)" stroke-width="1"/>`;
-    return`<svg viewBox="0 0 ${W} ${H}" width="100%" style="overflow:visible">${base}${bars}${tileLabels}${labels}</svg>`;
+    const base=\`<line x1="\${pad.l}" y1="\${pad.t+chartH}" x2="\${W-pad.r}" y2="\${pad.t+chartH}" stroke="var(--border)" stroke-width="1"/>\`;
+    return\`<svg viewBox="0 0 \${W} \${H}" width="100%" style="overflow:visible">\${base}\${bars}\${tileLabels}\${labels}</svg>\`;
   }
 
   bc.innerHTML=`
@@ -1571,8 +1580,9 @@ async function loadBaoCao(){
           </div>`;
         }).join('')}
         <div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--text-muted)">
-          <span><span style="display:inline-block;width:8px;height:8px;background:var(--success);border-radius:2px;opacity:.85;margin-right:3px"></span>Kết hợp / Kẹp ghép</span>
-          <span><span style="display:inline-block;width:8px;height:8px;background:#e2e8f0;border-radius:2px;margin-right:3px"></span>Thường</span>
+          <span><span style="display:inline-block;width:8px;height:8px;background:var(--success);border-radius:2px;opacity:.85;margin-right:3px"></span>KH/KG (xanh)</span>
+          <span><span style="display:inline-block;width:8px;height:8px;background:#e2e8f0;border-radius:2px;margin-right:3px"></span>Thường chưa kết hợp (xám)</span>
+          <span style="color:var(--text-muted)">Thanh = tổng chuyến Thường</span>
         </div>
       </div>
     </div>
