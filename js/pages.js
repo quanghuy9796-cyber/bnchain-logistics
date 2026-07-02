@@ -1479,8 +1479,8 @@ async function loadBaoCao(){
     let bars='',labels='',tileLabels='';
     items.forEach(([bien,v],i)=>{
       const x=pad.l+gap+(bw+gap)*i;
-      const tiLeBar=v.so>0?Math.round(v.kh/v.so*100):0;  // tỉ lệ cho chiều cao bar (KH/tổng)
-      const tiLe=v.thuong>0?Math.round(v.kh/v.thuong*100):0; // tỉ lệ hiện label (KH/thường)
+      const tiLeBar=v.so>0?Math.round(v.kh/v.so*100):0;     // tỉ lệ bar: KH/tổng (chiều cao xanh vs xám)
+      const tiLe=v.thuong>0?Math.round(v.kh/v.thuong*100):0; // label: KH/Thường
       const khH=Math.round(tiLeBar/100*chartH);
       const thuongH=chartH-khH;
       // stacked: thường (bottom, gray), kết hợp (top, green)
