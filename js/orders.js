@@ -14,8 +14,7 @@ const ORDER_PAGE_SIZE=25;
 let _filteredOrders=[];
 let _canM=false;
 
-async function pgOrders(c){
-  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
+async function _fetchOrdersData(){
   const COLS='id,ma_don,ngay,trang_thai,ten_khach,so_bill,so_booking,loai_hang,so_cont,loai_cont,loai_xe_hang,loai_chuyen,bien_kiem_soat,ten_lai_xe,hanh_trinh,diem_lay,diem_tra,locked,ky_thanh_toan,trang_thai_bang_ke,gia_cuoc_khach,gia_cuoc_thau,thanh_toan_khach,thanh_toan_thau,phi_doi_lenh,phi_to_khai,co_doi_lenh,co_to_khai,ngay_yeu_cau,created_at,ma_thau_phu,loai_phan_loai_xe,la_xe_noi_bo,ghi_chu,ghi_chu_xe,diem_tra_phat_sinh,created_by,tra_thau_doi_lenh,don_vi_doi_lenh';
   let q=db.from('van_don').select(COLS).order('ngay',{ascending:false}).order('created_at',{ascending:false});
   if(CU?.vai_tro==='nhan_vien') q=q.eq('created_by',CU.id);
@@ -24,6 +23,11 @@ async function pgOrders(c){
   const{data}=await q.limit(500);
   ORDERS=data||[];
   _canM=canSee(['ke_toan','ceo','thu_quy']);
+}
+
+async function pgOrders(c){
+  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
+  await _fetchOrdersData();
   _renderOrdersUI(c);
 }
 
@@ -1119,14 +1123,17 @@ async function doLockOrder(id){
 async function refreshOrder(id){
   // 1. Fetch full data trước
   const{data}=await db.from('van_don').select('*').eq('id',id).single();
-  // 2. await pgOrders — bắt buộc, không thì race condition overwrite ORDERS
-  await pgOrders(document.getElementById('content'));
-  // 3. Patch ORDERS bằng full data, re-render
+  // 2. Refresh cache ORDERS NGẦM (không đụng DOM) — bắt buộc, không thì race condition overwrite ORDERS
+  await _fetchOrdersData();
+  // 3. Patch ORDERS bằng full data
   if(data){
     const idx=ORDERS.findIndex(x=>x.id===id);
-    if(idx>=0)ORDERS[idx]=data;
-    await renderDP(data);
+    if(idx>=0)ORDERS[idx]=data; else ORDERS.unshift(data);
   }
+  // 4. Vẽ lại ĐÚNG trang đang đứng (Bảng điều vận / Quản lý vận đơn / ...) — không ép về trang Quản lý vận đơn (v2.9 fix)
+  renderPage();
+  // 5. Panel chi tiết bên phải nằm ngoài #content — refresh riêng để giữ nguyên đang mở
+  if(data&&SEL===id) await renderDP(data);
 }
 
 // OPEN FORM (thêm mới)
