@@ -42,6 +42,8 @@ function _renderOrdersUI(c){
     if(ORDER_TT_THAU&&(o.thanh_toan_thau||'Chưa thu')!==ORDER_TT_THAU)return false;
     if(ORDER_TU_NGAY&&(!o.ngay||o.ngay<ORDER_TU_NGAY))return false;
     if(ORDER_DEN_NGAY&&(!o.ngay||o.ngay>ORDER_DEN_NGAY))return false;
+    if(ORDER_BIEN_SO&&o.bien_kiem_soat!==ORDER_BIEN_SO)return false;
+    if(ORDER_LOAI_CHUYEN&&o.loai_chuyen!==ORDER_LOAI_CHUYEN)return false;
     return true;
   });
   const totalPages=Math.max(1,Math.ceil(_filteredOrders.length/ORDER_PAGE_SIZE));
@@ -99,20 +101,32 @@ function _renderOrdersUI(c){
   }
 }
 function _advCount(){
-  return[ORDER_KH,ORDER_THAU,ORDER_PHANLOAI,ORDER_TT_KHACH,ORDER_TT_THAU,ORDER_TU_NGAY,ORDER_DEN_NGAY].filter(Boolean).length;
+  return[ORDER_KH,ORDER_THAU,ORDER_PHANLOAI,ORDER_TT_KHACH,ORDER_TT_THAU,ORDER_TU_NGAY,ORDER_DEN_NGAY,ORDER_BIEN_SO,ORDER_LOAI_CHUYEN].filter(Boolean).length;
 }
 function _buildAdvFilterBar(){
   const khOpts=[...new Set(ORDERS.map(o=>o.ten_khach).filter(Boolean))].sort().map(k=>`<option value="${k}" ${ORDER_KH===k?'selected':''}>${k}</option>`).join('');
-  const thauOpts=(TP||[]).map(t=>`<option value="${t.ma_thau}" ${ORDER_THAU===t.ma_thau?'selected':''}>${t.ma_thau} — ${t.ten_cong_ty}</option>`).join('');
+  // Thầu phụ: lấy TRỰC TIẾP từ mã đang có trên vận đơn (không chỉ Danh mục Thầu phụ) —
+  // vì có thầu ngoài/gõ tay chưa từng thêm vào Danh mục (VD: DV-THUTUC). Ghép tên nếu tìm thấy trong TP, không thì hiện mã.
+  const tpNameMap={};(TP||[]).forEach(t=>tpNameMap[t.ma_thau]=t.ten_cong_ty);
+  const maThauSet=[...new Set(ORDERS.map(o=>o.ma_thau_phu).filter(Boolean))].sort();
+  const thauOpts=maThauSet.map(ma=>`<option value="${ma}" ${ORDER_THAU===ma?'selected':''}>${ma}${tpNameMap[ma]?' — '+tpNameMap[ma]:''}</option>`).join('');
   const plLabel={'noi_bo':'🚗 Nội bộ','thau_tu_lai':'🚛 Thầu tự lái','thau_thue_lai':'🔄 Thầu thuê lái'};
   const plOpts=Object.entries(plLabel).map(([v,l])=>`<option value="${v}" ${ORDER_PHANLOAI===v?'selected':''}>${l}</option>`).join('');
   const ttOpts=['Đã thu','Chưa thu','Đã thu một phần'].map(v=>`<option value="${v}">${v}</option>`).join('');
+  const bienSoOpts=[...new Set(ORDERS.map(o=>o.bien_kiem_soat).filter(Boolean))].sort().map(b=>`<option value="${b}" ${ORDER_BIEN_SO===b?'selected':''}>${b}</option>`).join('');
+  const lcOpts=['Thường','Kết hợp','Kẹp ghép'].map(v=>`<option value="${v}" ${ORDER_LOAI_CHUYEN===v?'selected':''}>${v}</option>`).join('');
   return`<div class="toolbar" style="margin-top:-6px;margin-bottom:10px;flex-wrap:wrap;gap:8px;background:var(--bg-alt,#f8fafc);border-radius:8px;padding:10px">
     <select class="filter-sel" onchange="ORDER_KH=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
       <option value="">-- Khách hàng --</option>${khOpts}
     </select>
     <select class="filter-sel" onchange="ORDER_THAU=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
       <option value="">-- Thầu phụ --</option>${thauOpts}
+    </select>
+    <select class="filter-sel" onchange="ORDER_BIEN_SO=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
+      <option value="">-- Biển số xe --</option>${bienSoOpts}
+    </select>
+    <select class="filter-sel" onchange="ORDER_LOAI_CHUYEN=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
+      <option value="">-- Loại chuyến --</option>${lcOpts}
     </select>
     <select class="filter-sel" onchange="ORDER_PHANLOAI=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
       <option value="">-- Phân loại xe --</option>${plOpts}
@@ -125,7 +139,7 @@ function _buildAdvFilterBar(){
     </select>`:''}
     <input type="date" class="filter-sel" value="${ORDER_TU_NGAY}" title="Từ ngày" onchange="ORDER_TU_NGAY=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
     <input type="date" class="filter-sel" value="${ORDER_DEN_NGAY}" title="Đến ngày" onchange="ORDER_DEN_NGAY=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
-    <button class="btn btn-sm" onclick="ORDER_KH='';ORDER_THAU='';ORDER_PHANLOAI='';ORDER_TT_KHACH='';ORDER_TT_THAU='';ORDER_TU_NGAY='';ORDER_DEN_NGAY='';ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))"><i class="ti ti-x"></i> Xóa lọc nâng cao</button>
+    <button class="btn btn-sm" onclick="ORDER_KH='';ORDER_THAU='';ORDER_PHANLOAI='';ORDER_TT_KHACH='';ORDER_TT_THAU='';ORDER_TU_NGAY='';ORDER_DEN_NGAY='';ORDER_BIEN_SO='';ORDER_LOAI_CHUYEN='';ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))"><i class="ti ti-x"></i> Xóa lọc nâng cao</button>
   </div>`;
 }
 
