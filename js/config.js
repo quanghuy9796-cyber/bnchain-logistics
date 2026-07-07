@@ -16,6 +16,15 @@ let ORDER_FILTER='all';
 let ORDER_SEARCH='';
 let ORDER_LOAI='';
 let ORDER_THANG='';
+// Bộ lọc nâng cao (v2.9) — ẩn/hiện qua toggle, không phát sinh query DB mới
+let ORDER_ADV_OPEN=false;
+let ORDER_KH='';
+let ORDER_THAU='';
+let ORDER_PHANLOAI='';
+let ORDER_TT_KHACH='';
+let ORDER_TT_THAU='';
+let ORDER_TU_NGAY='';
+let ORDER_DEN_NGAY='';
 
 const fmt=n=>Number(n||0).toLocaleString('vi-VN');
 const fmtM=n=>fmt(n)+' đ';
