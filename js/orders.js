@@ -33,7 +33,16 @@ function _renderOrdersUI(c){
   const sq=ORDER_SEARCH.trim().toLowerCase();
   _filteredOrders=ORDERS.filter(o=>{
     const mq=!sq||(o.ma_don?.toLowerCase().includes(sq)||o.ten_khach?.toLowerCase().includes(sq)||o.so_bill?.toLowerCase().includes(sq)||o.so_booking?.toLowerCase().includes(sq)||o.so_cont?.toLowerCase().includes(sq)||o.bien_kiem_soat?.toLowerCase().includes(sq)||o.ma_thau_phu?.toLowerCase().includes(sq));
-    return mq&&(!ORDER_LOAI||o.loai_hang===ORDER_LOAI)&&(ORDER_FILTER==='all'||o.trang_thai===ORDER_FILTER);
+    if(!mq||(ORDER_LOAI&&o.loai_hang!==ORDER_LOAI)||(ORDER_FILTER!=='all'&&o.trang_thai!==ORDER_FILTER))return false;
+    // Bộ lọc nâng cao (v2.9)
+    if(ORDER_KH&&o.ten_khach!==ORDER_KH)return false;
+    if(ORDER_THAU&&o.ma_thau_phu!==ORDER_THAU)return false;
+    if(ORDER_PHANLOAI&&o.loai_phan_loai_xe!==ORDER_PHANLOAI)return false;
+    if(ORDER_TT_KHACH&&(o.thanh_toan_khach||'Chưa thu')!==ORDER_TT_KHACH)return false;
+    if(ORDER_TT_THAU&&(o.thanh_toan_thau||'Chưa thu')!==ORDER_TT_THAU)return false;
+    if(ORDER_TU_NGAY&&(!o.ngay||o.ngay<ORDER_TU_NGAY))return false;
+    if(ORDER_DEN_NGAY&&(!o.ngay||o.ngay>ORDER_DEN_NGAY))return false;
+    return true;
   });
   const totalPages=Math.max(1,Math.ceil(_filteredOrders.length/ORDER_PAGE_SIZE));
   if(ORDER_PAGE>totalPages)ORDER_PAGE=totalPages;if(ORDER_PAGE<1)ORDER_PAGE=1;
@@ -60,8 +69,11 @@ function _renderOrdersUI(c){
     <select class="filter-sel" onchange="ORDER_THANG=this.value;ORDER_PAGE=1;pgOrders(document.getElementById('content'))">
       <option value="">Tất cả tháng</option>${thOpts}
     </select>
+    <button class="btn btn-sm" onclick="ORDER_ADV_OPEN=!ORDER_ADV_OPEN;_renderOrdersUI(document.getElementById('content'))"><i class="ti ti-filter"></i> Lọc nâng cao${_advCount()?` (${_advCount()})`:''}</button>
+    <button class="btn btn-sm" onclick="xuatExcelOrders(this)"><i class="ti ti-file-spreadsheet"></i> Xuất Excel</button>
     <span class="ml-auto" style="font-size:11.5px;color:var(--text-muted)">${_filteredOrders.length} vận đơn</span>
   </div>
+  ${ORDER_ADV_OPEN?_buildAdvFilterBar():''}
   <div class="tbl-wrap"><table class="tbl">
     <colgroup>
       <col style="width:105px"><col style="width:70px"><col style="width:110px"><col style="width:90px">
@@ -86,6 +98,75 @@ function _renderOrdersUI(c){
     if(selTr)selTr.classList.add('selected');
   }
 }
+function _advCount(){
+  return[ORDER_KH,ORDER_THAU,ORDER_PHANLOAI,ORDER_TT_KHACH,ORDER_TT_THAU,ORDER_TU_NGAY,ORDER_DEN_NGAY].filter(Boolean).length;
+}
+function _buildAdvFilterBar(){
+  const khOpts=[...new Set(ORDERS.map(o=>o.ten_khach).filter(Boolean))].sort().map(k=>`<option value="${k}" ${ORDER_KH===k?'selected':''}>${k}</option>`).join('');
+  const thauOpts=(TP||[]).map(t=>`<option value="${t.ma_thau}" ${ORDER_THAU===t.ma_thau?'selected':''}>${t.ma_thau} — ${t.ten_cong_ty}</option>`).join('');
+  const plLabel={'noi_bo':'🚗 Nội bộ','thau_tu_lai':'🚛 Thầu tự lái','thau_thue_lai':'🔄 Thầu thuê lái'};
+  const plOpts=Object.entries(plLabel).map(([v,l])=>`<option value="${v}" ${ORDER_PHANLOAI===v?'selected':''}>${l}</option>`).join('');
+  const ttOpts=['Đã thu','Chưa thu','Đã thu một phần'].map(v=>`<option value="${v}">${v}</option>`).join('');
+  return`<div class="toolbar" style="margin-top:-6px;margin-bottom:10px;flex-wrap:wrap;gap:8px;background:var(--bg-alt,#f8fafc);border-radius:8px;padding:10px">
+    <select class="filter-sel" onchange="ORDER_KH=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
+      <option value="">-- Khách hàng --</option>${khOpts}
+    </select>
+    <select class="filter-sel" onchange="ORDER_THAU=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
+      <option value="">-- Thầu phụ --</option>${thauOpts}
+    </select>
+    <select class="filter-sel" onchange="ORDER_PHANLOAI=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
+      <option value="">-- Phân loại xe --</option>${plOpts}
+    </select>
+    ${_canM?`<select class="filter-sel" onchange="ORDER_TT_KHACH=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
+      <option value="">-- TT thu khách --</option>${ttOpts.replace(`value="${ORDER_TT_KHACH}"`,`value="${ORDER_TT_KHACH}" selected`)}
+    </select>
+    <select class="filter-sel" onchange="ORDER_TT_THAU=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
+      <option value="">-- TT trả thầu --</option>${ttOpts.replace(`value="${ORDER_TT_THAU}"`,`value="${ORDER_TT_THAU}" selected`)}
+    </select>`:''}
+    <input type="date" class="filter-sel" value="${ORDER_TU_NGAY}" title="Từ ngày" onchange="ORDER_TU_NGAY=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
+    <input type="date" class="filter-sel" value="${ORDER_DEN_NGAY}" title="Đến ngày" onchange="ORDER_DEN_NGAY=this.value;ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))">
+    <button class="btn btn-sm" onclick="ORDER_KH='';ORDER_THAU='';ORDER_PHANLOAI='';ORDER_TT_KHACH='';ORDER_TT_THAU='';ORDER_TU_NGAY='';ORDER_DEN_NGAY='';ORDER_PAGE=1;_renderOrdersUI(document.getElementById('content'))"><i class="ti ti-x"></i> Xóa lọc nâng cao</button>
+  </div>`;
+}
+
+// ==================== XUẤT EXCEL ====================
+async function xuatExcelOrders(btn){
+  if(!_filteredOrders.length){toast('Không có vận đơn nào để xuất','error');return;}
+  if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i> Đang tạo...';}
+  try{
+    if(!window.XLSX){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        s.onload=res; s.onerror=rej;
+        document.head.appendChild(s);
+      });
+    }
+    const plLabel={'noi_bo':'Nội bộ','thau_tu_lai':'Thầu tự lái','thau_thue_lai':'Thầu thuê lái'};
+    const header=['Mã đơn','Ngày','Khách hàng','Bill','Booking','Loại hàng','Hành trình','Số cont','Loại cont','Loại chuyến','Biển số','Thầu phụ','Phân loại xe'];
+    if(_canM)header.push('Cước KH','Cước thầu','TT thu khách','TT trả thầu');
+    header.push('Trạng thái');
+    const rows=_filteredOrders.map(o=>{
+      const r=[o.ma_don,fmtDate(o.ngay),o.ten_khach,o.so_bill||'',o.so_booking||'',o.loai_hang||'',o.hanh_trinh||'',o.so_cont||'',o.loai_cont||o.loai_xe_hang||'',o.loai_chuyen||'',o.bien_kiem_soat||'',o.ma_thau_phu||'',plLabel[o.loai_phan_loai_xe]||''];
+      if(_canM)r.push(+o.gia_cuoc_khach||0,+o.gia_cuoc_thau||0,o.thanh_toan_khach||'Chưa thu',o.thanh_toan_thau||'Chưa thu');
+      r.push(o.trang_thai||'');
+      return r;
+    });
+    const ws=XLSX.utils.aoa_to_sheet([header,...rows]);
+    ws['!cols']=header.map(h=>({wch:h==='Hành trình'?32:h==='Khách hàng'?26:14}));
+    const WB=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(WB,ws,'Vận đơn');
+    const stamp=new Date().toISOString().slice(0,10);
+    XLSX.writeFile(WB,`VanDon_${stamp}.xlsx`);
+    toast(`✅ Đã xuất ${_filteredOrders.length} vận đơn`);
+  }catch(err){
+    console.error('[xuatExcelOrders]',err);
+    toast('Lỗi xuất Excel: '+err.message,'error');
+  }finally{
+    if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-file-spreadsheet"></i> Xuất Excel';}
+  }
+}
+
 function _buildRows(list){
   if(!list||list.length===0)return'<tr><td colspan="20"><div class="empty"><i class="ti ti-inbox"></i>Chưa có dữ liệu</div></td></tr>';
   const lcTag=lc=>!lc?'—':({'Thường':'<span class="tag" style="background:#f0fdf4;color:#166534">Thường</span>','Kết hợp':'<span class="tag" style="background:#eff6ff;color:#1d4ed8">Kết hợp</span>','Kẹp ghép':'<span class="tag" style="background:#fef9c3;color:#854d0e">Kẹp ghép</span>'}[lc]||lc);
