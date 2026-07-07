@@ -25,6 +25,8 @@ let ORDER_TT_KHACH='';
 let ORDER_TT_THAU='';
 let ORDER_TU_NGAY='';
 let ORDER_DEN_NGAY='';
+let ORDER_BIEN_SO='';
+let ORDER_LOAI_CHUYEN='';
 
 const fmt=n=>Number(n||0).toLocaleString('vi-VN');
 const fmtM=n=>fmt(n)+' đ';
