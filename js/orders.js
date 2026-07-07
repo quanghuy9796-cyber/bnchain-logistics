@@ -879,11 +879,13 @@ async function onBienChange(bien){
   const nbEl=document.getElementById('fx-noibo');
   const lchuyenEl=document.getElementById('fx-lchuyen');
   if(!xe){
-    // Xe mới tinh chưa có trong danh mục
+    // Xe mới tinh chưa có trong danh mục: xóa trắng thầu phụ + loại chuyến để điều vận chọn lại,
+    // NHƯNG ô Lái xe PHẢI GIỮ HIỆN để OPS tự gõ tay tên lái xe (v2.9 fix — trước đây ẩn luôn ô này
+    // khiến ten_lai_xe vĩnh viễn rỗng, hỏng mọi báo cáo/lọc/xuất Excel theo tên lái xe)
     if(tpEl)tpEl.value='';
     if(lxEl)lxEl.value='';
     if(plEl)plEl.value='thau_tu_lai';
-    if(lxGroup)lxGroup.style.display='none';
+    if(lxGroup)lxGroup.style.display='';
     if(nbEl)nbEl.value='false';
     // Bắt buộc chọn lại loại chuyến
     if(lchuyenEl){lchuyenEl.value='';if(!lchuyenEl.querySelector('option[value=""]'))lchuyenEl.insertAdjacentHTML('afterbegin','<option value="" disabled>-- Chọn loại chuyến --</option>');lchuyenEl.options[0].selected=true;}
