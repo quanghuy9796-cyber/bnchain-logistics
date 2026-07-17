@@ -11,6 +11,12 @@ let PAGE='orders';
 let SEL=null; // selected id
 let ORDERS=[];
 let KH=[],LX=[],TP=[],NV=[],XE=[],DD=[];
+// Chuẩn hóa tên người (lái xe, nhân viên...) để so khớp: trim + gộp khoảng trắng thừa + hạ chữ thường.
+// Dùng thay cho so khớp SQL (ilike/eq) vì dữ liệu ten_lai_xe là ô nhập tự do, dễ dính khoảng trắng
+// thừa/kép mà mắt thường không thấy nhưng khiến so khớp chuỗi chính xác bị trượt.
+function chuanHoaTen(t){
+  return (t||'').trim().replace(/\s+/g,' ').toLowerCase();
+}
 let CH_LUONG={bang_gia_tinh:{}}; // cấu hình lương lái xe theo tỉnh — 1 dòng duy nhất trong bảng cau_hinh_luong
 const LUONG_DOI_LENH=10000;   // hằng số cố định — điều động & quản lý đều nhận khi co_doi_lenh=true
 const LUONG_KETHOP_QL=30000;  // hằng số cố định — chỉ Quản lý nhận thêm khi loai_chuyen là Kết hợp/Kẹp ghép
