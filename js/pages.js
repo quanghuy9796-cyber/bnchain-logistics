@@ -1456,7 +1456,7 @@ async function loadBangLuong(){
   // Lấy TOÀN BỘ đơn trong tháng (không lọc theo tên ở tầng SQL) rồi tự so khớp tên bằng chuanHoaTen()
   // ở phía code — tránh phụ thuộc ilike/eq của SQL vốn nhạy với khoảng trắng thừa/kép mà ô nhập tự do
   // ten_lai_xe rất dễ dính (mắt thường không thấy nhưng khiến so khớp chuỗi chính xác bị trượt).
-  const{data:monthOrders}=await db.from('van_don').select('id,ma_don,ngay,diem_lay,diem_tra,diem_tra_phat_sinh,loai_chuyen,loai_phan_loai_xe,ten_lai_xe,bien_kiem_soat,ma_thau_phu,locked')
+  const{data:monthOrders}=await db.from('van_don').select('id,ma_don,ngay,diem_lay,diem_tra,diem_tra_phat_sinh,loai_chuyen,loai_phan_loai_xe,ten_lai_xe,bien_kiem_soat,ma_thau_phu,so_cont,loai_cont,locked')
     .gte('ngay',dateFrom).lte('ngay',dateTo).order('ngay',{ascending:true});
   const tenChuan=chuanHoaTen(ten);
   const debugAll=(monthOrders||[]).filter(o=>chuanHoaTen(o.ten_lai_xe)===tenChuan);
@@ -1508,14 +1508,19 @@ async function loadBangLuong(){
   </div>`:'';
 
   res.innerHTML=canhbaoThieu+canhbao+`
+  <div style="margin-bottom:10px">
+    <button class="btn btn-teal" onclick="xuatExcelBangLuong('laixe')"><i class="ti ti-file-spreadsheet"></i> Xuất Excel</button>
+  </div>
   <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Biển số</th><th>Thầu</th><th>Tuyến</th><th>Loại chuyến</th><th style="text-align:right">Lương chuyến</th><th style="text-align:right">Chi hộ trả LX</th><th style="text-align:right">Tổng</th></tr></thead>
+    <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Biển số</th><th>Thầu</th><th>Tuyến</th><th>Số cont</th><th>Loại cont</th><th>Loại chuyến</th><th style="text-align:right">Lương chuyến</th><th style="text-align:right">Chi hộ trả LX</th><th style="text-align:right">Tổng</th></tr></thead>
     <tbody>
     ${rows.map(r=>`<tr>
       <td>${fmtDate(r.ngay)}</td><td class="text-blue fw6">${r.ma_don}</td>
       <td style="font-size:12px">${r.bien_kiem_soat||'—'}</td>
       <td style="font-size:12px">${r.loai_phan_loai_xe==='noi_bo'?'<span style="color:#7c3aed">Nội bộ</span>':(r.ma_thau_phu||'—')}</td>
       <td style="font-size:12px">${r.diem_lay||'—'} → ${r.diem_tra||'—'}</td>
+      <td style="font-size:12px">${r.so_cont||'—'}</td>
+      <td style="font-size:12px">${r.loai_cont||'—'}</td>
       <td><span class="tag">${r.loai_chuyen||'—'}</span></td>
       <td style="text-align:right">${r.khongTrucking?'<span style="font-size:10px;color:#0891b2;font-weight:600">KHÔNG TRUCKING</span>':(r.luongChuyen?fmt(r.luongChuyen):'<span style="color:var(--text-muted);font-style:italic">chưa có giá</span>')}</td>
       <td style="text-align:right">${fmt(r.traLX)}</td>
@@ -1523,12 +1528,13 @@ async function loadBangLuong(){
     </tr>`).join('')}
     </tbody>
     <tfoot><tr style="font-weight:700;background:var(--bg)">
-      <td colspan="6">Tổng cộng (${rows.length} chuyến)</td>
+      <td colspan="8">Tổng cộng (${rows.length} chuyến)</td>
       <td style="text-align:right">${fmt(tongLuongChuyen)}</td>
       <td style="text-align:right">${fmt(tongTraLX)}</td>
       <td style="text-align:right">${fmt(tongCong)}</td>
     </tr></tfoot>
   </table></div>`;
+  window._BL_LAIXE={ten,thang,rows,tongLuongChuyen,tongTraLX,tongCong};
 }
 
 // ---- Lương nhân viên: Điều động (theo created_by) hoặc Quản lý (toàn bộ đơn trong tháng — hiện chỉ 1 quản lý) ----
@@ -1546,7 +1552,7 @@ async function loadBangLuongNV(){
   const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
-  let q=db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_chuyen,co_doi_lenh,created_by,loai_phan_loai_xe,bien_kiem_soat,ma_thau_phu,diem_tra,diem_tra_phat_sinh')
+  let q=db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_chuyen,co_doi_lenh,created_by,loai_phan_loai_xe,bien_kiem_soat,ma_thau_phu,diem_tra,diem_tra_phat_sinh,so_cont,loai_cont')
     .eq('locked',true).gte('ngay',dateFrom).lte('ngay',dateTo).order('ngay',{ascending:true});
   if(!isQL)q=q.eq('created_by',nvId); // Quản lý: hiện chỉ 1 người, tính toàn bộ đơn đã khóa trong tháng
   const{data:orders}=await q;
@@ -1578,24 +1584,62 @@ async function loadBangLuongNV(){
   const tongCong=tongThuong+tongDoiLenh+tongKetHop;
 
   res.innerHTML=`
+  <div style="margin-bottom:10px">
+    <button class="btn btn-teal" onclick="xuatExcelBangLuong('nv')"><i class="ti ti-file-spreadsheet"></i> Xuất Excel</button>
+  </div>
   <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Biển số</th><th>Thầu</th><th>Khách</th><th>Loại chuyến</th><th>Đổi lệnh</th><th style="text-align:right">Thành tiền</th></tr></thead>
+    <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Biển số</th><th>Thầu</th><th>Khách</th><th>Số cont</th><th>Loại cont</th><th>Loại chuyến</th><th>Đổi lệnh</th><th style="text-align:right">Thành tiền</th></tr></thead>
     <tbody>
     ${rows.map(r=>`<tr ${r.khongTrucking?'style="background:#f8fafc"':''}>
       <td>${fmtDate(r.ngay)}</td><td class="text-blue fw6">${r.ma_don}</td>
       <td style="font-size:12px">${r.bien_kiem_soat?(r.trongDanhMucXe?`<span style="color:#7c3aed">${r.bien_kiem_soat}</span>`:r.bien_kiem_soat):'—'}</td>
       <td style="font-size:12px">${r.ma_thau_phu||(r.loai_phan_loai_xe==='noi_bo'?'Nội bộ':'—')}</td>
       <td style="font-size:12px">${r.ten_khach||'—'}</td>
+      <td style="font-size:12px">${r.so_cont||'—'}</td>
+      <td style="font-size:12px">${r.loai_cont||'—'}</td>
       <td><span class="tag">${r.loai_chuyen||'—'}</span>${r.khongTrucking?' <span style="font-size:10px;color:#0891b2;font-weight:600">(KHÔNG TRUCKING — chỉ tính đổi lệnh)</span>':(isQL&&(r.loai_chuyen==='Kết hợp'||r.loai_chuyen==='Kẹp ghép')&&!r.trongDanhMucXe?' <span style="font-size:10px;color:var(--text-muted)">(biển số ngoài danh mục — tính như thường)</span>':'')}</td>
       <td>${r.co_doi_lenh?'<span style="color:var(--warning)">Có</span>':'—'}</td>
       <td style="text-align:right;font-weight:600">${fmt(r.tong)}</td>
     </tr>`).join('')}
     </tbody>
     <tfoot><tr style="font-weight:700;background:var(--bg)">
-      <td colspan="7">Tổng cộng (${rows.length} chuyến) — Thường ${fmt(tongThuong)} + Đổi lệnh ${fmt(tongDoiLenh)}${isQL?` + Kết hợp ${fmt(tongKetHop)}`:''}</td>
+      <td colspan="9">Tổng cộng (${rows.length} chuyến) — Thường ${fmt(tongThuong)} + Đổi lệnh ${fmt(tongDoiLenh)}${isQL?` + Kết hợp ${fmt(tongKetHop)}`:''}</td>
       <td style="text-align:right">${fmt(tongCong)}</td>
     </tr></tfoot>
   </table></div>`;
+  window._BL_NV={ten:nv.ho_ten,vaiTro:isQL?'Quản lý':'Điều động',thang,rows,tongThuong,tongDoiLenh,tongKetHop,tongCong,isQL};
+}
+
+// ---- Xuất Excel Bảng lương (dùng chung cho cả 2 tab) ----
+async function xuatExcelBangLuong(loai){
+  const D=loai==='laixe'?window._BL_LAIXE:window._BL_NV;
+  if(!D){toast('Vui lòng xem bảng lương trước','error');return;}
+  if(!window.XLSX){
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload=res; s.onerror=rej;
+      document.head.appendChild(s);
+    });
+  }
+  const[y,m]=D.thang.split('-');
+  let header,rows,R;
+  if(loai==='laixe'){
+    header=['Ngày','Mã đơn','Biển số','Thầu','Điểm lấy','Điểm trả','Số cont','Loại cont','Loại chuyến','Lương chuyến','Chi hộ trả LX','Tổng'];
+    rows=D.rows.map(r=>[fmtDate(r.ngay),r.ma_don,r.bien_kiem_soat||'',r.loai_phan_loai_xe==='noi_bo'?'Nội bộ':(r.ma_thau_phu||''),r.diem_lay||'',r.diem_tra||'',r.so_cont||'',r.loai_cont||'',r.khongTrucking?'KHÔNG TRUCKING':(r.loai_chuyen||''),r.khongTrucking?0:r.luongChuyen,r.traLX,r.tong]);
+    R=[[`BẢNG LƯƠNG LÁI XE — ${D.ten} — Tháng ${+m}/${y}`],[],header,...rows,[],['','','','','','','','','Tổng cộng',D.tongLuongChuyen,D.tongTraLX,D.tongCong]];
+  }else{
+    header=['Ngày','Mã đơn','Biển số','Thầu','Khách','Số cont','Loại cont','Loại chuyến','Đổi lệnh','Thành tiền'];
+    rows=D.rows.map(r=>[fmtDate(r.ngay),r.ma_don,r.bien_kiem_soat||'',r.loai_phan_loai_xe==='noi_bo'?'Nội bộ':(r.ma_thau_phu||''),r.ten_khach||'',r.so_cont||'',r.loai_cont||'',r.loai_chuyen||'',r.co_doi_lenh?'Có':'',r.tong]);
+    R=[[`BẢNG LƯƠNG ${D.vaiTro.toUpperCase()} — ${D.ten} — Tháng ${+m}/${y}`],[],header,...rows,[],['','','','','','','','Tổng cộng',D.tongCong]];
+  }
+  const ws=XLSX.utils.aoa_to_sheet(R);
+  ws['!cols']=header.map(()=>({wch:16}));
+  const WB=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(WB,ws,`T${+m}.${y}`);
+  const stamp=`T${+m}_${y}`;
+  XLSX.writeFile(WB,`BangLuong_${loai==='laixe'?'LaiXe':'NhanVien'}_${D.ten.replace(/\s+/g,'')}_${stamp}.xlsx`);
+  toast('Đã xuất file Excel');
 }
 
 // ==================== BÁO CÁO ====================
