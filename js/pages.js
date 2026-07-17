@@ -1358,6 +1358,177 @@ async function xacNhanThuHoiThau(tenThau,items){
   }catch(err){toast('Lỗi: '+err.message,'error');}
 }
 
+// ==================== BẢNG LƯƠNG (Lái xe / Nhân viên — Điều động & Quản lý) ====================
+// Không đánh dấu đã trả/chưa trả, không trừ tạm ứng (kế toán tự theo dõi riêng) — chỉ xem số, kéo dồn theo tháng.
+let BL_TAB='laixe';
+
+function monthSelectOpts(){
+  const now=new Date();const curY=now.getFullYear();
+  return Array.from({length:6},(_,i)=>{
+    const d=new Date(curY,now.getMonth()-i,1);
+    const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    return`<option value="${v}" ${i===0?'selected':''}>Tháng ${d.getMonth()+1}/${d.getFullYear()}</option>`;
+  }).join('');
+}
+
+async function pgBangLuong(c){
+  if(!canSee(['quan_ly','ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
+  c.innerHTML=`
+  <div style="display:flex;gap:8px;margin-bottom:14px;border-bottom:1px solid var(--border)">
+    <button class="btn ${BL_TAB==='laixe'?'btn-primary':''}" style="border-radius:var(--r) var(--r) 0 0" onclick="switchBLTab('laixe')"><i class="ti ti-steering-wheel"></i> Lương lái xe</button>
+    <button class="btn ${BL_TAB==='nv'?'btn-primary':''}" style="border-radius:var(--r) var(--r) 0 0" onclick="switchBLTab('nv')"><i class="ti ti-user-star"></i> Lương nhân viên</button>
+  </div>
+  <div id="bl-body"></div>`;
+  renderBLBody();
+}
+
+function switchBLTab(tab){BL_TAB=tab;pgBangLuong(document.getElementById('content'));}
+
+function renderBLBody(){
+  const body=document.getElementById('bl-body');
+  if(!body)return;
+  if(BL_TAB==='laixe'){
+    const opts=LX.map(l=>`<option value="${l.ho_ten}">${l.ho_ten}</option>`).join('');
+    body.innerHTML=`
+    <div class="toolbar" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <select id="bl-ten" class="filter-sel" style="min-width:220px"><option value="">-- Chọn lái xe --</option>${opts}</select>
+      <select id="bl-thang" class="filter-sel">${monthSelectOpts()}</select>
+      <button class="btn btn-teal" onclick="loadBangLuong()"><i class="ti ti-search"></i> Xem</button>
+    </div>
+    <div id="bl-result" style="color:var(--text-muted);font-size:13px">Chọn lái xe và tháng để xem lương.</div>`;
+  }else{
+    const nvList=NV.filter(n=>['nhan_vien','quan_ly'].includes(n.vai_tro));
+    const rMap={nhan_vien:'Điều động',quan_ly:'Quản lý'};
+    const opts=nvList.map(n=>`<option value="${n.id}">${n.ho_ten} (${rMap[n.vai_tro]||n.vai_tro})</option>`).join('');
+    body.innerHTML=`
+    <div class="toolbar" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <select id="bl-nv" class="filter-sel" style="min-width:220px"><option value="">-- Chọn nhân viên --</option>${opts}</select>
+      <select id="bl-thang" class="filter-sel">${monthSelectOpts()}</select>
+      <button class="btn btn-teal" onclick="loadBangLuongNV()"><i class="ti ti-search"></i> Xem</button>
+    </div>
+    <div id="bl-result" style="color:var(--text-muted);font-size:13px">Chọn nhân viên và tháng để xem lương.</div>`;
+  }
+}
+
+// ---- Lương lái xe: tra theo (tỉnh đến, loại chuyến) trong bảng giá gộp + cộng chi_ho.tien_tra_laixe ----
+async function loadBangLuong(){
+  const ten=document.getElementById('bl-ten').value;
+  const thang=document.getElementById('bl-thang').value;
+  const res=document.getElementById('bl-result');
+  if(!ten){toast('Vui lòng chọn lái xe','error');return;}
+  res.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
+  const[y,m]=thang.split('-');
+  const lastDay=new Date(+y,+m,0).getDate();
+  const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
+  const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+
+  const{data:orders}=await db.from('van_don').select('id,ma_don,ngay,diem_lay,diem_tra,loai_chuyen,loai_phan_loai_xe,ten_lai_xe,locked')
+    .eq('ten_lai_xe',ten).eq('locked',true).gte('ngay',dateFrom).lte('ngay',dateTo)
+    .in('loai_phan_loai_xe',['noi_bo','thau_thue_lai']).order('ngay',{ascending:true});
+  const list=orders||[];
+  if(!list.length){res.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có chuyến đã khóa của lái xe này trong tháng</div>';return;}
+
+  const{data:chiHoRows}=await db.from('chi_ho').select('van_don_id,tien_tra_laixe').in('van_don_id',list.map(o=>o.id));
+  const chMap={};
+  (chiHoRows||[]).forEach(r=>{chMap[r.van_don_id]=(chMap[r.van_don_id]||0)+(+r.tien_tra_laixe||0);});
+
+  let thieuGia=[];
+  const gia=CH_LUONG.bang_gia_tinh||{};
+  const rows=list.map(o=>{
+    const ddTra=DD.find(d=>d.ten_chuan===o.diem_tra);
+    const tinh=ddTra?tinhTuDiaPhuong(ddTra.dia_phuong):null;
+    const g=tinh?gia[tinh]:null;
+    const laKetHop=o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép';
+    const luongChuyen=g?(laKetHop?(+g.ket_hop||0):(+g.thuong||0)):null;
+    if(luongChuyen===null)thieuGia.push(o.ma_don);
+    const traLX=chMap[o.id]||0;
+    return{...o,tinh,luongChuyen:luongChuyen||0,traLX,tong:(luongChuyen||0)+traLX};
+  });
+  const tongLuongChuyen=rows.reduce((s,r)=>s+r.luongChuyen,0);
+  const tongTraLX=rows.reduce((s,r)=>s+r.traLX,0);
+  const tongCong=tongLuongChuyen+tongTraLX;
+
+  const canhbao=thieuGia.length?`<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:var(--r);padding:8px 14px;margin-bottom:10px;font-size:12px">
+    <i class="ti ti-alert-triangle" style="color:#d97706"></i>
+    <strong style="color:#92400e">${thieuGia.length} chuyến chưa có giá lương (chưa khai báo tỉnh trong Điểm & Cung đường):</strong>
+    ${thieuGia.slice(0,8).map(m=>`<span style="background:#fef9c3;border-radius:3px;padding:1px 5px;margin-left:3px">${m}</span>`).join('')}
+  </div>`:'';
+
+  res.innerHTML=canhbao+`
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Tuyến</th><th>Loại chuyến</th><th style="text-align:right">Lương chuyến</th><th style="text-align:right">Chi hộ trả LX</th><th style="text-align:right">Tổng</th></tr></thead>
+    <tbody>
+    ${rows.map(r=>`<tr>
+      <td>${fmtDate(r.ngay)}</td><td class="text-blue fw6">${r.ma_don}</td>
+      <td style="font-size:12px">${r.diem_lay||'—'} → ${r.diem_tra||'—'}</td>
+      <td><span class="tag">${r.loai_chuyen||'—'}</span></td>
+      <td style="text-align:right">${r.luongChuyen?fmt(r.luongChuyen):'<span style="color:var(--text-muted);font-style:italic">chưa có giá</span>'}</td>
+      <td style="text-align:right">${fmt(r.traLX)}</td>
+      <td style="text-align:right;font-weight:600">${fmt(r.tong)}</td>
+    </tr>`).join('')}
+    </tbody>
+    <tfoot><tr style="font-weight:700;background:var(--bg)">
+      <td colspan="4">Tổng cộng (${rows.length} chuyến)</td>
+      <td style="text-align:right">${fmt(tongLuongChuyen)}</td>
+      <td style="text-align:right">${fmt(tongTraLX)}</td>
+      <td style="text-align:right">${fmt(tongCong)}</td>
+    </tr></tfoot>
+  </table></div>`;
+}
+
+// ---- Lương nhân viên: Điều động (theo created_by) hoặc Quản lý (toàn bộ đơn trong tháng — hiện chỉ 1 quản lý) ----
+async function loadBangLuongNV(){
+  const nvId=document.getElementById('bl-nv').value;
+  const thang=document.getElementById('bl-thang').value;
+  const res=document.getElementById('bl-result');
+  if(!nvId){toast('Vui lòng chọn nhân viên','error');return;}
+  const nv=NV.find(n=>n.id===nvId);
+  if(!nv)return;
+  const isQL=nv.vai_tro==='quan_ly';
+  res.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
+  const[y,m]=thang.split('-');
+  const lastDay=new Date(+y,+m,0).getDate();
+  const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
+  const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+
+  let q=db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_chuyen,co_doi_lenh,created_by')
+    .eq('locked',true).gte('ngay',dateFrom).lte('ngay',dateTo).order('ngay',{ascending:true});
+  if(!isQL)q=q.eq('created_by',nvId); // Quản lý: hiện chỉ 1 người, tính toàn bộ đơn đã khóa trong tháng
+  const{data:orders}=await q;
+  const list=orders||[];
+  if(!list.length){res.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có chuyến đã khóa trong tháng này</div>';return;}
+
+  const rows=list.map(o=>{
+    const kh=KH.find(k=>k.ten_cong_ty===o.ten_khach);
+    const thuong=+((kh?.luong_thuong)??10000);
+    const doiLenh=o.co_doi_lenh?LUONG_DOI_LENH:0;
+    const ketHop=isQL&&(o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép')?LUONG_KETHOP_QL:0;
+    return{...o,thuong,doiLenh,ketHop,tong:thuong+doiLenh+ketHop};
+  });
+  const tongThuong=rows.reduce((s,r)=>s+r.thuong,0);
+  const tongDoiLenh=rows.reduce((s,r)=>s+r.doiLenh,0);
+  const tongKetHop=rows.reduce((s,r)=>s+r.ketHop,0);
+  const tongCong=tongThuong+tongDoiLenh+tongKetHop;
+
+  res.innerHTML=`
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Khách</th><th>Loại chuyến</th><th>Đổi lệnh</th><th style="text-align:right">Thành tiền</th></tr></thead>
+    <tbody>
+    ${rows.map(r=>`<tr>
+      <td>${fmtDate(r.ngay)}</td><td class="text-blue fw6">${r.ma_don}</td>
+      <td style="font-size:12px">${r.ten_khach||'—'}</td>
+      <td><span class="tag">${r.loai_chuyen||'—'}</span></td>
+      <td>${r.co_doi_lenh?'<span style="color:var(--warning)">Có</span>':'—'}</td>
+      <td style="text-align:right;font-weight:600">${fmt(r.tong)}</td>
+    </tr>`).join('')}
+    </tbody>
+    <tfoot><tr style="font-weight:700;background:var(--bg)">
+      <td colspan="5">Tổng cộng (${rows.length} chuyến) — Thường ${fmt(tongThuong)} + Đổi lệnh ${fmt(tongDoiLenh)}${isQL?` + Kết hợp ${fmt(tongKetHop)}`:''}</td>
+      <td style="text-align:right">${fmt(tongCong)}</td>
+    </tr></tfoot>
+  </table></div>`;
+}
+
 // ==================== BÁO CÁO ====================
 async function pgBaoCao(c){
   if(!canSee(['ke_toan','ceo','thu_quy'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
