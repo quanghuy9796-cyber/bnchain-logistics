@@ -11,6 +11,15 @@ let PAGE='orders';
 let SEL=null; // selected id
 let ORDERS=[];
 let KH=[],LX=[],TP=[],NV=[],XE=[],DD=[];
+let CH_LUONG={bang_gia_tinh:{}}; // cấu hình lương lái xe theo tỉnh — 1 dòng duy nhất trong bảng cau_hinh_luong
+const LUONG_DOI_LENH=10000;   // hằng số cố định — điều động & quản lý đều nhận khi co_doi_lenh=true
+const LUONG_KETHOP_QL=30000;  // hằng số cố định — chỉ Quản lý nhận thêm khi loai_chuyen là Kết hợp/Kẹp ghép
+// Tách tỉnh từ chuỗi "Xã/KCN, Tỉnh" hoặc chỉ "Tỉnh" — luôn lấy phần sau dấu phẩy cuối cùng
+function tinhTuDiaPhuong(dp){
+  if(!dp)return null;
+  const parts=dp.split(',').map(s=>s.trim()).filter(Boolean);
+  return parts.length?parts[parts.length-1]:null;
+}
 let DP_TAB='info'; // detail panel tab
 let ORDER_FILTER='all';
 let ORDER_SEARCH='';
@@ -143,6 +152,12 @@ async function loadMaster(){
     DD=error?[]:data||[];
     if(error)console.warn('[loadMaster] dia_diem chưa có hoặc lỗi:',error.message);
   }catch(err){DD=[];console.warn('[loadMaster] dia_diem exception:',err);}
+  // cấu hình lương theo tỉnh — 1 dòng duy nhất (id=1), an toàn nếu bảng chưa tồn tại
+  try{
+    const{data,error}=await db.from('cau_hinh_luong').select('*').eq('id',1).maybeSingle();
+    CH_LUONG=error||!data?{bang_gia_tinh:{}}:{bang_gia_tinh:data.bang_gia_tinh||{}};
+    if(error)console.warn('[loadMaster] cau_hinh_luong chưa có hoặc lỗi:',error.message);
+  }catch(err){CH_LUONG={bang_gia_tinh:{}};console.warn('[loadMaster] cau_hinh_luong exception:',err);}
 }
 
 // NAV
@@ -150,13 +165,13 @@ function nav(p,el){
   document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
   el.classList.add('active');PAGE=p;SEL=null;
   document.getElementById('dp').style.display='none';
-  const T={orders:'Quản lý vận đơn',dieuvan:'Bảng điều vận',chiho:'Chi hộ / Phát sinh',hoadon:'Upload & Xử lý Hóa Đơn',congno:'Công nợ',bangke:'Bảng kê thu khách',traphau:'Trả thầu phụ',baocao:'Báo cáo tháng',kh:'Khách hàng',laixe:'Lái xe',thauphu:'Thầu phụ',xe:'Quản lý xe',nv:'Nhân viên',diadiem:'Điểm & Cung đường',chiphi:'Chi phí',khodau:'Kho dầu',taisan:'Tài sản cố định'};
+  const T={orders:'Quản lý vận đơn',dieuvan:'Bảng điều vận',chiho:'Chi hộ / Phát sinh',hoadon:'Upload & Xử lý Hóa Đơn',congno:'Công nợ',bangke:'Bảng kê thu khách',traphau:'Trả thầu phụ',baocao:'Báo cáo tháng',kh:'Khách hàng',laixe:'Lái xe',thauphu:'Thầu phụ',xe:'Quản lý xe',nv:'Nhân viên',diadiem:'Điểm & Cung đường',chiphi:'Chi phí',khodau:'Kho dầu',taisan:'Tài sản cố định',bangluong:'Bảng lương'};
   document.getElementById('page-title').textContent=T[p]||p;
   renderPage();
 }
 function renderPage(){
   const c=document.getElementById('content');
-  const P={orders:window.pgOrders,dieuvan:window.pgDieuVan,chiho:window.pgChiHo,hoadon:window.pgHoaDon,congno:window.pgCongNo,bangke:window.pgBangKe,traphau:window.pgTraThau,baocao:window.pgBaoCao,kh:window.pgKH,laixe:window.pgLaiXe,thauphu:window.pgThauPhu,xe:window.pgXe,nv:window.pgNV,diadiem:window.pgDiaDiem,chiphi:window.pgChiPhi,khodau:window.pgKhoDau,taisan:window.pgTaiSan};
+  const P={orders:window.pgOrders,dieuvan:window.pgDieuVan,chiho:window.pgChiHo,hoadon:window.pgHoaDon,congno:window.pgCongNo,bangke:window.pgBangKe,traphau:window.pgTraThau,baocao:window.pgBaoCao,kh:window.pgKH,laixe:window.pgLaiXe,thauphu:window.pgThauPhu,xe:window.pgXe,nv:window.pgNV,diadiem:window.pgDiaDiem,chiphi:window.pgChiPhi,khodau:window.pgKhoDau,taisan:window.pgTaiSan,bangluong:window.pgBangLuong};
   if(P[PAGE])P[PAGE](c); else c.innerHTML='<div class="empty"><i class="ti ti-tools"></i>Đang xây dựng... (nếu đây là trang Chi phí/Kho dầu/Tài sản, kiểm tra file js/chiphi.js đã được deploy chưa)</div>';
 }
 
