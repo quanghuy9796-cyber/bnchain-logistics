@@ -1432,7 +1432,7 @@ async function reloadLaiXeDropdown(){
   (data||[]).forEach(o=>{
     const raw=(o.ten_lai_xe||'').trim();
     if(!raw)return;
-    const key=raw.toLowerCase();
+    const key=chuanHoaTen(raw);
     if(!seen[key])seen[key]=raw;
   });
   const names=Object.values(seen).sort((a,b)=>a.localeCompare(b,'vi'));
@@ -1453,18 +1453,17 @@ async function loadBangLuong(){
   const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
-  // Debug: đếm TẤT CẢ đơn của lái xe này trong tháng (kể cả chưa khóa/chưa đúng loại xe) để phát
-  // hiện đơn "thiếu" khỏi báo cáo — giống cách cảnh báo đang làm ở Trả thầu phụ.
-  const{data:debugAll}=await db.from('van_don').select('id,ma_don,locked,loai_phan_loai_xe')
-    .ilike('ten_lai_xe',ten).gte('ngay',dateFrom).lte('ngay',dateTo);
-
-  const{data:orders}=await db.from('van_don').select('id,ma_don,ngay,diem_lay,diem_tra,diem_tra_phat_sinh,loai_chuyen,loai_phan_loai_xe,ten_lai_xe,bien_kiem_soat,ma_thau_phu,locked')
-    .ilike('ten_lai_xe',ten).eq('locked',true).gte('ngay',dateFrom).lte('ngay',dateTo)
-    .in('loai_phan_loai_xe',['noi_bo','thau_thue_lai']).order('ngay',{ascending:true});
-  const list=orders||[];
+  // Lấy TOÀN BỘ đơn trong tháng (không lọc theo tên ở tầng SQL) rồi tự so khớp tên bằng chuanHoaTen()
+  // ở phía code — tránh phụ thuộc ilike/eq của SQL vốn nhạy với khoảng trắng thừa/kép mà ô nhập tự do
+  // ten_lai_xe rất dễ dính (mắt thường không thấy nhưng khiến so khớp chuỗi chính xác bị trượt).
+  const{data:monthOrders}=await db.from('van_don').select('id,ma_don,ngay,diem_lay,diem_tra,diem_tra_phat_sinh,loai_chuyen,loai_phan_loai_xe,ten_lai_xe,bien_kiem_soat,ma_thau_phu,locked')
+    .gte('ngay',dateFrom).lte('ngay',dateTo).order('ngay',{ascending:true});
+  const tenChuan=chuanHoaTen(ten);
+  const debugAll=(monthOrders||[]).filter(o=>chuanHoaTen(o.ten_lai_xe)===tenChuan);
+  const list=debugAll.filter(o=>o.locked&&['noi_bo','thau_thue_lai'].includes(o.loai_phan_loai_xe));
 
   let canhbaoThieu='';
-  const thieu=(debugAll||[]).filter(o=>!list.some(x=>x.id===o.id));
+  const thieu=debugAll.filter(o=>!list.some(x=>x.id===o.id));
   if(thieu.length){
     const chuaKhoa=thieu.filter(o=>!o.locked);
     const saiLoaiXe=thieu.filter(o=>o.locked&&!['noi_bo','thau_thue_lai'].includes(o.loai_phan_loai_xe));
