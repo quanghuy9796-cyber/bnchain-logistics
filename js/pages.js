@@ -1372,17 +1372,22 @@ function monthSelectOpts(){
 }
 
 async function pgBangLuong(c){
-  if(!canSee(['ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
+  if(!canSee(['ke_toan','ceo','quan_ly'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
+  const chiXemLaiXe=!canSee(['ke_toan','ceo']); // Quản lý: chỉ xem Lương lái xe, không xem Lương nhân viên
+  if(chiXemLaiXe)BL_TAB='laixe';
   c.innerHTML=`
   <div style="display:flex;gap:8px;margin-bottom:14px;border-bottom:1px solid var(--border)">
     <button class="btn ${BL_TAB==='laixe'?'btn-primary':''}" style="border-radius:var(--r) var(--r) 0 0" onclick="switchBLTab('laixe')"><i class="ti ti-steering-wheel"></i> Lương lái xe</button>
-    <button class="btn ${BL_TAB==='nv'?'btn-primary':''}" style="border-radius:var(--r) var(--r) 0 0" onclick="switchBLTab('nv')"><i class="ti ti-user-star"></i> Lương nhân viên</button>
+    ${chiXemLaiXe?'':`<button class="btn ${BL_TAB==='nv'?'btn-primary':''}" style="border-radius:var(--r) var(--r) 0 0" onclick="switchBLTab('nv')"><i class="ti ti-user-star"></i> Lương nhân viên</button>`}
   </div>
   <div id="bl-body"></div>`;
   renderBLBody();
 }
 
-function switchBLTab(tab){BL_TAB=tab;pgBangLuong(document.getElementById('content'));}
+function switchBLTab(tab){
+  if(tab==='nv'&&!canSee(['ke_toan','ceo'])){toast('Không có quyền xem Lương nhân viên','error');return;}
+  BL_TAB=tab;pgBangLuong(document.getElementById('content'));
+}
 
 function renderBLBody(){
   const body=document.getElementById('bl-body');
@@ -1539,6 +1544,7 @@ async function loadBangLuong(){
 
 // ---- Lương nhân viên: Điều động (theo created_by) hoặc Quản lý (toàn bộ đơn trong tháng — hiện chỉ 1 quản lý) ----
 async function loadBangLuongNV(){
+  if(!canSee(['ke_toan','ceo'])){toast('Không có quyền xem Lương nhân viên','error');return;}
   const nvId=document.getElementById('bl-nv').value;
   const thang=document.getElementById('bl-thang').value;
   const res=document.getElementById('bl-result');
