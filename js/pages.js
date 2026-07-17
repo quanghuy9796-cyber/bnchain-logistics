@@ -1372,7 +1372,7 @@ function monthSelectOpts(){
 }
 
 async function pgBangLuong(c){
-  if(!canSee(['quan_ly','ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
+  if(!canSee(['ke_toan','ceo'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
   c.innerHTML=`
   <div style="display:flex;gap:8px;margin-bottom:14px;border-bottom:1px solid var(--border)">
     <button class="btn ${BL_TAB==='laixe'?'btn-primary':''}" style="border-radius:var(--r) var(--r) 0 0" onclick="switchBLTab('laixe')"><i class="ti ti-steering-wheel"></i> Lương lái xe</button>
