@@ -534,7 +534,18 @@ function renderBangGiaLuong(ddList){
   if(!canSee(['quan_ly','ceo'])){wrap.innerHTML='';return;}
   const tinhSet=[...new Set(ddList.map(d=>tinhTuDiaPhuong(d.dia_phuong)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
   const gia=CH_LUONG.bang_gia_tinh||{};
-  wrap.innerHTML=`
+  // Cảnh báo Điểm nào có "Địa phương" khả nghi (quá ngắn, không giống tên tỉnh thật) — không tự loại
+  // khỏi bảng vì có thể vẫn đúng, chỉ nêu tên để bạn vào bảng Điểm phía trên kiểm tra lại tận gốc.
+  const khaNghi=ddList.filter(d=>{
+    const t=tinhTuDiaPhuong(d.dia_phuong);
+    return t&&t.replace(/\s/g,'').length<=3;
+  });
+  const canhbao=khaNghi.length?`<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:var(--r);padding:8px 14px;margin-bottom:10px;font-size:12px">
+    <i class="ti ti-alert-triangle" style="color:#d97706"></i>
+    <strong style="color:#92400e">${khaNghi.length} Điểm có ô "Địa phương" nghi gõ sai (quá ngắn/không giống tên tỉnh)</strong> — sửa lại ở bảng Điểm phía trên:
+    ${khaNghi.map(d=>`<span style="background:#fef9c3;border-radius:3px;padding:1px 5px;margin-left:3px">${d.ten_chuan} → "${d.dia_phuong}"</span>`).join('')}
+  </div>`:'';
+  wrap.innerHTML=canhbao+`
   <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:2px"><i class="ti ti-coin"></i> Bảng giá lương lái xe theo tỉnh</div>
   <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Điểm đi mặc định: Hải Phòng. Sửa số rồi bấm "Lưu bảng giá" — dùng cho trang Bảng lương.</div>
   <div class="tbl-wrap"><table class="tbl">
