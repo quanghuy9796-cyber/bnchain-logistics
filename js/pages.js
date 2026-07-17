@@ -1424,6 +1424,7 @@ async function reloadLaiXeDropdown(){
   sel.innerHTML='<option value="">-- Đang tải... --</option>';
   const{data}=await db.from('van_don').select('ten_lai_xe').eq('locked',true)
     .gte('ngay',dateFrom).lte('ngay',dateTo)
+    .in('loai_phan_loai_xe',['noi_bo','thau_thue_lai'])
     .not('ten_lai_xe','is',null).neq('ten_lai_xe','');
   const names=[...new Set((data||[]).map(o=>(o.ten_lai_xe||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
   sel.innerHTML=`<option value="">-- Chọn lái xe (${names.length} người có chuyến tháng này) --</option>`
@@ -1443,7 +1444,7 @@ async function loadBangLuong(){
   const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
-  const{data:orders}=await db.from('van_don').select('id,ma_don,ngay,diem_lay,diem_tra,loai_chuyen,loai_phan_loai_xe,ten_lai_xe,bien_kiem_soat,ma_thau_phu,locked')
+  const{data:orders}=await db.from('van_don').select('id,ma_don,ngay,diem_lay,diem_tra,diem_tra_phat_sinh,loai_chuyen,loai_phan_loai_xe,ten_lai_xe,bien_kiem_soat,ma_thau_phu,locked')
     .eq('ten_lai_xe',ten).eq('locked',true).gte('ngay',dateFrom).lte('ngay',dateTo)
     .in('loai_phan_loai_xe',['noi_bo','thau_thue_lai']).order('ngay',{ascending:true});
   const list=orders||[];
@@ -1456,14 +1457,18 @@ async function loadBangLuong(){
   let thieuGia=[];
   const gia=CH_LUONG.bang_gia_tinh||{};
   const rows=list.map(o=>{
+    // Chuyến KHÔNG TRUCKING — không có xe chạy thật, không tính lương chuyến cho lái xe (chỉ giữ
+    // lại phần chi_ho.tien_tra_laixe nếu có phát sinh thực tế khác được nhập tay).
+    const khongTrucking=/kh[oô]ng\s*trucking/i.test((o.diem_tra||'')+' '+(o.diem_tra_phat_sinh||''));
+    const traLX=chMap[o.id]||0;
+    if(khongTrucking)return{...o,tinh:null,luongChuyen:0,khongTrucking,traLX,tong:traLX};
     const ddTra=DD.find(d=>d.ten_chuan===o.diem_tra);
     const tinh=ddTra?tinhTuDiaPhuong(ddTra.dia_phuong):null;
     const g=tinh?gia[tinh]:null;
     const laKetHop=o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép';
     const luongChuyen=g?(laKetHop?(+g.ket_hop||0):(+g.thuong||0)):null;
     if(luongChuyen===null)thieuGia.push(o.ma_don);
-    const traLX=chMap[o.id]||0;
-    return{...o,tinh,luongChuyen:luongChuyen||0,traLX,tong:(luongChuyen||0)+traLX};
+    return{...o,tinh,luongChuyen:luongChuyen||0,khongTrucking,traLX,tong:(luongChuyen||0)+traLX};
   });
   const tongLuongChuyen=rows.reduce((s,r)=>s+r.luongChuyen,0);
   const tongTraLX=rows.reduce((s,r)=>s+r.traLX,0);
@@ -1485,7 +1490,7 @@ async function loadBangLuong(){
       <td style="font-size:12px">${r.loai_phan_loai_xe==='noi_bo'?'<span style="color:#7c3aed">Nội bộ</span>':(r.ma_thau_phu||'—')}</td>
       <td style="font-size:12px">${r.diem_lay||'—'} → ${r.diem_tra||'—'}</td>
       <td><span class="tag">${r.loai_chuyen||'—'}</span></td>
-      <td style="text-align:right">${r.luongChuyen?fmt(r.luongChuyen):'<span style="color:var(--text-muted);font-style:italic">chưa có giá</span>'}</td>
+      <td style="text-align:right">${r.khongTrucking?'<span style="font-size:10px;color:#0891b2;font-weight:600">KHÔNG TRUCKING</span>':(r.luongChuyen?fmt(r.luongChuyen):'<span style="color:var(--text-muted);font-style:italic">chưa có giá</span>')}</td>
       <td style="text-align:right">${fmt(r.traLX)}</td>
       <td style="text-align:right;font-weight:600">${fmt(r.tong)}</td>
     </tr>`).join('')}
@@ -1514,7 +1519,7 @@ async function loadBangLuongNV(){
   const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
-  let q=db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_chuyen,co_doi_lenh,created_by,loai_phan_loai_xe,bien_kiem_soat,ma_thau_phu')
+  let q=db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_chuyen,co_doi_lenh,created_by,loai_phan_loai_xe,bien_kiem_soat,ma_thau_phu,diem_tra,diem_tra_phat_sinh')
     .eq('locked',true).gte('ngay',dateFrom).lte('ngay',dateTo).order('ngay',{ascending:true});
   if(!isQL)q=q.eq('created_by',nvId); // Quản lý: hiện chỉ 1 người, tính toàn bộ đơn đã khóa trong tháng
   const{data:orders}=await q;
@@ -1522,6 +1527,13 @@ async function loadBangLuongNV(){
   if(!list.length){res.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có chuyến đã khóa trong tháng này</div>';return;}
 
   const rows=list.map(o=>{
+    // Chuyến "KHÔNG TRUCKING" — chỉ là dịch vụ đổi lệnh, không có xe chạy thật. Ghi chú tự do trong
+    // diem_tra hoặc diem_tra_phat_sinh (chưa có field cấu trúc riêng) — dò chuỗi "KHÔNG TRUCKING".
+    const khongTrucking=/kh[oô]ng\s*trucking/i.test((o.diem_tra||'')+' '+(o.diem_tra_phat_sinh||''));
+    if(khongTrucking){
+      const tong=o.co_doi_lenh?LUONG_DOI_LENH:0; // chỉ tính phí đổi lệnh, không cộng phần Thường/Kết hợp
+      return{...o,thuong:0,doiLenh:tong,ketHop:0,khongTrucking,trongDanhMucXe:false,tong};
+    }
     const kh=KH.find(k=>k.ten_cong_ty===o.ten_khach);
     const thuong=+((kh?.luong_thuong)??10000);
     const doiLenh=o.co_doi_lenh?LUONG_DOI_LENH:0;
@@ -1531,7 +1543,7 @@ async function loadBangLuongNV(){
     const trongDanhMucXe=!!o.bien_kiem_soat&&XE.some(x=>x.bien_so===o.bien_kiem_soat);
     const laKetHop=o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép';
     const ketHop=isQL&&laKetHop&&trongDanhMucXe?LUONG_KETHOP_QL:0;
-    return{...o,thuong,doiLenh,ketHop,trongDanhMucXe,tong:thuong+doiLenh+ketHop};
+    return{...o,thuong,doiLenh,ketHop,khongTrucking,trongDanhMucXe,tong:thuong+doiLenh+ketHop};
   });
   const tongThuong=rows.reduce((s,r)=>s+r.thuong,0);
   const tongDoiLenh=rows.reduce((s,r)=>s+r.doiLenh,0);
@@ -1542,12 +1554,12 @@ async function loadBangLuongNV(){
   <div class="tbl-wrap"><table class="tbl">
     <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Biển số</th><th>Thầu</th><th>Khách</th><th>Loại chuyến</th><th>Đổi lệnh</th><th style="text-align:right">Thành tiền</th></tr></thead>
     <tbody>
-    ${rows.map(r=>`<tr>
+    ${rows.map(r=>`<tr ${r.khongTrucking?'style="background:#f8fafc"':''}>
       <td>${fmtDate(r.ngay)}</td><td class="text-blue fw6">${r.ma_don}</td>
       <td style="font-size:12px">${r.bien_kiem_soat?(r.trongDanhMucXe?`<span style="color:#7c3aed">${r.bien_kiem_soat}</span>`:r.bien_kiem_soat):'—'}</td>
       <td style="font-size:12px">${r.ma_thau_phu||(r.loai_phan_loai_xe==='noi_bo'?'Nội bộ':'—')}</td>
       <td style="font-size:12px">${r.ten_khach||'—'}</td>
-      <td><span class="tag">${r.loai_chuyen||'—'}</span>${isQL&&(r.loai_chuyen==='Kết hợp'||r.loai_chuyen==='Kẹp ghép')&&!r.trongDanhMucXe?' <span style="font-size:10px;color:var(--text-muted)">(biển số ngoài danh mục — tính như thường)</span>':''}</td>
+      <td><span class="tag">${r.loai_chuyen||'—'}</span>${r.khongTrucking?' <span style="font-size:10px;color:#0891b2;font-weight:600">(KHÔNG TRUCKING — chỉ tính đổi lệnh)</span>':(isQL&&(r.loai_chuyen==='Kết hợp'||r.loai_chuyen==='Kẹp ghép')&&!r.trongDanhMucXe?' <span style="font-size:10px;color:var(--text-muted)">(biển số ngoài danh mục — tính như thường)</span>':'')}</td>
       <td>${r.co_doi_lenh?'<span style="color:var(--warning)">Có</span>':'—'}</td>
       <td style="text-align:right;font-weight:600">${fmt(r.tong)}</td>
     </tr>`).join('')}
