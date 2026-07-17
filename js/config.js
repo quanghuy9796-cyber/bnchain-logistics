@@ -14,11 +14,14 @@ let KH=[],LX=[],TP=[],NV=[],XE=[],DD=[];
 let CH_LUONG={bang_gia_tinh:{}}; // cấu hình lương lái xe theo tỉnh — 1 dòng duy nhất trong bảng cau_hinh_luong
 const LUONG_DOI_LENH=10000;   // hằng số cố định — điều động & quản lý đều nhận khi co_doi_lenh=true
 const LUONG_KETHOP_QL=30000;  // hằng số cố định — chỉ Quản lý nhận thêm khi loai_chuyen là Kết hợp/Kẹp ghép
-// Tách tỉnh từ chuỗi "Xã/KCN, Tỉnh" hoặc chỉ "Tỉnh" — luôn lấy phần sau dấu phẩy cuối cùng
+// Tách tỉnh từ chuỗi "Xã/KCN, Tỉnh" hoặc chỉ "Tỉnh" — luôn lấy phần sau dấu phẩy cuối cùng,
+// chuẩn hóa hoa/thường (Title Case) để "PHÚ THỌ" và "Phú Thọ" gộp thành đúng 1 tỉnh duy nhất khi tra cứu.
 function tinhTuDiaPhuong(dp){
   if(!dp)return null;
   const parts=dp.split(',').map(s=>s.trim()).filter(Boolean);
-  return parts.length?parts[parts.length-1]:null;
+  const raw=parts.length?parts[parts.length-1]:null;
+  if(!raw)return null;
+  return raw.toLowerCase().replace(/(^|[\s-])\p{L}/gu,c=>c.toUpperCase());
 }
 let DP_TAB='info'; // detail panel tab
 let ORDER_FILTER='all';
