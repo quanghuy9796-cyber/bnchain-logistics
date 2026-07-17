@@ -1388,14 +1388,14 @@ function renderBLBody(){
   const body=document.getElementById('bl-body');
   if(!body)return;
   if(BL_TAB==='laixe'){
-    const opts=LX.map(l=>`<option value="${l.ho_ten}">${l.ho_ten}</option>`).join('');
     body.innerHTML=`
     <div class="toolbar" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <select id="bl-ten" class="filter-sel" style="min-width:220px"><option value="">-- Chọn lái xe --</option>${opts}</select>
-      <select id="bl-thang" class="filter-sel">${monthSelectOpts()}</select>
+      <select id="bl-ten" class="filter-sel" style="min-width:220px"><option value="">-- Đang tải... --</option></select>
+      <select id="bl-thang" class="filter-sel" onchange="reloadLaiXeDropdown()">${monthSelectOpts()}</select>
       <button class="btn btn-teal" onclick="loadBangLuong()"><i class="ti ti-search"></i> Xem</button>
     </div>
     <div id="bl-result" style="color:var(--text-muted);font-size:13px">Chọn lái xe và tháng để xem lương.</div>`;
+    reloadLaiXeDropdown();
   }else{
     const nvList=NV.filter(n=>['nhan_vien','quan_ly'].includes(n.vai_tro));
     const rMap={nhan_vien:'Điều động',quan_ly:'Quản lý'};
@@ -1410,6 +1410,27 @@ function renderBLBody(){
   }
 }
 
+// Nạp dropdown lái xe — lấy distinct ten_lai_xe trực tiếp từ vận đơn đã khóa (KHÔNG lấy từ danh mục
+// lai_xe vì đó chỉ là gợi ý khai báo Xe, tên lái xe thực tế nhập tự do trên từng vận đơn)
+async function reloadLaiXeDropdown(){
+  const sel=document.getElementById('bl-ten');
+  const thang=document.getElementById('bl-thang')?.value;
+  if(!sel||!thang)return;
+  const[y,m]=thang.split('-');
+  const lastDay=new Date(+y,+m,0).getDate();
+  const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
+  const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  const dangChon=sel.value;
+  sel.innerHTML='<option value="">-- Đang tải... --</option>';
+  const{data}=await db.from('van_don').select('ten_lai_xe').eq('locked',true)
+    .gte('ngay',dateFrom).lte('ngay',dateTo)
+    .not('ten_lai_xe','is',null).neq('ten_lai_xe','');
+  const names=[...new Set((data||[]).map(o=>(o.ten_lai_xe||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  sel.innerHTML=`<option value="">-- Chọn lái xe (${names.length} người có chuyến tháng này) --</option>`
+    +names.map(n=>`<option value="${n}">${n}</option>`).join('');
+  if(names.includes(dangChon))sel.value=dangChon;
+}
+
 // ---- Lương lái xe: tra theo (tỉnh đến, loại chuyến) trong bảng giá gộp + cộng chi_ho.tien_tra_laixe ----
 async function loadBangLuong(){
   const ten=document.getElementById('bl-ten').value;
@@ -1422,7 +1443,7 @@ async function loadBangLuong(){
   const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
-  const{data:orders}=await db.from('van_don').select('id,ma_don,ngay,diem_lay,diem_tra,loai_chuyen,loai_phan_loai_xe,ten_lai_xe,locked')
+  const{data:orders}=await db.from('van_don').select('id,ma_don,ngay,diem_lay,diem_tra,loai_chuyen,loai_phan_loai_xe,ten_lai_xe,bien_kiem_soat,ma_thau_phu,locked')
     .eq('ten_lai_xe',ten).eq('locked',true).gte('ngay',dateFrom).lte('ngay',dateTo)
     .in('loai_phan_loai_xe',['noi_bo','thau_thue_lai']).order('ngay',{ascending:true});
   const list=orders||[];
@@ -1456,10 +1477,12 @@ async function loadBangLuong(){
 
   res.innerHTML=canhbao+`
   <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Tuyến</th><th>Loại chuyến</th><th style="text-align:right">Lương chuyến</th><th style="text-align:right">Chi hộ trả LX</th><th style="text-align:right">Tổng</th></tr></thead>
+    <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Biển số</th><th>Thầu</th><th>Tuyến</th><th>Loại chuyến</th><th style="text-align:right">Lương chuyến</th><th style="text-align:right">Chi hộ trả LX</th><th style="text-align:right">Tổng</th></tr></thead>
     <tbody>
     ${rows.map(r=>`<tr>
       <td>${fmtDate(r.ngay)}</td><td class="text-blue fw6">${r.ma_don}</td>
+      <td style="font-size:12px">${r.bien_kiem_soat||'—'}</td>
+      <td style="font-size:12px">${r.loai_phan_loai_xe==='noi_bo'?'<span style="color:#7c3aed">Nội bộ</span>':(r.ma_thau_phu||'—')}</td>
       <td style="font-size:12px">${r.diem_lay||'—'} → ${r.diem_tra||'—'}</td>
       <td><span class="tag">${r.loai_chuyen||'—'}</span></td>
       <td style="text-align:right">${r.luongChuyen?fmt(r.luongChuyen):'<span style="color:var(--text-muted);font-style:italic">chưa có giá</span>'}</td>
@@ -1468,7 +1491,7 @@ async function loadBangLuong(){
     </tr>`).join('')}
     </tbody>
     <tfoot><tr style="font-weight:700;background:var(--bg)">
-      <td colspan="4">Tổng cộng (${rows.length} chuyến)</td>
+      <td colspan="6">Tổng cộng (${rows.length} chuyến)</td>
       <td style="text-align:right">${fmt(tongLuongChuyen)}</td>
       <td style="text-align:right">${fmt(tongTraLX)}</td>
       <td style="text-align:right">${fmt(tongCong)}</td>
@@ -1491,7 +1514,7 @@ async function loadBangLuongNV(){
   const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
-  let q=db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_chuyen,co_doi_lenh,created_by')
+  let q=db.from('van_don').select('id,ma_don,ngay,ten_khach,loai_chuyen,co_doi_lenh,created_by,loai_phan_loai_xe,bien_kiem_soat,ma_thau_phu')
     .eq('locked',true).gte('ngay',dateFrom).lte('ngay',dateTo).order('ngay',{ascending:true});
   if(!isQL)q=q.eq('created_by',nvId); // Quản lý: hiện chỉ 1 người, tính toàn bộ đơn đã khóa trong tháng
   const{data:orders}=await q;
@@ -1502,8 +1525,13 @@ async function loadBangLuongNV(){
     const kh=KH.find(k=>k.ten_cong_ty===o.ten_khach);
     const thuong=+((kh?.luong_thuong)??10000);
     const doiLenh=o.co_doi_lenh?LUONG_DOI_LENH:0;
-    const ketHop=isQL&&(o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép')?LUONG_KETHOP_QL:0;
-    return{...o,thuong,doiLenh,ketHop,tong:thuong+doiLenh+ketHop};
+    // Kết hợp/Kẹp ghép chỉ được 30k nếu BIỂN SỐ có trong danh mục Phương tiện (bảng xe) — không phụ
+    // thuộc loai_phan_loai_xe ghi trên đơn, vì danh mục Phương tiện có thể chứa cả xe thầu đã đăng ký.
+    // Biển số KHÔNG có trong danh mục (xe thầu vãng lai, chưa đăng ký) → tính như chuyến thường.
+    const trongDanhMucXe=!!o.bien_kiem_soat&&XE.some(x=>x.bien_so===o.bien_kiem_soat);
+    const laKetHop=o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép';
+    const ketHop=isQL&&laKetHop&&trongDanhMucXe?LUONG_KETHOP_QL:0;
+    return{...o,thuong,doiLenh,ketHop,trongDanhMucXe,tong:thuong+doiLenh+ketHop};
   });
   const tongThuong=rows.reduce((s,r)=>s+r.thuong,0);
   const tongDoiLenh=rows.reduce((s,r)=>s+r.doiLenh,0);
@@ -1512,18 +1540,20 @@ async function loadBangLuongNV(){
 
   res.innerHTML=`
   <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Khách</th><th>Loại chuyến</th><th>Đổi lệnh</th><th style="text-align:right">Thành tiền</th></tr></thead>
+    <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Biển số</th><th>Thầu</th><th>Khách</th><th>Loại chuyến</th><th>Đổi lệnh</th><th style="text-align:right">Thành tiền</th></tr></thead>
     <tbody>
     ${rows.map(r=>`<tr>
       <td>${fmtDate(r.ngay)}</td><td class="text-blue fw6">${r.ma_don}</td>
+      <td style="font-size:12px">${r.bien_kiem_soat?(r.trongDanhMucXe?`<span style="color:#7c3aed">${r.bien_kiem_soat}</span>`:r.bien_kiem_soat):'—'}</td>
+      <td style="font-size:12px">${r.ma_thau_phu||(r.loai_phan_loai_xe==='noi_bo'?'Nội bộ':'—')}</td>
       <td style="font-size:12px">${r.ten_khach||'—'}</td>
-      <td><span class="tag">${r.loai_chuyen||'—'}</span></td>
+      <td><span class="tag">${r.loai_chuyen||'—'}</span>${isQL&&(r.loai_chuyen==='Kết hợp'||r.loai_chuyen==='Kẹp ghép')&&!r.trongDanhMucXe?' <span style="font-size:10px;color:var(--text-muted)">(biển số ngoài danh mục — tính như thường)</span>':''}</td>
       <td>${r.co_doi_lenh?'<span style="color:var(--warning)">Có</span>':'—'}</td>
       <td style="text-align:right;font-weight:600">${fmt(r.tong)}</td>
     </tr>`).join('')}
     </tbody>
     <tfoot><tr style="font-weight:700;background:var(--bg)">
-      <td colspan="5">Tổng cộng (${rows.length} chuyến) — Thường ${fmt(tongThuong)} + Đổi lệnh ${fmt(tongDoiLenh)}${isQL?` + Kết hợp ${fmt(tongKetHop)}`:''}</td>
+      <td colspan="7">Tổng cộng (${rows.length} chuyến) — Thường ${fmt(tongThuong)} + Đổi lệnh ${fmt(tongDoiLenh)}${isQL?` + Kết hợp ${fmt(tongKetHop)}`:''}</td>
       <td style="text-align:right">${fmt(tongCong)}</td>
     </tr></tfoot>
   </table></div>`;
