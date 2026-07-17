@@ -15,11 +15,12 @@ async function pgKH(c){
       <td class="text-blue fw6">${k.ma_kh}</td><td style="font-weight:500">${k.ten_cong_ty}</td>
       <td>${k.nguoi_lien_he||'—'}</td><td>${k.so_dien_thoai||'—'}</td>
       <td>${k.email||'—'}</td><td>${k.ma_so_thue||'—'}</td>
+      <td style="text-align:right">${fmt(k.luong_thuong??10000)}</td>
       <td>${canEdit?`<div style="display:flex;gap:4px">
         <button class="btn btn-xs btn-teal" onclick="editKH('${k.id}')"><i class="ti ti-edit"></i></button>
         <button class="btn btn-xs btn-danger" onclick="deleteKH('${k.id}','${k.ten_cong_ty}')"><i class="ti ti-trash"></i></button>
       </div>`:'—'}</td>
-    </tr>`).join(''):`<tr><td colspan="7"><div class="empty"><i class="ti ti-search-off"></i>Không tìm thấy khách hàng nào</div></td></tr>`;
+    </tr>`).join(''):`<tr><td colspan="8"><div class="empty"><i class="ti ti-search-off"></i>Không tìm thấy khách hàng nào</div></td></tr>`;
     document.getElementById('kh-count').textContent=arr.length+' khách hàng';
   }
 
@@ -43,8 +44,8 @@ async function pgKH(c){
     <span id="kh-count" style="font-size:12px;color:var(--text-muted)">${list.length} khách hàng</span>
   </div>
   <div class="tbl-wrap"><table class="tbl">
-    <colgroup><col style="width:80px"><col style="width:180px"><col style="width:130px"><col style="width:110px"><col style="width:150px"><col style="width:100px"><col style="width:80px"></colgroup>
-    <thead><tr><th>Mã KH</th><th>Tên công ty</th><th>Người LH</th><th>Điện thoại</th><th>Email</th><th>MST</th><th>Thao tác</th></tr></thead>
+    <colgroup><col style="width:80px"><col style="width:180px"><col style="width:130px"><col style="width:110px"><col style="width:150px"><col style="width:100px"><col style="width:130px"><col style="width:80px"></colgroup>
+    <thead><tr><th>Mã KH</th><th>Tên công ty</th><th>Người LH</th><th>Điện thoại</th><th>Email</th><th>MST</th><th>Lương thường (ĐĐ/QL)</th><th>Thao tác</th></tr></thead>
     <tbody id="kh-tbody"></tbody>
   </table></div>`;
   renderKHTable(list);
@@ -62,6 +63,8 @@ function openAddKH(existing={}){
     <div class="form-group"><label>Điện thoại</label><input id="kh-dt" value="${existing.so_dien_thoai||''}"></div>
     <div class="form-group"><label>Email</label><input id="kh-email" type="email" value="${existing.email||''}"></div>
     <div class="form-group"><label>Mã số thuế</label><input id="kh-mst" value="${existing.ma_so_thue||''}"></div>
+    <div class="form-group"><label>Lương thường (ĐĐ/QL) <span style="font-size:10px;color:#8b5cf6">· dùng cho Bảng lương</span></label>
+      <input id="kh-luong" type="text" value="${fmtInput(existing.luong_thuong??10000)}" oninput="fmtOnInput(this)"></div>
     <div class="form-group full"><label>Địa chỉ</label><input id="kh-dc" value="${existing.dia_chi||''}"></div>
     <div class="form-group full"><label>Ghi chú</label><textarea id="kh-gc">${existing.ghi_chu||''}</textarea></div>
   </div></div>
@@ -76,7 +79,7 @@ async function editKH(id){
 }
 async function saveKH(id=''){
   if(!canSee(['quan_ly','ke_toan','ceo'])){toast('Không có quyền thực hiện','error');return;}
-  const d={ten_cong_ty:document.getElementById('kh-ten').value,nguoi_lien_he:document.getElementById('kh-nlh').value,so_dien_thoai:document.getElementById('kh-dt').value,email:document.getElementById('kh-email').value,ma_so_thue:document.getElementById('kh-mst').value,dia_chi:document.getElementById('kh-dc').value,ghi_chu:document.getElementById('kh-gc').value};
+  const d={ten_cong_ty:document.getElementById('kh-ten').value,nguoi_lien_he:document.getElementById('kh-nlh').value,so_dien_thoai:document.getElementById('kh-dt').value,email:document.getElementById('kh-email').value,ma_so_thue:document.getElementById('kh-mst').value,luong_thuong:parseNum(document.getElementById('kh-luong').value)||10000,dia_chi:document.getElementById('kh-dc').value,ghi_chu:document.getElementById('kh-gc').value};
   if(!d.ten_cong_ty){toast('Nhập tên công ty','error');return;}
   let error;
   if(id){({error}=await db.from('khach_hang').update(d).eq('id',id));}
@@ -516,8 +519,59 @@ async function pgDiaDiem(c){
     <colgroup><col style="width:220px"><col style="width:90px"><col style="width:120px"><col style="width:180px"><col style="width:90px"></colgroup>
     <thead><tr><th>Tên chuẩn</th><th>Loại</th><th>Địa phương</th><th>Viết tắt / gợi ý tìm</th><th>Thao tác</th></tr></thead>
     <tbody id="dd-tbody"></tbody>
-  </table></div>`;
+  </table></div>
+  <div id="bgl-wrap" style="margin-top:24px"></div>`;
   renderDDTable(list);
+  renderBangGiaLuong(list);
+}
+
+// ============ BẢNG GIÁ LƯƠNG LÁI XE THEO TỈNH (gộp 1 dòng cấu hình, không CRUD từng dòng) ============
+// Điểm đi mặc định luôn là Hải Phòng (đa số chuyến). Tỉnh đến lấy tự động (distinct) từ danh sách
+// Điểm đã có ở bảng trên — không cần khai báo tỉnh riêng, không phát sinh danh mục mới.
+function renderBangGiaLuong(ddList){
+  const wrap=document.getElementById('bgl-wrap');
+  if(!wrap)return;
+  if(!canSee(['quan_ly','ceo'])){wrap.innerHTML='';return;}
+  const tinhSet=[...new Set(ddList.map(d=>tinhTuDiaPhuong(d.dia_phuong)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  const gia=CH_LUONG.bang_gia_tinh||{};
+  wrap.innerHTML=`
+  <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:2px"><i class="ti ti-coin"></i> Bảng giá lương lái xe theo tỉnh</div>
+  <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Điểm đi mặc định: Hải Phòng. Sửa số rồi bấm "Lưu bảng giá" — dùng cho trang Bảng lương.</div>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Tỉnh đến</th><th>Lương thường (VNĐ)</th><th>Lương kết hợp / kẹp ghép (VNĐ)</th></tr></thead>
+    <tbody>
+    ${tinhSet.length?tinhSet.map(t=>{
+      const g=gia[t]||{};
+      return `<tr>
+        <td style="font-weight:500">${t}</td>
+        <td><input type="text" class="bgl-thuong" data-tinh="${t}" value="${fmtInput(g.thuong||0)}" oninput="fmtOnInput(this)" style="width:140px"></td>
+        <td><input type="text" class="bgl-kethop" data-tinh="${t}" value="${fmtInput(g.ket_hop||0)}" oninput="fmtOnInput(this)" style="width:140px"></td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="3"><div class="empty">Chưa có địa điểm nào để suy ra tỉnh</div></td></tr>'}
+    </tbody>
+  </table></div>
+  <div style="margin-top:10px">
+    <button class="btn btn-primary" onclick="saveBangGiaLuong()"><i class="ti ti-device-floppy"></i> Lưu bảng giá</button>
+  </div>`;
+}
+
+async function saveBangGiaLuong(){
+  if(!canSee(['quan_ly','ceo'])){toast('Không có quyền thực hiện','error');return;}
+  const bang={};
+  document.querySelectorAll('.bgl-thuong').forEach(inp=>{
+    const t=inp.dataset.tinh;
+    bang[t]=bang[t]||{};
+    bang[t].thuong=parseNum(inp.value);
+  });
+  document.querySelectorAll('.bgl-kethop').forEach(inp=>{
+    const t=inp.dataset.tinh;
+    bang[t]=bang[t]||{};
+    bang[t].ket_hop=parseNum(inp.value);
+  });
+  const{error}=await db.from('cau_hinh_luong').upsert({id:1,bang_gia_tinh:bang,updated_at:new Date().toISOString()});
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  CH_LUONG.bang_gia_tinh=bang;
+  toast('Đã lưu bảng giá lương');
 }
 
 function openAddDD(existing={}){
