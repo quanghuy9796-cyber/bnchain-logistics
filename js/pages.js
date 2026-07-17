@@ -1426,7 +1426,16 @@ async function reloadLaiXeDropdown(){
     .gte('ngay',dateFrom).lte('ngay',dateTo)
     .in('loai_phan_loai_xe',['noi_bo','thau_thue_lai'])
     .not('ten_lai_xe','is',null).neq('ten_lai_xe','');
-  const names=[...new Set((data||[]).map(o=>(o.ten_lai_xe||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  // Gộp tên trùng nhau nhưng khác hoa/thường (vd "Trần Trung Dũng" vs "TRẦN TRUNG DŨNG") — giữ lại
+  // bản viết hoa chữ cái đầu để hiển thị, nhưng khi lọc sẽ dùng ilike nên không lo khớp sai ở bước sau.
+  const seen={};
+  (data||[]).forEach(o=>{
+    const raw=(o.ten_lai_xe||'').trim();
+    if(!raw)return;
+    const key=raw.toLowerCase();
+    if(!seen[key])seen[key]=raw;
+  });
+  const names=Object.values(seen).sort((a,b)=>a.localeCompare(b,'vi'));
   sel.innerHTML=`<option value="">-- Chọn lái xe (${names.length} người có chuyến tháng này) --</option>`
     +names.map(n=>`<option value="${n}">${n}</option>`).join('');
   if(names.includes(dangChon))sel.value=dangChon;
@@ -1444,11 +1453,30 @@ async function loadBangLuong(){
   const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
   const dateTo=`${y}-${m.padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
+  // Debug: đếm TẤT CẢ đơn của lái xe này trong tháng (kể cả chưa khóa/chưa đúng loại xe) để phát
+  // hiện đơn "thiếu" khỏi báo cáo — giống cách cảnh báo đang làm ở Trả thầu phụ.
+  const{data:debugAll}=await db.from('van_don').select('id,ma_don,locked,loai_phan_loai_xe')
+    .ilike('ten_lai_xe',ten).gte('ngay',dateFrom).lte('ngay',dateTo);
+
   const{data:orders}=await db.from('van_don').select('id,ma_don,ngay,diem_lay,diem_tra,diem_tra_phat_sinh,loai_chuyen,loai_phan_loai_xe,ten_lai_xe,bien_kiem_soat,ma_thau_phu,locked')
-    .eq('ten_lai_xe',ten).eq('locked',true).gte('ngay',dateFrom).lte('ngay',dateTo)
+    .ilike('ten_lai_xe',ten).eq('locked',true).gte('ngay',dateFrom).lte('ngay',dateTo)
     .in('loai_phan_loai_xe',['noi_bo','thau_thue_lai']).order('ngay',{ascending:true});
   const list=orders||[];
-  if(!list.length){res.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Không có chuyến đã khóa của lái xe này trong tháng</div>';return;}
+
+  let canhbaoThieu='';
+  const thieu=(debugAll||[]).filter(o=>!list.some(x=>x.id===o.id));
+  if(thieu.length){
+    const chuaKhoa=thieu.filter(o=>!o.locked);
+    const saiLoaiXe=thieu.filter(o=>o.locked&&!['noi_bo','thau_thue_lai'].includes(o.loai_phan_loai_xe));
+    canhbaoThieu=`<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:var(--r);padding:8px 14px;margin-bottom:10px;font-size:12px">
+      <i class="ti ti-alert-triangle" style="color:#d97706"></i>
+      <strong style="color:#92400e">${thieu.length} đơn của "${ten}" trong tháng KHÔNG có trong bảng dưới đây:</strong>
+      ${chuaKhoa.length?`<div style="margin-top:3px">— ${chuaKhoa.length} đơn <strong>chưa khóa</strong>: ${chuaKhoa.slice(0,8).map(o=>`<span style="background:#fef9c3;border-radius:3px;padding:1px 5px;margin-left:3px">${o.ma_don}</span>`).join('')}${chuaKhoa.length>8?' và '+(chuaKhoa.length-8)+' đơn khác':''}</div>`:''}
+      ${saiLoaiXe.length?`<div style="margin-top:3px">— ${saiLoaiXe.length} đơn đang gắn loại xe <strong>Thầu tự lái</strong> (không tính lương): ${saiLoaiXe.slice(0,8).map(o=>`<span style="background:#fef9c3;border-radius:3px;padding:1px 5px;margin-left:3px">${o.ma_don}</span>`).join('')}</div>`:''}
+    </div>`;
+  }
+
+  if(!list.length){res.innerHTML=canhbaoThieu+'<div class="empty"><i class="ti ti-inbox"></i>Không có chuyến đã khóa của lái xe này trong tháng</div>';return;}
 
   const{data:chiHoRows}=await db.from('chi_ho').select('van_don_id,tien_tra_laixe').in('van_don_id',list.map(o=>o.id));
   const chMap={};
@@ -1480,7 +1508,7 @@ async function loadBangLuong(){
     ${thieuGia.slice(0,8).map(m=>`<span style="background:#fef9c3;border-radius:3px;padding:1px 5px;margin-left:3px">${m}</span>`).join('')}
   </div>`:'';
 
-  res.innerHTML=canhbao+`
+  res.innerHTML=canhbaoThieu+canhbao+`
   <div class="tbl-wrap"><table class="tbl">
     <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Biển số</th><th>Thầu</th><th>Tuyến</th><th>Loại chuyến</th><th style="text-align:right">Lương chuyến</th><th style="text-align:right">Chi hộ trả LX</th><th style="text-align:right">Tổng</th></tr></thead>
     <tbody>
