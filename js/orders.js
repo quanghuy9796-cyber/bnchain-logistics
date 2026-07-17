@@ -18,7 +18,7 @@ async function _fetchOrdersData(){
   const COLS='id,ma_don,ngay,trang_thai,ten_khach,so_bill,so_booking,loai_hang,so_cont,loai_cont,loai_xe_hang,loai_chuyen,bien_kiem_soat,ten_lai_xe,hanh_trinh,diem_lay,diem_tra,locked,ky_thanh_toan,trang_thai_bang_ke,gia_cuoc_khach,gia_cuoc_thau,thanh_toan_khach,thanh_toan_thau,phi_doi_lenh,phi_to_khai,co_doi_lenh,co_to_khai,ngay_yeu_cau,created_at,ma_thau_phu,loai_phan_loai_xe,la_xe_noi_bo,ghi_chu,ghi_chu_xe,diem_tra_phat_sinh,created_by,tra_thau_doi_lenh,don_vi_doi_lenh';
   let q=db.from('van_don').select(COLS).order('ngay',{ascending:false}).order('created_at',{ascending:false});
   if(CU?.vai_tro==='nhan_vien') q=q.eq('created_by',CU.id);
-  if(ORDER_THANG){const[y,m]=ORDER_THANG.split('-');q=q.gte('ngay',`${y}-${m}-01`).lte('ngay',`${y}-${m}-31`);}
+  if(ORDER_THANG){const[y,m]=ORDER_THANG.split('-');const lastDay=new Date(+y,+m,0).getDate();q=q.gte('ngay',`${y}-${m}-01`).lte('ngay',`${y}-${m}-${String(lastDay).padStart(2,'0')}`);}
   else{const d3m=new Date();d3m.setMonth(d3m.getMonth()-3);const cutoff=`${d3m.getFullYear()}-${String(d3m.getMonth()+1).padStart(2,'0')}-01`;q=q.gte('ngay',cutoff);}
   const{data}=await q.limit(500);
   ORDERS=data||[];
