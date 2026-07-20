@@ -2077,7 +2077,17 @@ function xoaDoanNKHT(idx){NKHT_DATA.doan_duong.splice(idx,1);renderNKHT();}
 function moThemDiemNKHT(idx,mode){
   NKHT_ADDING=idx; NKHT_ADDING_MODE=mode;
   renderNKHT();
-  setTimeout(()=>document.getElementById('nkht-diem-input-'+idx)?.focus(),50);
+  setTimeout(()=>{
+    const el=document.getElementById('nkht-diem-input-'+idx);
+    if(el){
+      if(mode==='bai'){
+        // Mặc định đúng tên đã có trong danh mục Điểm — nếu tên chuẩn thay đổi, sửa lại 1 chỗ này
+        const bai=(DD||[]).find(d=>removeAccents(d.ten_chuan).includes('bai xe'));
+        el.value=bai?bai.ten_chuan:'BÃI XE BN CHAIN, BẮC NINH';
+      }
+      el.focus();
+    }
+  },50);
 }
 // Dropdown gợi ý điểm cho Nhật ký hành trình — cùng logic bỏ dấu + viết tắt như ô Khoảng cách/vận đơn
 function nkhtDiemOnInput(el,dropId){
