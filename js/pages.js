@@ -2125,7 +2125,9 @@ function xacNhanThemDiemNKHT(idx){
   const d=NKHT_DATA.doan_duong[idx];
   const km1=tracuuKm(d.diem_a,diem), km2=tracuuKm(diem,d.diem_b);
   NKHT_DATA.doan_duong.splice(idx,1,
-    {...d,diem_b:diem,km:km1||0,can_xac_nhan:km1==null,nguon:'thu_cong'},
+    // Đoạn đầu: đã chắc chắn là đi thẳng tới điểm vừa chọn — không hỏi lại, km thiếu thì để 0 và cho sửa tay như đoạn rỗng bình thường
+    {...d,diem_b:diem,km:km1||0,can_xac_nhan:false,nguon:'thu_cong'},
+    // Đoạn sau: từ bãi xe/điểm mới đi tiếp — vẫn có thể phát sinh, giữ nguyên logic cần xác nhận nếu chưa rõ km
     {diem_a:diem,diem_b:d.diem_b,km:km2||0,loai_doan:'rong',ngay:d.ngay,can_xac_nhan:km2==null,nguon:'thu_cong'}
   );
   NKHT_ADDING=null;NKHT_ADDING_MODE=null;
