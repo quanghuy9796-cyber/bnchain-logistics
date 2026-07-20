@@ -623,16 +623,22 @@ async function renderKhoangCach(ddList){
   const{data,error}=await db.from('khoang_cach').select('*').order('id');
   if(error){wrap.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Chưa có bảng khoang_cach — chạy SQL migration trước</div>`;return;}
   window._kcList=data||[];
-  const ddOpts=ddList.map(d=>`<option value="${d.ten_chuan}">`).join('');
   wrap.innerHTML=`
   <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Dùng để tính đoạn rỗng trong Nhật ký hành trình. Mặc định 2 chiều bằng nhau — sửa riêng nếu cần.</div>
-  <datalist id="kc-diem-dl">${ddOpts}</datalist>
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
-    <input type="text" id="kc-a" list="kc-diem-dl" placeholder="Gõ tên điểm A..." style="width:220px" oninput="canhBaoTrungKC()">
-    <span style="font-size:13px;color:var(--text-muted)">↔</span>
-    <input type="text" id="kc-b" list="kc-diem-dl" placeholder="Gõ tên điểm B..." style="width:220px" oninput="canhBaoTrungKC()">
+  <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:4px;flex-wrap:wrap">
+    <div style="position:relative;width:220px">
+      <input type="text" id="kc-a" placeholder="Gõ tên / viết tắt điểm A..." autocomplete="off" style="width:100%"
+        oninput="kcOnDiemInput(this,'kc-a-drop')" onblur="kcCloseDrop('kc-a-drop')">
+      <div id="kc-a-drop" data-input-id="kc-a" style="display:none;position:absolute;z-index:999;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:240px;overflow-y:auto"></div>
+    </div>
+    <span style="font-size:13px;color:var(--text-muted);margin-top:8px">↔</span>
+    <div style="position:relative;width:220px">
+      <input type="text" id="kc-b" placeholder="Gõ tên / viết tắt điểm B..." autocomplete="off" style="width:100%"
+        oninput="kcOnDiemInput(this,'kc-b-drop')" onblur="kcCloseDrop('kc-b-drop')">
+      <div id="kc-b-drop" data-input-id="kc-b" style="display:none;position:absolute;z-index:999;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:240px;overflow-y:auto"></div>
+    </div>
     <input type="number" id="kc-km" placeholder="Km" style="width:100px">
-    <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="kc-2chieu" checked> 2 chiều bằng nhau</label>
+    <label style="font-size:12px;display:flex;align-items:center;gap:4px;margin-top:8px"><input type="checkbox" id="kc-2chieu" checked> 2 chiều bằng nhau</label>
     <button class="btn btn-primary btn-sm" onclick="themKhoangCach()"><i class="ti ti-plus"></i> Thêm</button>
   </div>
   <div id="kc-canhbao" style="font-size:12px;color:var(--warning);margin-bottom:10px;min-height:16px"></div>
@@ -646,6 +652,50 @@ async function renderKhoangCach(ddList){
     </tr>`).join('')||'<tr><td colspan="4"><div class="empty">Chưa có khoảng cách nào</div></td></tr>'}
     </tbody>
   </table></div>`;
+}
+
+// Dropdown gợi ý điểm cho Khoảng cách — copy đúng logic bỏ dấu + viết tắt như ô điểm lấy/trả vận đơn (orders.js onDiemInput),
+// viết riêng ở đây để không đụng vào orders.js, chỉ khác 1 chỗ: gọi canhBaoTrungKC() ngay sau khi chọn.
+function kcOnDiemInput(el,dropId){
+  canhBaoTrungKC();
+  const q=removeAccents(el.value.trim());
+  const drop=document.getElementById(dropId);
+  if(!drop)return;
+  if(!q){drop.style.display='none';return;}
+  const matches=(DD||[]).filter(d=>{
+    const haystack=removeAccents((d.ten_chuan||'')+' '+(d.viet_tat||'')+' '+(d.dia_phuong||''));
+    return haystack.includes(q);
+  }).slice(0,8);
+  if(!matches.length){drop.style.display='none';return;}
+  const loaiIcon={'Cang':'🚢','KCN':'🏭','Kho':'📦','Depot':'🔲','Cua khau':'🛃','Khac':'📍'};
+  drop.innerHTML=matches.map(d=>{
+    const loaiKey=removeAccents(d.loai||'');
+    const icon=Object.entries(loaiIcon).find(([k])=>loaiKey.includes(k));
+    const ico=icon?icon[1]:'📍';
+    const safe=d.ten_chuan.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return '<div onclick="kcPickDiem(\''+dropId+'\',\''+safe+'\')"'
+      +' style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px"'
+      +' onmouseover="this.style.background=\'var(--teal-light)\'"'
+      +' onmouseout="this.style.background=\'\'">'
+      +'<span style="margin-right:6px">'+ico+'</span>'
+      +'<span style="font-weight:600;color:var(--sidebar-bg)">'+d.ten_chuan+'</span>'
+      +(d.dia_phuong?'<span style="color:var(--text-muted);margin-left:6px;font-size:11px">'+d.dia_phuong+'</span>':'')
+      +(d.viet_tat?'<span style="color:var(--teal);margin-left:6px;font-size:11px">'+d.viet_tat+'</span>':'')
+      +'</div>';
+  }).join('');
+  drop.style.display='block';
+}
+function kcPickDiem(dropId,tenChuan){
+  const drop=document.getElementById(dropId);
+  if(!drop)return;
+  const inputId=drop.dataset.inputId;
+  const input=inputId?document.getElementById(inputId):null;
+  if(input)input.value=tenChuan;
+  canhBaoTrungKC(); // gọi ngay, không chờ blur — tránh phải bấm nhiều lần mới thấy cảnh báo
+  setTimeout(()=>{if(drop)drop.style.display='none';},80);
+}
+function kcCloseDrop(dropId){
+  setTimeout(()=>{const d=document.getElementById(dropId);if(d)d.style.display='none';},200);
 }
 
 function canhBaoTrungKC(){
