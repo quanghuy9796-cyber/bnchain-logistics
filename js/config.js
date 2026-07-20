@@ -151,7 +151,7 @@ async function loadMaster(){
       db.from('lai_xe').select('*').eq('active',true).order('ho_ten'),
       db.from('thau_phu').select('*').eq('active',true).order('ten_cong_ty'),
       db.from('users').select('*').eq('active',true).order('ho_ten'),
-      db.from('xe').select('id,bien_so,loai_phan_loai,ma_thau_phu,ten_lai_xe_mac_dinh,loai_xe').eq('active',true).order('bien_so'),
+      db.from('xe').select('id,bien_so,loai_phan_loai,ma_thau_phu,ten_lai_xe_mac_dinh,loai_xe,dinh_muc_khoan').eq('active',true).order('bien_so'),
     ]);
     KH=a.data||[];LX=b.data||[];TP=c.data||[];NV=d.data||[];XE=e.data||[];
   }catch(err){console.error('[loadMaster] core tables error:',err);}
@@ -174,13 +174,13 @@ function nav(p,el){
   document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
   el.classList.add('active');PAGE=p;SEL=null;
   document.getElementById('dp').style.display='none';
-  const T={orders:'Quản lý vận đơn',dieuvan:'Bảng điều vận',chiho:'Chi hộ / Phát sinh',hoadon:'Upload & Xử lý Hóa Đơn',congno:'Công nợ',bangke:'Bảng kê thu khách',traphau:'Trả thầu phụ',baocao:'Báo cáo tháng',kh:'Khách hàng',laixe:'Lái xe',thauphu:'Thầu phụ',xe:'Quản lý xe',nv:'Nhân viên',diadiem:'Điểm & Cung đường',chiphi:'Chi phí',khodau:'Kho dầu',taisan:'Tài sản cố định',bangluong:'Bảng lương'};
+  const T={orders:'Quản lý vận đơn',dieuvan:'Bảng điều vận',nhatkyht:'Nhật ký hành trình',chiho:'Chi hộ / Phát sinh',hoadon:'Upload & Xử lý Hóa Đơn',congno:'Công nợ',bangke:'Bảng kê thu khách',traphau:'Trả thầu phụ',baocao:'Báo cáo tháng',kh:'Khách hàng',laixe:'Lái xe',thauphu:'Thầu phụ',xe:'Quản lý xe',nv:'Nhân viên',diadiem:'Điểm & Cung đường',chiphi:'Chi phí',khodau:'Kho dầu',taisan:'Tài sản cố định',bangluong:'Bảng lương'};
   document.getElementById('page-title').textContent=T[p]||p;
   renderPage();
 }
 function renderPage(){
   const c=document.getElementById('content');
-  const P={orders:window.pgOrders,dieuvan:window.pgDieuVan,chiho:window.pgChiHo,hoadon:window.pgHoaDon,congno:window.pgCongNo,bangke:window.pgBangKe,traphau:window.pgTraThau,baocao:window.pgBaoCao,kh:window.pgKH,laixe:window.pgLaiXe,thauphu:window.pgThauPhu,xe:window.pgXe,nv:window.pgNV,diadiem:window.pgDiaDiem,chiphi:window.pgChiPhi,khodau:window.pgKhoDau,taisan:window.pgTaiSan,bangluong:window.pgBangLuong};
+  const P={orders:window.pgOrders,dieuvan:window.pgDieuVan,nhatkyht:window.pgNhatKyHanhTrinh,chiho:window.pgChiHo,hoadon:window.pgHoaDon,congno:window.pgCongNo,bangke:window.pgBangKe,traphau:window.pgTraThau,baocao:window.pgBaoCao,kh:window.pgKH,laixe:window.pgLaiXe,thauphu:window.pgThauPhu,xe:window.pgXe,nv:window.pgNV,diadiem:window.pgDiaDiem,chiphi:window.pgChiPhi,khodau:window.pgKhoDau,taisan:window.pgTaiSan,bangluong:window.pgBangLuong};
   if(P[PAGE])P[PAGE](c); else c.innerHTML='<div class="empty"><i class="ti ti-tools"></i>Đang xây dựng... (nếu đây là trang Chi phí/Kho dầu/Tài sản, kiểm tra file js/chiphi.js đã được deploy chưa)</div>';
 }
 
