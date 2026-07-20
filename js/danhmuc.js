@@ -627,14 +627,15 @@ async function renderKhoangCach(ddList){
   wrap.innerHTML=`
   <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Dùng để tính đoạn rỗng trong Nhật ký hành trình. Mặc định 2 chiều bằng nhau — sửa riêng nếu cần.</div>
   <datalist id="kc-diem-dl">${ddOpts}</datalist>
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-    <input type="text" id="kc-a" list="kc-diem-dl" placeholder="Gõ tên điểm A..." style="width:220px">
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
+    <input type="text" id="kc-a" list="kc-diem-dl" placeholder="Gõ tên điểm A..." style="width:220px" oninput="canhBaoTrungKC()">
     <span style="font-size:13px;color:var(--text-muted)">↔</span>
-    <input type="text" id="kc-b" list="kc-diem-dl" placeholder="Gõ tên điểm B..." style="width:220px">
+    <input type="text" id="kc-b" list="kc-diem-dl" placeholder="Gõ tên điểm B..." style="width:220px" oninput="canhBaoTrungKC()">
     <input type="number" id="kc-km" placeholder="Km" style="width:100px">
     <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="kc-2chieu" checked> 2 chiều bằng nhau</label>
     <button class="btn btn-primary btn-sm" onclick="themKhoangCach()"><i class="ti ti-plus"></i> Thêm</button>
   </div>
+  <div id="kc-canhbao" style="font-size:12px;color:var(--warning);margin-bottom:10px;min-height:16px"></div>
   <div class="tbl-wrap"><table class="tbl">
     <thead><tr><th>Điểm A</th><th>Điểm B</th><th>Km</th><th>Thao tác</th></tr></thead>
     <tbody>
@@ -647,11 +648,37 @@ async function renderKhoangCach(ddList){
   </table></div>`;
 }
 
+function canhBaoTrungKC(){
+  const el=document.getElementById('kc-canhbao');
+  if(!el)return;
+  const a=(document.getElementById('kc-a').value||'').trim().toLowerCase();
+  const b=(document.getElementById('kc-b').value||'').trim().toLowerCase();
+  if(!a||!b){el.textContent='';return;}
+  const trung=(window._kcList||[]).find(k=>
+    (k.diem_a.toLowerCase()===a&&k.diem_b.toLowerCase()===b)||
+    (k.diem_a.toLowerCase()===b&&k.diem_b.toLowerCase()===a)
+  );
+  el.innerHTML=trung?`<i class="ti ti-alert-triangle"></i> Đã có sẵn: ${trung.diem_a} ↔ ${trung.diem_b} = <strong>${trung.km}km</strong> — bấm Thêm sẽ hỏi cập nhật thay vì tạo trùng`:'';
+}
+
 async function themKhoangCach(){
-  const a=document.getElementById('kc-a').value, b=document.getElementById('kc-b').value;
+  const a=document.getElementById('kc-a').value.trim(), b=document.getElementById('kc-b').value.trim();
   const km=Number(document.getElementById('kc-km').value)||0;
   const haiChieu=document.getElementById('kc-2chieu').checked;
-  if(!a||!b||a===b){toast('Chọn đủ 2 điểm khác nhau','error');return;}
+  if(!a||!b||a.toLowerCase()===b.toLowerCase()){toast('Chọn đủ 2 điểm khác nhau','error');return;}
+  // Kiểm tra trùng — không phân biệt hoa/thường, không phân biệt chiều A-B hay B-A
+  const trung=(window._kcList||[]).find(k=>
+    (k.diem_a.toLowerCase()===a.toLowerCase()&&k.diem_b.toLowerCase()===b.toLowerCase())||
+    (k.diem_a.toLowerCase()===b.toLowerCase()&&k.diem_b.toLowerCase()===a.toLowerCase())
+  );
+  if(trung){
+    if(!confirm(`Đã có sẵn "${trung.diem_a} ↔ ${trung.diem_b}" = ${trung.km}km.\nBấm OK để CẬP NHẬT lại thành ${km}km, hoặc Hủy để không làm gì.`))return;
+    const{error}=await db.from('khoang_cach').update({km}).eq('id',trung.id);
+    if(error){toast('Lỗi: '+error.message,'error');return;}
+    toast('Đã cập nhật dòng có sẵn (không tạo trùng)');
+    renderKhoangCach(window._ddList);
+    return;
+  }
   const rows=[{diem_a:a,diem_b:b,km}];
   if(haiChieu) rows.push({diem_a:b,diem_b:a,km});
   const{error}=await db.from('khoang_cach').insert(rows);
