@@ -1927,7 +1927,6 @@ let NKHT_XE='', NKHT_THANG=new Date().toISOString().slice(0,7), NKHT_DATA=null, 
 
 async function pgNhatKyHanhTrinh(c){
   if(!canSee(['quan_ly','ceo','ke_toan'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
-  // Chỉ áp dụng lương khoán km cho xe Nội bộ và Thầu thuê lái — thầu tự lái không nhận lương từ công ty
   const xeApDung=XE.filter(x=>x.loai_phan_loai==='noi_bo'||x.loai_phan_loai==='thau_thue_lai');
   if(!xeApDung.length){c.innerHTML='<div class="empty"><i class="ti ti-info-circle"></i>Chưa có xe Nội bộ/Thầu thuê lái nào trong danh mục</div>';return;}
   if(!NKHT_XE || !xeApDung.some(x=>x.bien_so===NKHT_XE)) NKHT_XE=xeApDung[0].bien_so;
@@ -1935,7 +1934,7 @@ async function pgNhatKyHanhTrinh(c){
   NKHT_KC=kc||[];
   c.innerHTML=`
   <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-    <select id="nkht-xe" onchange="NKHT_XE=this.value;pgNhatKyHanhTrinh(document.getElementById('content'))" style="width:160px">
+    <select id="nkht-xe" onchange="NKHT_XE=this.value;pgNhatKyHanhTrinh(document.getElementById('content'))" style="width:180px">
       ${xeApDung.map(x=>`<option value="${x.bien_so}" ${NKHT_XE===x.bien_so?'selected':''}>${x.bien_so} (${x.loai_phan_loai==='noi_bo'?'Nội bộ':'Thầu thuê lái'})</option>`).join('')}
     </select>
     <input type="month" id="nkht-thang" value="${NKHT_THANG}" onchange="NKHT_THANG=this.value;pgNhatKyHanhTrinh(document.getElementById('content'))" style="width:150px">
