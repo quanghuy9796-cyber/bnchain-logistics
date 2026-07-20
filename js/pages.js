@@ -1962,13 +1962,16 @@ async function taoNhapNKHT(){
   const donCu=(NKHT_DATA.doan_duong||[]).filter(d=>d.nguon==='thu_cong');
   const moi=[];
   (vd||[]).forEach((o,i)=>{
-    moi.push({thu_tu:moi.length+1,ngay:o.ngay,diem_a:o.diem_lay,diem_b:o.diem_tra,km:null,loai_doan:'co_hang',van_don_id:o.id,ma_don:o.ma_don,so_cont:o.so_cont,lai_xe:o.ten_lai_xe,loai_chuyen:o.loai_chuyen,nguon:'tu_dong'});
+    const kmCoHang=tracuuKm(o.diem_lay,o.diem_tra);
+    moi.push({thu_tu:moi.length+1,ngay:o.ngay,diem_a:o.diem_lay,diem_b:o.diem_tra,km:kmCoHang,loai_doan:'co_hang',van_don_id:o.id,ma_don:o.ma_don,so_cont:o.so_cont,lai_xe:o.ten_lai_xe,loai_chuyen:o.loai_chuyen,can_xac_nhan:kmCoHang==null,nguon:'tu_dong'});
     const next=vd[i+1];
     if(next && o.diem_tra!==next.diem_lay){
-      if(next.loai_chuyen==='Kết hợp'){
-        const km=tracuuKm(o.diem_tra,next.diem_lay);
-        moi.push({thu_tu:moi.length+1,ngay:o.ngay,diem_a:o.diem_tra,diem_b:next.diem_lay,km,loai_doan:'rong',van_don_id:null,lai_xe:o.ten_lai_xe,can_xac_nhan:km==null,nguon:'tu_dong'});
-      }
+      const km=tracuuKm(o.diem_tra,next.diem_lay);
+      // Chỉ tự động điền (không hỏi lại) khi đơn kế tiếp là Kết hợp VÀ đã có sẵn km chuẩn.
+      // Mọi trường hợp khác (Thường nối tiếp, hoặc Kết hợp nhưng chưa có km) đều phải xác nhận tay —
+      // vì không có gì đảm bảo xe đi thẳng, có thể đã quay về bãi giữa 2 chuyến.
+      const tuDong=next.loai_chuyen==='Kết hợp'&&km!=null;
+      moi.push({thu_tu:moi.length+1,ngay:o.ngay,diem_a:o.diem_tra,diem_b:next.diem_lay,km,loai_doan:'rong',van_don_id:null,lai_xe:o.ten_lai_xe,can_xac_nhan:!tuDong,nguon:tuDong?'tu_dong':'tu_dong'});
     }
   });
   moi.forEach(d=>{ if(d.loai_chuyen==='Kẹp ghép') d.canh_bao_kep=true; });
@@ -1998,7 +2001,7 @@ function renderNKHT(){
       const kep=doan.some(x=>x.ngay===ngayHT&&x.canh_bao_kep);
       html+=`<div style="font-size:12px;color:var(--text-muted);margin:14px 0 8px;border-bottom:1px solid var(--border);padding-bottom:6px;display:flex;gap:6px;align-items:center">${fmtDate(ngayHT)}${kep?'<span style="width:6px;height:6px;border-radius:50%;background:var(--danger)" title="Có Kẹp/ghép trong ngày — kiểm tra lộ trình"></span>':''}</div>`;
     }
-    if(d.loai_doan==='co_hang'){
+    if(d.loai_doan==='co_hang'&&!d.can_xac_nhan){
       html+=`<div style="display:flex;gap:12px;align-items:center;padding:8px 0">
         <i class="ti ti-truck" style="color:var(--teal)"></i>
         <div style="flex:1">
@@ -2006,6 +2009,15 @@ function renderNKHT(){
           <div style="font-size:12px;color:var(--text-muted)">${d.loai_chuyen||''} · Cont ${d.so_cont||'—'} · ${d.ma_don||''} · ${d.lai_xe||''}</div>
         </div>
         <div style="font-size:14px;font-weight:500">${fmt(d.km||0)} km</div>
+      </div>`;
+    }else if(d.loai_doan==='co_hang'&&d.can_xac_nhan){
+      html+=`<div style="display:flex;gap:12px;align-items:center;padding:8px 0;background:#fef3c7;border-radius:8px;padding-left:12px">
+        <i class="ti ti-alert-triangle" style="color:#92400e"></i>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:500">${d.diem_a} → ${d.diem_b}</div>
+          <div style="font-size:12px;color:#92400e">${d.loai_chuyen||''} · Cont ${d.so_cont||'—'} · ${d.ma_don||''} — chưa có km chuẩn trong Khoảng cách, nhập tay:</div>
+        </div>
+        <input type="number" placeholder="km" style="width:90px" onchange="suaKmCoHangNKHT(${idx},this.value)">
       </div>`;
     }else if(d.can_xac_nhan){
       html+=`<div style="margin-left:27px;border-left:2px dashed var(--warning);padding:8px 0 8px 17px;background:#fef3c7;border-radius:8px">
@@ -2039,6 +2051,12 @@ function xacNhanDoanNKHT(idx,a,b){
   const d=NKHT_DATA.doan_duong[idx];
   d.can_xac_nhan=false; d.nguon='thu_cong';
   if(d.km==null) d.km=tracuuKm(a,b)||0;
+  renderNKHT();
+}
+function suaKmCoHangNKHT(idx,v){
+  NKHT_DATA.doan_duong[idx].km=Number(v)||0;
+  NKHT_DATA.doan_duong[idx].can_xac_nhan=false;
+  NKHT_DATA.doan_duong[idx].nguon='thu_cong';
   renderNKHT();
 }
 function suaKmNKHT(idx,v){NKHT_DATA.doan_duong[idx].km=Number(v)||0;NKHT_DATA.doan_duong[idx].nguon='thu_cong';renderNKHT();}
