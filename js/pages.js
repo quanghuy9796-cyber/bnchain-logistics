@@ -1924,6 +1924,7 @@ const PROXY_URL='/api/gemini'; // Gemini 2.0 Flash
 
 // ==================== NHẬT KÝ HÀNH TRÌNH (lương khoán km) ====================
 let NKHT_XE='', NKHT_THANG=new Date().toISOString().slice(0,7), NKHT_DATA=null, NKHT_KC=[];
+let NKHT_ADDING=null, NKHT_ADDING_MODE=null; // idx đoạn đang mở ô "Qua bãi xe"/"Thêm điểm khác", và mode tương ứng
 
 async function pgNhatKyHanhTrinh(c){
   if(!canSee(['quan_ly','ceo','ke_toan'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
@@ -2020,13 +2021,24 @@ function renderNKHT(){
         <input type="number" placeholder="km" style="width:90px" onchange="suaKmCoHangNKHT(${idx},this.value)">
       </div>`;
     }else if(d.can_xac_nhan){
+      const dangThem=NKHT_ADDING===idx;
       html+=`<div style="margin-left:27px;border-left:2px dashed var(--warning);padding:8px 0 8px 17px;background:#fef3c7;border-radius:8px">
         <div style="font-size:12px;color:#92400e;font-weight:500;margin-bottom:6px"><i class="ti ti-alert-triangle"></i> Đoạn nối chưa xác nhận: ${d.diem_a} → ${d.diem_b}</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:${dangThem?'8':'0'}px">
           <button class="btn btn-xs" onclick="xacNhanDoanNKHT(${idx},'${(d.diem_a||'').replace(/'/g,"\\'")}','${(d.diem_b||'').replace(/'/g,"\\'")}')">Đi thẳng</button>
-          <button class="btn btn-xs" onclick="themDiemNKHT(${idx})">Thêm điểm khác</button>
+          <button class="btn btn-xs ${dangThem&&NKHT_ADDING_MODE==='bai'?'btn-primary':''}" onclick="moThemDiemNKHT(${idx},'bai')">Qua bãi xe (qua nhà)</button>
+          <button class="btn btn-xs ${dangThem&&NKHT_ADDING_MODE==='khac'?'btn-primary':''}" onclick="moThemDiemNKHT(${idx},'khac')">Thêm điểm khác</button>
           <input type="number" placeholder="hoặc nhập km tay" style="width:120px" onchange="suaKmNKHT(${idx},this.value)">
         </div>
+        ${dangThem?`<div style="position:relative;width:260px">
+          <input type="text" id="nkht-diem-input-${idx}" placeholder="${NKHT_ADDING_MODE==='bai'?'Gõ tên bãi xe...':'Gõ tên điểm...'}" autocomplete="off" style="width:100%"
+            oninput="nkhtDiemOnInput(this,'nkht-diem-drop-${idx}')" onkeydown="if(event.key==='Enter')xacNhanThemDiemNKHT(${idx})">
+          <div id="nkht-diem-drop-${idx}" data-input-id="nkht-diem-input-${idx}" style="display:none;position:absolute;z-index:999;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:220px;overflow-y:auto"></div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <button class="btn btn-xs btn-primary" onclick="xacNhanThemDiemNKHT(${idx})">Xác nhận</button>
+            <button class="btn btn-xs" onclick="NKHT_ADDING=null;renderNKHT()">Hủy</button>
+          </div>
+        </div>`:''}
       </div>`;
     }else{
       html+=`<div style="display:flex;gap:12px;align-items:center;padding:6px 0;opacity:0.75">
@@ -2061,15 +2073,52 @@ function suaKmCoHangNKHT(idx,v){
 }
 function suaKmNKHT(idx,v){NKHT_DATA.doan_duong[idx].km=Number(v)||0;NKHT_DATA.doan_duong[idx].nguon='thu_cong';renderNKHT();}
 function xoaDoanNKHT(idx){NKHT_DATA.doan_duong.splice(idx,1);renderNKHT();}
-function themDiemNKHT(idx){
-  const diem=prompt('Nhập tên điểm trung gian (VD: Bãi xe):');
-  if(!diem)return;
+
+function moThemDiemNKHT(idx,mode){
+  NKHT_ADDING=idx; NKHT_ADDING_MODE=mode;
+  renderNKHT();
+  setTimeout(()=>document.getElementById('nkht-diem-input-'+idx)?.focus(),50);
+}
+// Dropdown gợi ý điểm cho Nhật ký hành trình — cùng logic bỏ dấu + viết tắt như ô Khoảng cách/vận đơn
+function nkhtDiemOnInput(el,dropId){
+  const q=removeAccents(el.value.trim());
+  const drop=document.getElementById(dropId);
+  if(!drop)return;
+  if(!q){drop.style.display='none';return;}
+  const matches=(DD||[]).filter(d=>{
+    const haystack=removeAccents((d.ten_chuan||'')+' '+(d.viet_tat||'')+' '+(d.dia_phuong||''));
+    return haystack.includes(q);
+  }).slice(0,8);
+  if(!matches.length){drop.style.display='none';return;}
+  drop.innerHTML=matches.map(d=>{
+    const safe=d.ten_chuan.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return '<div onclick="nkhtPickDiem(\''+dropId+'\',\''+safe+'\')"'
+      +' style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px"'
+      +' onmouseover="this.style.background=\'var(--teal-light)\'" onmouseout="this.style.background=\'\'">'
+      +'<span style="font-weight:600;color:var(--sidebar-bg)">'+d.ten_chuan+'</span>'
+      +(d.dia_phuong?'<span style="color:var(--text-muted);margin-left:6px;font-size:11px">'+d.dia_phuong+'</span>':'')
+      +'</div>';
+  }).join('');
+  drop.style.display='block';
+}
+function nkhtPickDiem(dropId,tenChuan){
+  const drop=document.getElementById(dropId);
+  if(!drop)return;
+  const inputId=drop.dataset.inputId;
+  const input=inputId?document.getElementById(inputId):null;
+  if(input)input.value=tenChuan;
+  setTimeout(()=>{if(drop)drop.style.display='none';},80);
+}
+function xacNhanThemDiemNKHT(idx){
+  const diem=(document.getElementById('nkht-diem-input-'+idx)?.value||'').trim();
+  if(!diem){toast('Chọn/gõ tên điểm trước','error');return;}
   const d=NKHT_DATA.doan_duong[idx];
-  const km1=tracuuKm(d.diem_a,diem)||0, km2=tracuuKm(diem,d.diem_b)||0;
+  const km1=tracuuKm(d.diem_a,diem), km2=tracuuKm(diem,d.diem_b);
   NKHT_DATA.doan_duong.splice(idx,1,
-    {...d,diem_b:diem,km:km1,can_xac_nhan:false,nguon:'thu_cong'},
-    {diem_a:diem,diem_b:d.diem_b,km:km2,loai_doan:'rong',ngay:d.ngay,can_xac_nhan:false,nguon:'thu_cong'}
+    {...d,diem_b:diem,km:km1||0,can_xac_nhan:km1==null,nguon:'thu_cong'},
+    {diem_a:diem,diem_b:d.diem_b,km:km2||0,loai_doan:'rong',ngay:d.ngay,can_xac_nhan:km2==null,nguon:'thu_cong'}
   );
+  NKHT_ADDING=null;NKHT_ADDING_MODE=null;
   renderNKHT();
 }
 
