@@ -520,9 +520,68 @@ async function pgDiaDiem(c){
     <thead><tr><th>Tên chuẩn</th><th>Loại</th><th>Địa phương</th><th>Viết tắt / gợi ý tìm</th><th>Thao tác</th></tr></thead>
     <tbody id="dd-tbody"></tbody>
   </table></div>
-  <div id="bgl-wrap" style="margin-top:24px"></div>`;
+  <div id="bgl-wrap" style="margin-top:24px"></div>
+  <div id="kc-wrap" style="margin-top:24px"></div>`;
   renderDDTable(list);
   renderBangGiaLuong(list);
+  renderKhoangCach(list);
+}
+
+// ============ KHOẢNG CÁCH GIỮA 2 ĐIỂM (cho Nhật ký hành trình) ============
+// Riêng biệt với Bảng giá lương ở trên — đây là km thực tế, không phải giá tiền.
+async function renderKhoangCach(ddList){
+  const wrap=document.getElementById('kc-wrap');
+  if(!wrap)return;
+  if(!canSee(['quan_ly','ceo'])){wrap.innerHTML='';return;}
+  const{data,error}=await db.from('khoang_cach').select('*').order('id');
+  if(error){wrap.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Chưa có bảng khoang_cach — chạy SQL migration trước</div>`;return;}
+  window._kcList=data||[];
+  const ddOpts=ddList.map(d=>`<option value="${d.ten_chuan}">${d.ten_chuan}</option>`).join('');
+  wrap.innerHTML=`
+  <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:2px"><i class="ti ti-ruler-2"></i> Khoảng cách giữa các điểm (km)</div>
+  <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Dùng để tính đoạn rỗng trong Nhật ký hành trình. Mặc định 2 chiều bằng nhau — sửa riêng nếu cần.</div>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+    <select id="kc-a" style="width:200px"><option value="">-- Điểm A --</option>${ddOpts}</select>
+    <span style="font-size:13px;color:var(--text-muted)">↔</span>
+    <select id="kc-b" style="width:200px"><option value="">-- Điểm B --</option>${ddOpts}</select>
+    <input type="number" id="kc-km" placeholder="Km" style="width:100px">
+    <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="kc-2chieu" checked> 2 chiều bằng nhau</label>
+    <button class="btn btn-primary btn-sm" onclick="themKhoangCach()"><i class="ti ti-plus"></i> Thêm</button>
+  </div>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Điểm A</th><th>Điểm B</th><th>Km</th><th>Thao tác</th></tr></thead>
+    <tbody>
+    ${(window._kcList.length?window._kcList:[]).map(k=>`<tr>
+      <td>${k.diem_a}</td><td>${k.diem_b}</td>
+      <td><input type="number" value="${k.km}" style="width:90px" onchange="suaKhoangCach(${k.id},this.value)"></td>
+      <td><button class="btn btn-xs btn-danger" onclick="xoaKhoangCach(${k.id})"><i class="ti ti-trash"></i></button></td>
+    </tr>`).join('')||'<tr><td colspan="4"><div class="empty">Chưa có khoảng cách nào</div></td></tr>'}
+    </tbody>
+  </table></div>`;
+}
+
+async function themKhoangCach(){
+  const a=document.getElementById('kc-a').value, b=document.getElementById('kc-b').value;
+  const km=Number(document.getElementById('kc-km').value)||0;
+  const haiChieu=document.getElementById('kc-2chieu').checked;
+  if(!a||!b||a===b){toast('Chọn đủ 2 điểm khác nhau','error');return;}
+  const rows=[{diem_a:a,diem_b:b,km}];
+  if(haiChieu) rows.push({diem_a:b,diem_b:a,km});
+  const{error}=await db.from('khoang_cach').insert(rows);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast('Đã thêm khoảng cách');
+  renderKhoangCach(window._ddList);
+}
+async function suaKhoangCach(id,km){
+  const{error}=await db.from('khoang_cach').update({km:Number(km)||0}).eq('id',id);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast('Đã cập nhật');
+}
+async function xoaKhoangCach(id){
+  if(!confirm('Xóa dòng khoảng cách này?'))return;
+  const{error}=await db.from('khoang_cach').delete().eq('id',id);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  renderKhoangCach(window._ddList);
 }
 
 // ============ BẢNG GIÁ LƯƠNG LÁI XE THEO TỈNH (gộp 1 dòng cấu hình, không CRUD từng dòng) ============
