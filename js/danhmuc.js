@@ -623,13 +623,14 @@ async function renderKhoangCach(ddList){
   const{data,error}=await db.from('khoang_cach').select('*').order('id');
   if(error){wrap.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Chưa có bảng khoang_cach — chạy SQL migration trước</div>`;return;}
   window._kcList=data||[];
-  const ddOpts=ddList.map(d=>`<option value="${d.ten_chuan}">${d.ten_chuan}</option>`).join('');
+  const ddOpts=ddList.map(d=>`<option value="${d.ten_chuan}">`).join('');
   wrap.innerHTML=`
   <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Dùng để tính đoạn rỗng trong Nhật ký hành trình. Mặc định 2 chiều bằng nhau — sửa riêng nếu cần.</div>
+  <datalist id="kc-diem-dl">${ddOpts}</datalist>
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-    <select id="kc-a" style="width:200px"><option value="">-- Điểm A --</option>${ddOpts}</select>
+    <input type="text" id="kc-a" list="kc-diem-dl" placeholder="Gõ tên điểm A..." style="width:220px">
     <span style="font-size:13px;color:var(--text-muted)">↔</span>
-    <select id="kc-b" style="width:200px"><option value="">-- Điểm B --</option>${ddOpts}</select>
+    <input type="text" id="kc-b" list="kc-diem-dl" placeholder="Gõ tên điểm B..." style="width:220px">
     <input type="number" id="kc-km" placeholder="Km" style="width:100px">
     <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="kc-2chieu" checked> 2 chiều bằng nhau</label>
     <button class="btn btn-primary btn-sm" onclick="themKhoangCach()"><i class="ti ti-plus"></i> Thêm</button>
