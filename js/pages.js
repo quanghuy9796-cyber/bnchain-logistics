@@ -1921,3 +1921,171 @@ async function loadBaoCao(){
 
 // ==================== UPLOAD HÓA ĐƠN ====================
 const PROXY_URL='/api/gemini'; // Gemini 2.0 Flash
+
+// ==================== NHẬT KÝ HÀNH TRÌNH (lương khoán km) ====================
+let NKHT_XE='', NKHT_THANG=new Date().toISOString().slice(0,7), NKHT_DATA=null, NKHT_KC=[];
+
+async function pgNhatKyHanhTrinh(c){
+  if(!canSee(['quan_ly','ceo','ke_toan'])){c.innerHTML='<div class="empty"><i class="ti ti-lock"></i>Không có quyền</div>';return;}
+  // Chỉ áp dụng lương khoán km cho xe Nội bộ và Thầu thuê lái — thầu tự lái không nhận lương từ công ty
+  const xeApDung=XE.filter(x=>x.loai_phan_loai==='noi_bo'||x.loai_phan_loai==='thau_thue_lai');
+  if(!xeApDung.length){c.innerHTML='<div class="empty"><i class="ti ti-info-circle"></i>Chưa có xe Nội bộ/Thầu thuê lái nào trong danh mục</div>';return;}
+  if(!NKHT_XE || !xeApDung.some(x=>x.bien_so===NKHT_XE)) NKHT_XE=xeApDung[0].bien_so;
+  const{data:kc}=await db.from('khoang_cach').select('*');
+  NKHT_KC=kc||[];
+  c.innerHTML=`
+  <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+    <select id="nkht-xe" onchange="NKHT_XE=this.value;pgNhatKyHanhTrinh(document.getElementById('content'))" style="width:160px">
+      ${xeApDung.map(x=>`<option value="${x.bien_so}" ${NKHT_XE===x.bien_so?'selected':''}>${x.bien_so} (${x.loai_phan_loai==='noi_bo'?'Nội bộ':'Thầu thuê lái'})</option>`).join('')}
+    </select>
+    <input type="month" id="nkht-thang" value="${NKHT_THANG}" onchange="NKHT_THANG=this.value;pgNhatKyHanhTrinh(document.getElementById('content'))" style="width:150px">
+    <button class="btn" onclick="taoNhapNKHT()"><i class="ti ti-refresh"></i> Tạo/cập nhật nháp</button>
+    <span id="nkht-trangthai" style="margin-left:auto;font-size:12px;color:var(--text-muted)"></span>
+  </div>
+  <div id="nkht-body" style="background:var(--card);border-radius:var(--r);padding:1rem 1.25rem"></div>`;
+  await loadNKHT();
+}
+
+async function loadNKHT(){
+  const{data}=await db.from('nhat_ky_hanh_trinh').select('*').eq('bien_so',NKHT_XE).eq('thang',NKHT_THANG).maybeSingle();
+  NKHT_DATA=data||{bien_so:NKHT_XE,thang:NKHT_THANG,trang_thai:'nhap',doan_duong:[],tong_km:0};
+  renderNKHT();
+}
+
+async function taoNhapNKHT(){
+  const[y,m]=NKHT_THANG.split('-');
+  const dauThang=`${y}-${m}-01`;
+  const cuoiThang=new Date(+y,+m,0).getDate();
+  const cuoiThangStr=`${y}-${m}-${String(cuoiThang).padStart(2,'0')}`;
+  const{data:vd,error}=await db.from('van_don').select('id,ma_don,ngay,diem_lay,diem_tra,loai_chuyen,so_cont,ten_lai_xe,created_at,thu_tu_trong_ngay')
+    .eq('bien_kiem_soat',NKHT_XE).gte('ngay',dauThang).lte('ngay',cuoiThangStr).order('thu_tu_trong_ngay',{ascending:true,nullsFirst:false}).order('created_at');
+  if(error){toast('Lỗi tải vận đơn: '+error.message,'error');return;}
+  const donCu=(NKHT_DATA.doan_duong||[]).filter(d=>d.nguon==='thu_cong');
+  const moi=[];
+  (vd||[]).forEach((o,i)=>{
+    moi.push({thu_tu:moi.length+1,ngay:o.ngay,diem_a:o.diem_lay,diem_b:o.diem_tra,km:null,loai_doan:'co_hang',van_don_id:o.id,ma_don:o.ma_don,so_cont:o.so_cont,lai_xe:o.ten_lai_xe,loai_chuyen:o.loai_chuyen,nguon:'tu_dong'});
+    const next=vd[i+1];
+    if(next && o.diem_tra!==next.diem_lay){
+      if(next.loai_chuyen==='Kết hợp'){
+        const km=tracuuKm(o.diem_tra,next.diem_lay);
+        moi.push({thu_tu:moi.length+1,ngay:o.ngay,diem_a:o.diem_tra,diem_b:next.diem_lay,km,loai_doan:'rong',van_don_id:null,lai_xe:o.ten_lai_xe,can_xac_nhan:km==null,nguon:'tu_dong'});
+      }
+    }
+  });
+  moi.forEach(d=>{ if(d.loai_chuyen==='Kẹp ghép') d.canh_bao_kep=true; });
+  NKHT_DATA.doan_duong=[...moi,...donCu].sort((a,b)=>(a.ngay||'').localeCompare(b.ngay||''));
+  renderNKHT();
+  toast('Đã tạo/cập nhật bản nháp — nhớ bấm Lưu');
+}
+
+function tracuuKm(a,b){
+  const hit=NKHT_KC.find(k=>(k.diem_a===a&&k.diem_b===b)||(k.diem_a===b&&k.diem_b===a));
+  return hit?Number(hit.km):null;
+}
+
+function renderNKHT(){
+  const wrap=document.getElementById('nkht-body');
+  if(!wrap)return;
+  const locked=NKHT_DATA.trang_thai==='da_duyet';
+  document.getElementById('nkht-trangthai').innerHTML=locked?'<span style="color:var(--success);font-weight:600"><i class="ti ti-lock"></i> Đã duyệt</span>':'<span style="color:var(--warning);font-weight:600">Nháp</span>';
+  const doan=NKHT_DATA.doan_duong||[];
+  const tongKm=doan.reduce((s,d)=>s+(Number(d.km)||0),0);
+  const conThieu=doan.filter(d=>d.can_xac_nhan).length;
+  let ngayHT='';
+  let html='';
+  doan.forEach((d,idx)=>{
+    if(d.ngay!==ngayHT){
+      ngayHT=d.ngay;
+      const kep=doan.some(x=>x.ngay===ngayHT&&x.canh_bao_kep);
+      html+=`<div style="font-size:12px;color:var(--text-muted);margin:14px 0 8px;border-bottom:1px solid var(--border);padding-bottom:6px;display:flex;gap:6px;align-items:center">${fmtDate(ngayHT)}${kep?'<span style="width:6px;height:6px;border-radius:50%;background:var(--danger)" title="Có Kẹp/ghép trong ngày — kiểm tra lộ trình"></span>':''}</div>`;
+    }
+    if(d.loai_doan==='co_hang'){
+      html+=`<div style="display:flex;gap:12px;align-items:center;padding:8px 0">
+        <i class="ti ti-truck" style="color:var(--teal)"></i>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:500">${d.diem_a} → ${d.diem_b}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${d.loai_chuyen||''} · Cont ${d.so_cont||'—'} · ${d.ma_don||''} · ${d.lai_xe||''}</div>
+        </div>
+        <div style="font-size:14px;font-weight:500">${fmt(d.km||0)} km</div>
+      </div>`;
+    }else if(d.can_xac_nhan){
+      html+=`<div style="margin-left:27px;border-left:2px dashed var(--warning);padding:8px 0 8px 17px;background:#fef3c7;border-radius:8px">
+        <div style="font-size:12px;color:#92400e;font-weight:500;margin-bottom:6px"><i class="ti ti-alert-triangle"></i> Đoạn nối chưa xác nhận: ${d.diem_a} → ${d.diem_b}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-xs" onclick="xacNhanDoanNKHT(${idx},'${(d.diem_a||'').replace(/'/g,"\\'")}','${(d.diem_b||'').replace(/'/g,"\\'")}')">Đi thẳng</button>
+          <button class="btn btn-xs" onclick="themDiemNKHT(${idx})">Thêm điểm khác</button>
+          <input type="number" placeholder="hoặc nhập km tay" style="width:120px" onchange="suaKmNKHT(${idx},this.value)">
+        </div>
+      </div>`;
+    }else{
+      html+=`<div style="display:flex;gap:12px;align-items:center;padding:6px 0;opacity:0.75">
+        <i class="ti ti-arrow-right" style="color:var(--text-muted)"></i>
+        <div style="flex:1;font-size:13px">${d.diem_a} → ${d.diem_b} <span style="font-size:11px;color:var(--text-muted)">(rỗng)</span></div>
+        <input type="number" value="${d.km||0}" style="width:90px" onchange="suaKmNKHT(${idx},this.value)">
+        <i class="ti ti-trash" style="cursor:pointer;color:var(--danger)" onclick="xoaDoanNKHT(${idx})"></i>
+      </div>`;
+    }
+  });
+  wrap.innerHTML=(html||'<div class="empty">Chưa có dữ liệu — bấm "Tạo/cập nhật nháp"</div>')+
+  `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+    <div style="font-size:13px;color:var(--text-muted)">Tổng km: <strong style="color:var(--text-primary)">${fmt(tongKm)}</strong>${conThieu?` · Còn ${conThieu} đoạn chưa xác nhận`:''}</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="luuNKHT()">Lưu</button>
+      ${locked?`<button class="btn" onclick="moKhoaNKHT()">Mở khóa</button>`:`<button class="btn btn-primary" ${conThieu?'disabled title="Còn đoạn chưa xác nhận"':''} onclick="duyetNKHT()">Duyệt tháng</button>`}
+    </div>
+  </div>`;
+}
+
+function xacNhanDoanNKHT(idx,a,b){
+  const d=NKHT_DATA.doan_duong[idx];
+  d.can_xac_nhan=false; d.nguon='thu_cong';
+  if(d.km==null) d.km=tracuuKm(a,b)||0;
+  renderNKHT();
+}
+function suaKmNKHT(idx,v){NKHT_DATA.doan_duong[idx].km=Number(v)||0;NKHT_DATA.doan_duong[idx].nguon='thu_cong';renderNKHT();}
+function xoaDoanNKHT(idx){NKHT_DATA.doan_duong.splice(idx,1);renderNKHT();}
+function themDiemNKHT(idx){
+  const diem=prompt('Nhập tên điểm trung gian (VD: Bãi xe):');
+  if(!diem)return;
+  const d=NKHT_DATA.doan_duong[idx];
+  const km1=tracuuKm(d.diem_a,diem)||0, km2=tracuuKm(diem,d.diem_b)||0;
+  NKHT_DATA.doan_duong.splice(idx,1,
+    {...d,diem_b:diem,km:km1,can_xac_nhan:false,nguon:'thu_cong'},
+    {diem_a:diem,diem_b:d.diem_b,km:km2,loai_doan:'rong',ngay:d.ngay,can_xac_nhan:false,nguon:'thu_cong'}
+  );
+  renderNKHT();
+}
+
+async function luuNKHT(){
+  const tongKm=(NKHT_DATA.doan_duong||[]).reduce((s,d)=>s+(Number(d.km)||0),0);
+  const{error}=await db.from('nhat_ky_hanh_trinh').upsert({
+    bien_so:NKHT_XE,thang:NKHT_THANG,trang_thai:NKHT_DATA.trang_thai||'nhap',
+    doan_duong:NKHT_DATA.doan_duong,tong_km:tongKm,updated_at:new Date().toISOString()
+  },{onConflict:'bien_so,thang'});
+  if(error){toast('Lỗi lưu: '+error.message,'error');return;}
+  toast('Đã lưu nhật ký hành trình');
+}
+
+async function duyetNKHT(){
+  const conThieu=(NKHT_DATA.doan_duong||[]).some(d=>d.can_xac_nhan);
+  if(conThieu){toast('Còn đoạn chưa xác nhận, không thể duyệt','error');return;}
+  const xeInfo=XE.find(x=>x.bien_so===NKHT_XE);
+  const tongKm=(NKHT_DATA.doan_duong||[]).reduce((s,d)=>s+(Number(d.km)||0),0);
+  const{error}=await db.from('nhat_ky_hanh_trinh').upsert({
+    bien_so:NKHT_XE,thang:NKHT_THANG,trang_thai:'da_duyet',
+    doan_duong:NKHT_DATA.doan_duong,tong_km:tongKm,
+    dinh_muc_ap_dung:xeInfo?.dinh_muc_khoan||0,
+    nguoi_duyet:CU?.ho_ten,ngay_duyet:new Date().toISOString(),updated_at:new Date().toISOString()
+  },{onConflict:'bien_so,thang'});
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  toast('Đã duyệt tháng');
+  await loadNKHT();
+}
+
+async function moKhoaNKHT(){
+  if(!canSee(['quan_ly','ceo'])){toast('Không có quyền mở khóa','error');return;}
+  if(!confirm('Mở khóa nhật ký tháng này để sửa lại?'))return;
+  const{error}=await db.from('nhat_ky_hanh_trinh').update({trang_thai:'nhap'}).eq('bien_so',NKHT_XE).eq('thang',NKHT_THANG);
+  if(error){toast('Lỗi: '+error.message,'error');return;}
+  await loadNKHT();
+}
