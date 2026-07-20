@@ -192,6 +192,11 @@ function openAddXe(existing={}){
         <option value="noi_bo" ${existing.loai_phan_loai==='noi_bo'?'selected':''}>🚗 Xe nội bộ</option>
       </select></div>
     <div class="form-group"><label>Tải trọng</label><input id="xe-tt" value="${existing.tai_trong||''}" placeholder="20 tấn"></div>
+    <div class="form-group" id="xe-dinhmuc-group" style="${(existing.loai_phan_loai==='noi_bo'||existing.loai_phan_loai==='thau_thue_lai')?'':'display:none'}">
+      <label>Định mức khoán (lít/km)</label>
+      <input id="xe-dinhmuc" type="number" step="0.01" value="${existing.dinh_muc_khoan||''}" placeholder="VD: 0.35">
+      <span style="font-size:10px;color:var(--text-muted)">Dùng để tính lương khoán km ở Nhật ký hành trình</span>
+    </div>
     <div class="form-group" id="xe-thau-group" style="${existing.loai_phan_loai==='noi_bo'?'display:none':''}">
       <label>Thầu phụ</label>
       <select id="xe-tp"><option value="">-- Chọn --</option>${tpOpts}</select>
@@ -213,8 +218,11 @@ function openAddXe(existing={}){
 function toggleXeFields(){
   const pl=document.getElementById('xe-pl')?.value;
   const thauGrp=document.getElementById('xe-thau-group');
+  const dmGrp=document.getElementById('xe-dinhmuc-group');
   // Ẩn thầu phụ nếu xe nội bộ
   if(thauGrp)thauGrp.style.display=pl==='noi_bo'?'none':'';
+  // Định mức khoán km chỉ áp dụng nội bộ + thầu thuê lái (thầu tự lái không nhận lương công ty)
+  if(dmGrp)dmGrp.style.display=(pl==='noi_bo'||pl==='thau_thue_lai')?'':'none';
   // Lái xe luôn hiện cho mọi loại
 }
 async function editXe(id){
@@ -236,6 +244,7 @@ async function saveXeModal(id=''){
     ma_thau_phu:tpMa,
     ten_thau_phu:tpTen,
     nam_sx:+document.getElementById('xe-nam')?.value||null,
+    dinh_muc_khoan:document.getElementById('xe-dinhmuc')?.value?+document.getElementById('xe-dinhmuc').value:null,
     la_xe_noi_bo:pl==='noi_bo',
     ghi_chu:document.getElementById('xe-gc')?.value||'',
   };
@@ -520,11 +529,23 @@ async function pgDiaDiem(c){
     <thead><tr><th>Tên chuẩn</th><th>Loại</th><th>Địa phương</th><th>Viết tắt / gợi ý tìm</th><th>Thao tác</th></tr></thead>
     <tbody id="dd-tbody"></tbody>
   </table></div>
-  <div id="bgl-wrap" style="margin-top:24px"></div>
-  <div id="kc-wrap" style="margin-top:24px"></div>`;
+  <div style="display:flex;gap:8px;margin-top:24px;border-bottom:1px solid var(--border)">
+    <button class="btn btn-sm ${DD_SUBTAB==='giaLuong'?'btn-primary':''}" onclick="chuyenDDSubTab('giaLuong')">Bảng giá lương</button>
+    <button class="btn btn-sm ${DD_SUBTAB==='khoangCach'?'btn-primary':''}" onclick="chuyenDDSubTab('khoangCach')">Khoảng cách</button>
+  </div>
+  <div id="bgl-wrap" style="margin-top:16px;${DD_SUBTAB!=='giaLuong'?'display:none':''}"></div>
+  <div id="kc-wrap" style="margin-top:16px;${DD_SUBTAB!=='khoangCach'?'display:none':''}"></div>`;
   renderDDTable(list);
   renderBangGiaLuong(list);
   renderKhoangCach(list);
+}
+let DD_SUBTAB='giaLuong';
+function chuyenDDSubTab(t){
+  DD_SUBTAB=t;
+  document.getElementById('bgl-wrap').style.display=t==='giaLuong'?'':'none';
+  document.getElementById('kc-wrap').style.display=t==='khoangCach'?'':'none';
+  document.querySelectorAll('#content .btn-sm').forEach(b=>b.classList.remove('btn-primary'));
+  event?.target?.classList.add('btn-primary');
 }
 
 // ============ KHOẢNG CÁCH GIỮA 2 ĐIỂM (cho Nhật ký hành trình) ============
