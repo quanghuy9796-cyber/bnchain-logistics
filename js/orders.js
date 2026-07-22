@@ -506,6 +506,7 @@ function _timGiaGanNhat(o,loai){
     if(x.id===o.id||!x.locked)return false;
     if(x.diem_lay!==o.diem_lay||x.diem_tra!==o.diem_tra)return false;
     if(x.ten_khach!==o.ten_khach)return false;
+    if(x.loai_cont!==o.loai_cont)return false;
     if(loai==='thau'&&x.ma_thau_phu!==o.ma_thau_phu)return false;
     if(loai==='khach'&&(+x.gia_cuoc_khach||0)<=0)return false;
     if(loai==='thau'&&(+x.gia_cuoc_thau||0)<=0)return false;
