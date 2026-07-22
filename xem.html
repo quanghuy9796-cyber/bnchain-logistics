@@ -112,10 +112,10 @@ function render(data,ymChon,thangs){
     <div class="card">
       ${!rows.length?'<div class="empty">Không có chuyến nào trong tháng này</div>':`
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Tuyến đường</th><th>Cont</th><th>Loại</th><th>BKS</th>
+        <thead><tr><th>Ngày</th><th>Tuyến đường</th><th>Cont</th><th>Loại</th><th>BKS</th>
           <th class="right">Cước thầu</th><th class="right">Phát sinh</th><th class="right">Trừ lương LX</th><th class="right">Tổng</th></tr></thead>
         <tbody>${rows.map(r=>`<tr>
-          <td>${fmtDate(r.ngay)}</td><td>${r.ma_don}</td><td>${r.hanh_trinh}</td>
+          <td>${fmtDate(r.ngay)}</td><td>${r.hanh_trinh}</td>
           <td>${r.so_cont||'—'}<br><span class="muted" style="font-size:10px">${r.loai_cont||''}</span></td>
           <td>${lcTag(r.loai_chuyen)}</td><td>${r.bien_kiem_soat||'—'}</td>
           <td class="right">${fmt(r.gia_cuoc_thau)}</td>
@@ -123,7 +123,7 @@ function render(data,ymChon,thangs){
           <td class="right">${r.tru_luong_lx?'-'+fmt(r.tru_luong_lx):'—'}</td>
           <td class="right" style="font-weight:600">${fmt(r.tong)}</td>
         </tr>`).join('')}</tbody>
-        <tfoot><tr><td colspan="9">Tổng cộng</td><td class="right">${fmt(tongThang)}</td></tr></tfoot>
+        <tfoot><tr><td colspan="8">Tổng cộng</td><td class="right">${fmt(tongThang)}</td></tr></tfoot>
       </table></div>`}
     </div>
     <div class="foot-note">Dữ liệu chỉ gồm các chuyến đã chốt (khóa sổ), tối đa trong 3 tháng gần nhất. Có thắc mắc, vui lòng liên hệ điều vận/kế toán BN Chain.</div>`;
@@ -138,10 +138,11 @@ function render(data,ymChon,thangs){
     <div class="card">
       ${!rows.length?'<div class="empty">Không có chuyến nào trong tháng này</div>':`
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Ngày</th><th>Mã đơn</th><th>BKS</th><th>Tuyến đường</th><th>Loại</th>
+        <thead><tr><th>Ngày</th><th>BKS</th><th>Tuyến đường</th><th>Cont</th><th>Loại</th>
           <th class="right">Lương chuyến</th><th class="right">Chi hộ trả LX</th><th class="right">Tổng</th></tr></thead>
         <tbody>${rows.map(r=>`<tr>
-          <td>${fmtDate(r.ngay)}</td><td>${r.ma_don}</td><td>${r.bien_kiem_soat||'—'}</td><td>${r.hanh_trinh}</td>
+          <td>${fmtDate(r.ngay)}</td><td>${r.bien_kiem_soat||'—'}</td><td>${r.hanh_trinh}</td>
+          <td>${r.so_cont||'—'}<br><span class="muted" style="font-size:10px">${r.loai_cont||''}</span></td>
           <td>${lcTag(r.loai_chuyen)}</td>
           <td class="right">${r.khong_trucking?'<span style="font-size:10px;color:var(--teal)">KHÔNG TRUCKING</span>':fmt(r.luong_chuyen)}</td>
           <td class="right">${r.tra_lx?fmt(r.tra_lx):'—'}</td>
