@@ -3,11 +3,12 @@
 // Dùng SERVICE ROLE KEY (server-side only, KHÔNG lộ ra client) để bypass RLS đọc dữ liệu cần thiết,
 // nhưng chỉ trả về đúng các cột đã whitelist — không trả nguyên bản ghi van_don.
 
-const SUPA_URL = 'https://vcrnlyvdquodiqfwaogj.supabase.co';
+// Import file công thức DÙNG CHUNG với web app (../js/luong-calc.js) — side-effect import: chạy file này
+// để nó tự gắn chuanHoaTen()/tinhTuDiaPhuong()/tinhLuongChuyen() vào globalThis, dùng thẳng bên dưới
+// KHÔNG viết lại công thức ở đây để tránh lệch số với bảng lương nội bộ (loadBangLuong() trong pages.js).
+import '../js/luong-calc.js';
 
-function chuanHoaTen(s) {
-  return (s || '').trim().replace(/\s+/g, ' ').toLowerCase();
-}
+const SUPA_URL = 'https://vcrnlyvdquodiqfwaogj.supabase.co';
 
 async function sbFetch(path, serviceKey) {
   const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
@@ -102,19 +103,19 @@ export default async function handler(req, res) {
     const chMap = {};
     chiHo.forEach(r => { chMap[r.van_don_id] = (chMap[r.van_don_id] || 0) + (+r.tien_tra_laixe || 0); });
 
-    // Cần bảng điểm & tỉnh để tính lương chuyến — lấy kèm
+    // Cần bảng điểm để tra dia_phuong của điểm trả — tinhLuongChuyen() (từ luong-calc.js) tự tách tỉnh
     const diaDiem = await sbFetch(`dia_diem?select=ten_chuan,dia_phuong`, serviceKey).catch(() => []);
-    const tinhCuaDiem = ten => (diaDiem.find(d => d.ten_chuan === ten) || {}).dia_phuong || null;
+    const diaPhuongCuaDiem = ten => (diaDiem.find(d => d.ten_chuan === ten) || {}).dia_phuong || null;
 
     const rows = list.map(o => {
-      const khongTrucking = /kh[oô]ng\s*trucking/i.test((o.diem_tra || '') + ' ' + (o.diem_tra_phat_sinh || ''));
       const traLX = chMap[o.id] || 0;
-      if (khongTrucking) return { ngay: o.ngay, ma_don: o.ma_don, bien_kiem_soat: o.bien_kiem_soat, hanh_trinh: `${o.diem_lay || ''} → ${o.diem_tra || ''}`, loai_chuyen: o.loai_chuyen, khong_trucking: true, luong_chuyen: 0, tra_lx: traLX, tong: traLX };
-      const tinh = tinhCuaDiem(o.diem_tra);
-      const g = tinh ? bangGia[tinh] : null;
-      const laKetHop = o.loai_chuyen === 'Kết hợp' || o.loai_chuyen === 'Kẹp ghép';
-      const luongChuyen = g ? (laKetHop ? (+g.ket_hop || 0) : (+g.thuong || 0)) : 0;
-      return { ngay: o.ngay, ma_don: o.ma_don, bien_kiem_soat: o.bien_kiem_soat, hanh_trinh: `${o.diem_lay || ''} → ${o.diem_tra || ''}`, loai_chuyen: o.loai_chuyen, khong_trucking: false, luong_chuyen: luongChuyen, tra_lx: traLX, tong: luongChuyen + traLX };
+      const { khongTrucking, luongChuyen } = tinhLuongChuyen(o, diaPhuongCuaDiem(o.diem_tra), bangGia);
+      const lc = luongChuyen || 0;
+      return {
+        ngay: o.ngay, ma_don: o.ma_don, bien_kiem_soat: o.bien_kiem_soat,
+        hanh_trinh: `${o.diem_lay || ''} → ${o.diem_tra || ''}`, loai_chuyen: o.loai_chuyen,
+        khong_trucking: khongTrucking, luong_chuyen: lc, tra_lx: traLX, tong: lc + traLX,
+      };
     });
 
     return res.status(200).json({
