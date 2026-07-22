@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>BN CHAIN — Xem bảng kê</title>
+<style>
+:root{--primary:#E8820C;--teal:#3d7a8a;--teal-dark:#2d5f6d;--text:#1a2a30;--text-muted:#5a7a85;--border:#dde8eb;--bg:#f0f5f7;--white:#fff;--success:#16a34a;--danger:#dc2626;--r:8px}
+*{box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;background:var(--bg);color:var(--text);margin:0;padding:16px}
+.wrap{max-width:900px;margin:0 auto}
+.brand{text-align:center;margin-bottom:16px}
+.brand .b{font-size:22px;font-weight:700;color:var(--teal)}
+.brand .b span{color:var(--primary)}
+.brand .s{font-size:10px;color:var(--text-muted);letter-spacing:1px;margin-top:2px}
+.card{background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px}
+.hd{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:4px}
+.hd h2{margin:0;font-size:16px}
+.hd .muted{font-size:11px;color:var(--text-muted)}
+.total{background:linear-gradient(135deg,#1a2f38,var(--teal-dark));border-radius:var(--r);padding:14px 16px;color:#fff;text-align:center;margin-bottom:14px}
+.total .lbl{font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.5px}
+.total .val{font-size:24px;font-weight:700;margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{padding:7px 8px;text-align:left;font-size:10px;font-weight:600;color:var(--text-muted);border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+tfoot td{font-weight:700;background:var(--bg)}
+.tbl-wrap{overflow-x:auto}
+.right{text-align:right}
+.tag{background:var(--teal);color:#fff;font-size:10px;padding:2px 7px;border-radius:20px}
+.loading,.error,.empty{text-align:center;padding:40px 20px;color:var(--text-muted)}
+.error{color:var(--danger)}
+.spin{display:inline-block;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.foot-note{text-align:center;font-size:10.5px;color:var(--text-muted);margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="b">BN <span>CHAIN</span></div>
+    <div class="s">LOGISTICS &amp; SOLUTIONS</div>
+  </div>
+  <div id="content" class="card"><div class="loading">⏳ Đang tải bảng kê...</div></div>
+</div>
+
+<script>
+const API_URL='/api/xembang';
+
+function fmt(n){return (Math.round(+n||0)).toLocaleString('vi-VN')+' đ';}
+function fmtDate(s){if(!s)return '—';const[y,m,d]=String(s).split('-');return d&&m&&y?`${d}/${m}/${y}`:s;}
+
+async function load(){
+  const el=document.getElementById('content');
+  const params=new URLSearchParams(location.search);
+  const token=(params.get('token')||'').trim();
+  if(!token){
+    el.innerHTML='<div class="error">⚠️ Link không hợp lệ — thiếu mã truy cập.</div>';
+    return;
+  }
+  try{
+    const r=await fetch(`${API_URL}?token=${encodeURIComponent(token)}`);
+    const data=await r.json();
+    if(!r.ok){
+      el.innerHTML=`<div class="error">⚠️ ${data.error||'Không tải được dữ liệu'}</div>`;
+      return;
+    }
+    render(data);
+  }catch(err){
+    el.innerHTML=`<div class="error">⚠️ Lỗi kết nối: ${err.message}</div>`;
+  }
+}
+
+function render(data){
+  const el=document.getElementById('content');
+  if(data.loai==='thau'){
+    document.title=`Bảng kê — ${data.ten}`;
+    el.outerHTML=`
+    <div class="card">
+      <div class="hd"><h2>📋 Bảng kê trả thầu — ${data.ten}</h2></div>
+      <div class="hd"><span class="muted">3 tháng gần nhất · ${data.rows.length} chuyến đã khóa</span></div>
+    </div>
+    <div class="total"><div class="lbl">Tổng phải trả</div><div class="val">${fmt(data.tong)}</div></div>
+    <div class="card">
+      ${!data.rows.length?'<div class="empty">Chưa có chuyến nào trong 3 tháng gần nhất</div>':`
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Tuyến đường</th><th>Cont</th><th>Loại</th><th>BKS</th>
+          <th class="right">Cước thầu</th><th class="right">Phát sinh</th><th class="right">Trừ lương LX</th><th class="right">Tổng</th></tr></thead>
+        <tbody>${data.rows.map(r=>`<tr>
+          <td>${fmtDate(r.ngay)}</td><td>${r.ma_don}</td><td>${r.hanh_trinh}</td>
+          <td>${r.so_cont||'—'}<br><span class="muted" style="font-size:10px">${r.loai_cont||''}</span></td>
+          <td><span class="tag">${r.loai_chuyen||'—'}</span></td><td>${r.bien_kiem_soat||'—'}</td>
+          <td class="right">${fmt(r.gia_cuoc_thau)}</td>
+          <td class="right">${(r.tra_them+r.doi_lenh)?fmt(r.tra_them+r.doi_lenh):'—'}</td>
+          <td class="right">${r.tru_luong_lx?'-'+fmt(r.tru_luong_lx):'—'}</td>
+          <td class="right" style="font-weight:600">${fmt(r.tong)}</td>
+        </tr>`).join('')}</tbody>
+        <tfoot><tr><td colspan="9">Tổng cộng</td><td class="right">${fmt(data.tong)}</td></tr></tfoot>
+      </table></div>`}
+    </div>
+    <div class="foot-note">Dữ liệu chỉ gồm các chuyến đã chốt (khóa sổ) trong 3 tháng gần nhất. Có thắc mắc, vui lòng liên hệ điều vận/kế toán BN Chain.</div>`;
+  }else{
+    document.title=`Bảng lương — ${data.ten}`;
+    el.outerHTML=`
+    <div class="card">
+      <div class="hd"><h2>💰 Bảng lương lái xe — ${data.ten}</h2></div>
+      <div class="hd"><span class="muted">3 tháng gần nhất · ${data.rows.length} chuyến đã khóa</span></div>
+    </div>
+    <div class="total"><div class="lbl">Tổng lương</div><div class="val">${fmt(data.tong)}</div></div>
+    <div class="card">
+      ${!data.rows.length?'<div class="empty">Chưa có chuyến nào trong 3 tháng gần nhất</div>':`
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Ngày</th><th>Mã đơn</th><th>BKS</th><th>Tuyến đường</th><th>Loại</th>
+          <th class="right">Lương chuyến</th><th class="right">Chi hộ trả LX</th><th class="right">Tổng</th></tr></thead>
+        <tbody>${data.rows.map(r=>`<tr>
+          <td>${fmtDate(r.ngay)}</td><td>${r.ma_don}</td><td>${r.bien_kiem_soat||'—'}</td><td>${r.hanh_trinh}</td>
+          <td><span class="tag">${r.loai_chuyen||'—'}</span></td>
+          <td class="right">${r.khong_trucking?'<span style="font-size:10px;color:var(--teal)">KHÔNG TRUCKING</span>':fmt(r.luong_chuyen)}</td>
+          <td class="right">${r.tra_lx?fmt(r.tra_lx):'—'}</td>
+          <td class="right" style="font-weight:600">${fmt(r.tong)}</td>
+        </tr>`).join('')}</tbody>
+        <tfoot><tr><td colspan="7">Tổng cộng</td><td class="right">${fmt(data.tong)}</td></tr></tfoot>
+      </table></div>`}
+    </div>
+    <div class="foot-note">Dữ liệu chỉ gồm các chuyến đã chốt (khóa sổ) trong 3 tháng gần nhất. Có thắc mắc, vui lòng liên hệ điều vận/kế toán BN Chain.</div>`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>
