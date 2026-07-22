@@ -497,6 +497,42 @@ function renderTabChiHo(o,list,editable,isOpsHP=false){
   </div>`:''}`;
 }
 
+// Gợi ý điền cước — tra ORDERS[] (RAM, không query DB thêm), chỉ lấy đơn locked=true, loại trừ chính đơn đang xem
+// loai: 'khach' → key ten_khach+diem_lay+diem_tra+loai_chuyen | 'thau' → key ten_khach+ma_thau_phu+diem_lay+diem_tra+loai_chuyen
+function _timGiaGanNhat(o,loai){
+  if(!o.diem_lay||!o.diem_tra)return null;
+  if(loai==='thau'&&!o.ma_thau_phu)return null;
+  const match=(x,coLoaiChuyen)=>{
+    if(x.id===o.id||!x.locked)return false;
+    if(x.diem_lay!==o.diem_lay||x.diem_tra!==o.diem_tra)return false;
+    if(x.ten_khach!==o.ten_khach)return false;
+    if(loai==='thau'&&x.ma_thau_phu!==o.ma_thau_phu)return false;
+    if(loai==='khach'&&(+x.gia_cuoc_khach||0)<=0)return false;
+    if(loai==='thau'&&(+x.gia_cuoc_thau||0)<=0)return false;
+    if(coLoaiChuyen&&x.loai_chuyen!==o.loai_chuyen)return false;
+    return true;
+  };
+  let list=ORDERS.filter(x=>match(x,true));
+  if(!list.length)list=ORDERS.filter(x=>match(x,false));
+  if(!list.length)return null;
+  list.sort((a,b)=>(b.ngay||'').localeCompare(a.ngay||''));
+  const best=list[0];
+  return{gia:loai==='thau'?best.gia_cuoc_thau:best.gia_cuoc_khach,ma_don:best.ma_don,ngay:best.ngay};
+}
+function _renderGoiYCuoc(o,loai,inputId){
+  const g=_timGiaGanNhat(o,loai);
+  if(!g)return'';
+  return`<div style="font-size:11px;color:var(--teal,#0d9488);margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+    <span>💡 Gợi ý: <b>${fmtM(g.gia)}</b> (đơn #${g.ma_don}, ${fmtDate(g.ngay)})</span>
+    <button type="button" class="btn btn-xs" style="padding:1px 8px" onclick="applyGoiYCuoc('${inputId}',${+g.gia})">Dùng giá này</button>
+  </div>`;
+}
+function applyGoiYCuoc(inputId,gia){
+  const el=document.getElementById(inputId);
+  if(!el)return;
+  el.value=String(gia);
+  fmtOnInputCalc(el);
+}
 function renderTabCuoc(o,chiHoList,editable,loi){
   // ke_toan/ceo: khi locked vẫn nhập cước được — chỉ hiện banner nhắc nhở thay vì lockBar
   const lockBar=o.locked&&canSee(['ke_toan','ceo'])
@@ -537,7 +573,8 @@ function renderTabCuoc(o,chiHoList,editable,loi){
     <div class="form-grid">
       <div class="form-group"><label>Cước vận chuyển (VNĐ)</label>
         <input type="text" id="fc-cuockh" value="${o.gia_cuoc_khach>0?fmtInput(o.gia_cuoc_khach):''}"
-          placeholder="0" ${!editable?'disabled':''} oninput="fmtOnInputCalc(this)"></div>
+          placeholder="0" ${!editable?'disabled':''} oninput="fmtOnInputCalc(this)">
+        ${editable?_renderGoiYCuoc(o,'khach','fc-cuockh'):''}</div>
       <div class="form-group"><label>Trạng thái thu</label>
         <select id="fc-thukh" ${!editable?'disabled':''}>
           ${['Chưa thu','Đã thu một phần','Đã thu'].map(s=>`<option ${o.thanh_toan_khach===s?'selected':''}>${s}</option>`).join('')}
@@ -584,7 +621,8 @@ function renderTabCuoc(o,chiHoList,editable,loi){
     <div class="form-grid">
       <div class="form-group"><label>Cước thầu (VNĐ)</label>
         <input type="text" id="fc-cuocthau" value="${o.gia_cuoc_thau>0?fmtInput(o.gia_cuoc_thau):''}"
-          placeholder="0" ${!editable?'disabled':''} oninput="fmtOnInputCalc(this)"></div>
+          placeholder="0" ${!editable?'disabled':''} oninput="fmtOnInputCalc(this)">
+        ${editable?_renderGoiYCuoc(o,'thau','fc-cuocthau'):''}</div>
       <div class="form-group"><label>Trạng thái trả thầu</label>
         <select id="fc-trathau" ${!editable?'disabled':''}>
           ${['Chưa trả','Đã trả một phần','Đã trả'].map(s=>`<option ${o.thanh_toan_thau===s?'selected':''}>${s}</option>`).join('')}
