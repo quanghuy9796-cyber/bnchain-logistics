@@ -1,6 +1,7 @@
 // PAGES.JS — Điều vận, Bảng kê, Báo cáo, Trả thầu, Công nợ
 // Requires: config.js, orders.js
 // fmtDate() được khai báo trong orders.js (load trước)
+let TT_EXPORT=null; // {list, tenThau, thang, coThauThueLai} — set mỗi lần loadBangKeThau() render xong, dùng cho xuatExcelTraThau()
 
 async function pgDieuVan(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
@@ -1076,6 +1077,7 @@ async function pgTraThau(c){
     <select id="tt-thang" class="filter-sel" onchange="reloadThauDropdown()">${thOpts}</select>
     <button class="btn btn-teal" onclick="loadBangKeThau()"><i class="ti ti-search"></i> Xem bảng kê</button>
     <button class="btn" onclick="window.print()" id="tt-btn-in" style="display:none"><i class="ti ti-printer"></i> In</button>
+    <button class="btn" onclick="xuatExcelTraThau(this)" id="tt-btn-excel" style="display:none"><i class="ti ti-file-spreadsheet"></i> Xuất Excel</button>
   </div>
   <div id="tt-canhbao"></div>
   <div id="tt-result" style="color:var(--text-muted);font-size:13px;padding:10px 0">
@@ -1127,6 +1129,9 @@ async function loadBangKeThau(){
   res.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Đang tải...</div>';
   canhbao.innerHTML='';
   btnIn.style.display='none';
+  const btnExcel=document.getElementById('tt-btn-excel');
+  if(btnExcel)btnExcel.style.display='none';
+  TT_EXPORT=null;
 
   const lastDay=new Date(parseInt(y),parseInt(m),0).getDate();
   const dateFrom=`${y}-${m.padStart(2,'0')}-01`;
@@ -1314,7 +1319,52 @@ async function loadBangKeThau(){
     </div>`:''}
     <div class="bk-total-row"><span>Còn phải trả (đã trừ chi hộ) ${tenThau}</span><span style="color:var(--danger)">${fmtM(conPhaiTra)}</span></div>
   </div>`;
+  TT_EXPORT={list,tenThau,thang:`Tháng ${m}/${y}`,coThauThueLai};
   btnIn.style.display='inline-flex';
+  document.getElementById('tt-btn-excel').style.display='inline-flex';
+}
+
+// ===== XUẤT EXCEL BẢNG KÊ TRẢ THẦU PHỤ =====
+async function xuatExcelTraThau(btn){
+  if(!TT_EXPORT||!TT_EXPORT.list.length){toast('Chưa có bảng kê để xuất — bấm "Xem bảng kê" trước','error');return;}
+  const{list,tenThau,thang,coThauThueLai}=TT_EXPORT;
+  if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i> Đang tạo...';}
+  try{
+    if(!window.XLSX){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        s.onload=res; s.onerror=rej;
+        document.head.appendChild(s);
+      });
+    }
+    const header=['Ngày','Mã đơn','Loại','Tuyến đường','Số cont','Loại cont','Loại chuyến','BKS','Cước thầu','Chi hộ trả thầu','Đổi lệnh'];
+    if(coThauThueLai)header.push('Trừ lương LX');
+    header.push('Tổng phải trả','Khách đã chốt?');
+    const rows=list.map(o=>{
+      const traLX=(o.loai_phan_loai_xe==='thau_thue_lai'&&o._traLX>0)?o._traLX:0;
+      const r=[fmtDate(o.ngay),o.ma_don,o.loai_hang||'',o.hanh_trinh||'',o.so_cont||'',o.loai_cont||'',o.loai_chuyen||'',o.bien_kiem_soat||'',+o.gia_cuoc_thau||0,o._traThauThem||0,o._traDL||0];
+      if(coThauThueLai)r.push(traLX?-traLX:0);
+      r.push(o._thucTra||0,o.trang_thai_bang_ke==='da_chot'?'Đã chốt':'Chưa chốt');
+      return r;
+    });
+    const tong=list.reduce((s,o)=>s+(o._thucTra||0),0);
+    const totalRow=Array(header.length).fill('');
+    totalRow[0]='Tổng cộng';totalRow[header.length-2]=tong;
+    const ws=XLSX.utils.aoa_to_sheet([header,...rows,totalRow]);
+    ws['!cols']=header.map(h=>({wch:h==='Tuyến đường'?32:h==='Mã đơn'?18:14}));
+    const WB=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(WB,ws,'Tra thau phu');
+    const safeTen=(tenThau||'ThauPhu').replace(/[^\w\-]+/g,'_');
+    const stamp=new Date().toISOString().slice(0,10);
+    XLSX.writeFile(WB,`TraThauPhu_${safeTen}_${thang.replace(/\s+/g,'')}_${stamp}.xlsx`);
+    toast(`✅ Đã xuất ${list.length} chuyến`);
+  }catch(err){
+    console.error('[xuatExcelTraThau]',err);
+    toast('Lỗi xuất Excel: '+err.message,'error');
+  }finally{
+    if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-file-spreadsheet"></i> Xuất Excel';}
+  }
 }
 
 // ===== CHỐT / HỦY CHỐT TRẢ THẦU PHỤ (v2.8) — cước thầu + phát sinh (chi hộ trả thầu, đổi lệnh, trừ lương LX)
