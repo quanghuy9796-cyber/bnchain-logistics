@@ -1545,10 +1545,7 @@ async function loadBangLuong(){
     const traLX=chMap[o.id]||0;
     if(khongTrucking)return{...o,tinh:null,luongChuyen:0,khongTrucking,traLX,tong:traLX};
     const ddTra=DD.find(d=>d.ten_chuan===o.diem_tra);
-    const tinh=ddTra?tinhTuDiaPhuong(ddTra.dia_phuong):null;
-    const g=tinh?gia[tinh]:null;
-    const laKetHop=o.loai_chuyen==='Kết hợp'||o.loai_chuyen==='Kẹp ghép';
-    const luongChuyen=g?(laKetHop?(+g.ket_hop||0):(+g.thuong||0)):null;
+    const {khongTrucking:kt2,tinh,luongChuyen}=tinhLuongChuyen(o,ddTra?ddTra.dia_phuong:null,gia);
     if(luongChuyen===null)thieuGia.push(o.ma_don);
     return{...o,tinh,luongChuyen:luongChuyen||0,khongTrucking,traLX,tong:(luongChuyen||0)+traLX};
   });
