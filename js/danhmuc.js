@@ -141,12 +141,13 @@ async function pgPhuongTien(c){
     <i class="ti ti-users"></i> THẦU PHỤ (${(tpList||[]).length})
   </h4>
   <div class="tbl-wrap" style="margin-bottom:16px"><table class="tbl">
-    <colgroup><col style="width:110px"><col style="width:160px"><col style="width:120px"><col style="width:110px"><col style="width:130px"><col style="width:110px"><col style="width:70px"></colgroup>
-    <thead><tr><th>Mã thầu</th><th>Tên công ty</th><th>Người LH</th><th>Điện thoại</th><th>Số TK</th><th>Ngân hàng</th><th>Thao tác</th></tr></thead>
+    <colgroup><col style="width:110px"><col style="width:160px"><col style="width:120px"><col style="width:110px"><col style="width:130px"><col style="width:110px"><col style="width:90px"><col style="width:70px"></colgroup>
+    <thead><tr><th>Mã thầu</th><th>Tên công ty</th><th>Người LH</th><th>Điện thoại</th><th>Số TK</th><th>Ngân hàng</th><th>Link xem</th><th>Thao tác</th></tr></thead>
     <tbody>${(tpList||[]).map(t=>`<tr>
       <td class="text-blue fw6">${t.ma_thau}</td><td class="fw6">${t.ten_cong_ty}</td>
       <td>${t.nguoi_lien_he||'—'}</td><td>${t.so_dien_thoai||'—'}</td>
       <td>${t.so_tai_khoan||'—'}</td><td>${t.ngan_hang||'—'}</td>
+      <td>${canEdit?`<button class="btn btn-xs btn-teal" onclick="taoLinkXem('thau','${t.ma_thau}','${(t.ten_cong_ty||'').replace(/'/g,"\\'")}',this)"><i class="ti ti-link"></i> Lấy link</button>`:'—'}</td>
       <td>${canEdit?`<div style="display:flex;gap:4px">
         <button class="btn btn-xs btn-teal" onclick="editTP('${t.id}')"><i class="ti ti-edit"></i></button>
         <button class="btn btn-xs btn-danger" onclick="deleteTP('${t.id}','${t.ma_thau}')"><i class="ti ti-trash"></i></button>
@@ -158,11 +159,12 @@ async function pgPhuongTien(c){
     <i class="ti ti-id-badge"></i> LÁI XE (${(lxList||[]).length})
   </h4>
   <div class="tbl-wrap"><table class="tbl">
-    <colgroup><col style="width:160px"><col style="width:110px"><col style="width:120px"><col style="width:90px"><col style="width:90px"><col style="width:70px"></colgroup>
-    <thead><tr><th>Họ tên</th><th>Điện thoại</th><th>CMND/CCCD</th><th>Bằng lái</th><th>HH bằng</th><th>Thao tác</th></tr></thead>
+    <colgroup><col style="width:160px"><col style="width:110px"><col style="width:120px"><col style="width:90px"><col style="width:90px"><col style="width:90px"><col style="width:70px"></colgroup>
+    <thead><tr><th>Họ tên</th><th>Điện thoại</th><th>CMND/CCCD</th><th>Bằng lái</th><th>HH bằng</th><th>Link xem</th><th>Thao tác</th></tr></thead>
     <tbody>${(lxList||[]).map(l=>`<tr>
       <td class="fw6">${l.ho_ten}</td><td>${l.so_dien_thoai||'—'}</td>
       <td>${l.so_cmnd||'—'}</td><td>${l.bang_lai||'—'}</td><td>${l.ngay_het_han_bang||'—'}</td>
+      <td>${canEdit?`<button class="btn btn-xs btn-teal" onclick="taoLinkXem('laixe','${(l.ho_ten||'').replace(/'/g,"\\'")}','${(l.ho_ten||'').replace(/'/g,"\\'")}',this)"><i class="ti ti-link"></i> Lấy link</button>`:'—'}</td>
       <td>${canEdit?`<div style="display:flex;gap:4px">
         <button class="btn btn-xs btn-teal" onclick="editLX('${l.id}')"><i class="ti ti-edit"></i></button>
         <button class="btn btn-xs btn-danger" onclick="deleteLX('${l.id}','${l.ho_ten}')"><i class="ti ti-trash"></i></button>
@@ -171,7 +173,43 @@ async function pgPhuongTien(c){
   </table></div>`;
 }
 
-// ---- XE CRUD ----
+// ---- TẠO / LẤY LINK XEM (thầu phụ / lái xe) ----
+async function taoLinkXem(loai,ma,tenHienThi,btn){
+  if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i> Đang tạo...';}
+  try{
+    const r=await fetch('/api/quanlylink',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'get_or_create',loai,ma,ten_hien_thi:tenHienThi})
+    });
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.error||'Lỗi tạo link');
+    const url=`${location.origin}/xem.html?token=${data.token}`;
+    showLinkXemModal(url,tenHienThi,loai,ma);
+  }catch(err){
+    toast('Lỗi: '+err.message,'error');
+  }finally{
+    if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-link"></i> Lấy link';}
+  }
+}
+function showLinkXemModal(url,ten,loai,ma){
+  const bg=document.createElement('div');bg.className='modal-bg';bg.id='modal-bg';
+  bg.innerHTML=`<div class="modal" style="width:460px">
+    <h3 style="margin-bottom:10px"><i class="ti ti-link"></i> Link xem — ${ten}</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
+      Gửi link này qua Zalo cho ${loai==='thau'?'thầu phụ':'lái xe'}. Link xem được ${loai==='thau'?'bảng kê trả thầu':'bảng lương'} 3 tháng gần nhất, tự cập nhật theo thời gian thực, không cần đăng nhập.
+    </p>
+    <input type="text" readonly value="${url}" id="link-xem-input" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--r);font-size:12px;margin-bottom:10px" onclick="this.select()">
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="document.getElementById('modal-bg').remove()">Đóng</button>
+      <button class="btn btn-teal" onclick="copyLinkXem()"><i class="ti ti-copy"></i> Copy link</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bg);
+}
+function copyLinkXem(){
+  const inp=document.getElementById('link-xem-input');
+  inp.select();navigator.clipboard.writeText(inp.value).then(()=>toast('Đã copy link')).catch(()=>toast('Copy thất bại, chọn thủ công','error'));
+}
 function openAddXe(existing={}){
   const isEdit=!!existing.id;
   const tpOpts=TP.map(t=>`<option value="${t.ma_thau}" ${existing.ma_thau_phu===t.ma_thau?'selected':''}>${t.ma_thau} — ${t.ten_cong_ty}</option>`).join('');
