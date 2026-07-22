@@ -27,7 +27,7 @@ td{padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
 tfoot td{font-weight:700;background:var(--bg)}
 .tbl-wrap{overflow-x:auto}
 .right{text-align:right}
-.tag{background:var(--teal);color:#fff;font-size:10px;padding:2px 7px;border-radius:20px}
+.tag{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;white-space:nowrap}
 .loading,.error,.empty{text-align:center;padding:40px 20px;color:var(--text-muted)}
 .error{color:var(--danger)}
 .spin{display:inline-block;animation:sp 1s linear infinite}
@@ -49,6 +49,12 @@ const API_URL='/api/xembang';
 
 function fmt(n){return (Math.round(+n||0)).toLocaleString('vi-VN')+' đ';}
 function fmtDate(s){if(!s)return '—';const[y,m,d]=String(s).split('-');return d&&m&&y?`${d}/${m}/${y}`:s;}
+function lcTag(lc){
+  if(!lc)return '—';
+  const bg={'Thường':'#f0fdf4','Kết hợp':'#eff6ff','Kẹp ghép':'#fef9c3'};
+  const co={'Thường':'#166534','Kết hợp':'#1d4ed8','Kẹp ghép':'#854d0e'};
+  return `<span class="tag" style="background:${bg[lc]||'#e2e8f0'};color:${co[lc]||'#334155'}">${lc}</span>`;
+}
 
 async function load(){
   const el=document.getElementById('content');
@@ -73,6 +79,7 @@ async function load(){
 
 function render(data){
   const el=document.getElementById('content');
+  const rows=[...data.rows].sort((a,b)=>(b.ngay||'').localeCompare(a.ngay||''));
   if(data.loai==='thau'){
     document.title=`Bảng kê — ${data.ten}`;
     el.outerHTML=`
@@ -82,14 +89,14 @@ function render(data){
     </div>
     <div class="total"><div class="lbl">Tổng phải trả</div><div class="val">${fmt(data.tong)}</div></div>
     <div class="card">
-      ${!data.rows.length?'<div class="empty">Chưa có chuyến nào trong 3 tháng gần nhất</div>':`
+      ${!rows.length?'<div class="empty">Chưa có chuyến nào trong 3 tháng gần nhất</div>':`
       <div class="tbl-wrap"><table>
         <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Tuyến đường</th><th>Cont</th><th>Loại</th><th>BKS</th>
           <th class="right">Cước thầu</th><th class="right">Phát sinh</th><th class="right">Trừ lương LX</th><th class="right">Tổng</th></tr></thead>
-        <tbody>${data.rows.map(r=>`<tr>
+        <tbody>${rows.map(r=>`<tr>
           <td>${fmtDate(r.ngay)}</td><td>${r.ma_don}</td><td>${r.hanh_trinh}</td>
           <td>${r.so_cont||'—'}<br><span class="muted" style="font-size:10px">${r.loai_cont||''}</span></td>
-          <td><span class="tag">${r.loai_chuyen||'—'}</span></td><td>${r.bien_kiem_soat||'—'}</td>
+          <td>${lcTag(r.loai_chuyen)}</td><td>${r.bien_kiem_soat||'—'}</td>
           <td class="right">${fmt(r.gia_cuoc_thau)}</td>
           <td class="right">${(r.tra_them+r.doi_lenh)?fmt(r.tra_them+r.doi_lenh):'—'}</td>
           <td class="right">${r.tru_luong_lx?'-'+fmt(r.tru_luong_lx):'—'}</td>
@@ -108,13 +115,13 @@ function render(data){
     </div>
     <div class="total"><div class="lbl">Tổng lương</div><div class="val">${fmt(data.tong)}</div></div>
     <div class="card">
-      ${!data.rows.length?'<div class="empty">Chưa có chuyến nào trong 3 tháng gần nhất</div>':`
+      ${!rows.length?'<div class="empty">Chưa có chuyến nào trong 3 tháng gần nhất</div>':`
       <div class="tbl-wrap"><table>
         <thead><tr><th>Ngày</th><th>Mã đơn</th><th>BKS</th><th>Tuyến đường</th><th>Loại</th>
           <th class="right">Lương chuyến</th><th class="right">Chi hộ trả LX</th><th class="right">Tổng</th></tr></thead>
-        <tbody>${data.rows.map(r=>`<tr>
+        <tbody>${rows.map(r=>`<tr>
           <td>${fmtDate(r.ngay)}</td><td>${r.ma_don}</td><td>${r.bien_kiem_soat||'—'}</td><td>${r.hanh_trinh}</td>
-          <td><span class="tag">${r.loai_chuyen||'—'}</span></td>
+          <td>${lcTag(r.loai_chuyen)}</td>
           <td class="right">${r.khong_trucking?'<span style="font-size:10px;color:var(--teal)">KHÔNG TRUCKING</span>':fmt(r.luong_chuyen)}</td>
           <td class="right">${r.tra_lx?fmt(r.tra_lx):'—'}</td>
           <td class="right" style="font-weight:600">${fmt(r.tong)}</td>
