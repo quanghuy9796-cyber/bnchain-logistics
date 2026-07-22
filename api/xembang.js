@@ -115,6 +115,7 @@ module.exports = async function handler(req, res) {
       return {
         ngay: o.ngay, ma_don: o.ma_don, bien_kiem_soat: o.bien_kiem_soat,
         hanh_trinh: `${o.diem_lay || ''} → ${o.diem_tra || ''}`, loai_chuyen: o.loai_chuyen,
+        so_cont: o.so_cont, loai_cont: o.loai_cont,
         khong_trucking: khongTrucking, luong_chuyen: lc, tra_lx: traLX, tong: lc + traLX,
       };
     });
