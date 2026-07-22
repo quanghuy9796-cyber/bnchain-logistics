@@ -535,12 +535,14 @@ function applyGoiYCuoc(inputId,gia){
   fmtOnInputCalc(el);
 }
 function renderTabCuoc(o,chiHoList,editable,loi){
-  // ke_toan/ceo: khi locked vẫn nhập cước được — chỉ hiện banner nhắc nhở thay vì lockBar
-  const lockBar=o.locked&&canSee(['ke_toan','ceo'])
+  // ke_toan/ceo: khi locked vẫn nhập cước được — chỉ hiện banner nhắc nhở
+  // Nút "Mở khóa" chỉ hiện cho quan_ly/ceo (đúng quyền thật của unlockOrder()) — ke_toan thấy banner nhưng không có nút vì bấm sẽ báo lỗi không có quyền
+  const canUnlock=canSee(['quan_ly','ceo']);
+  const lockBar=o.locked&&canSee(['ke_toan','ceo','quan_ly'])
     ?`<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--r);padding:8px 12px;margin-bottom:10px;font-size:12px;color:#1d4ed8;display:flex;align-items:center;gap:6px">
         <i class="ti ti-lock" style="font-size:14px"></i>
         Điều vận đã hoàn thành chuyến. Nhập cước & lưu để chốt sổ.
-        <button class="btn btn-xs btn-danger" style="margin-left:auto" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa sửa nội dung</button>
+        ${canUnlock?`<button class="btn btn-xs btn-danger" style="margin-left:auto" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa sửa nội dung</button>`:''}
       </div>`
     :(o.locked?'<div class="lock-notice" style="margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>':'');
   const totalCH=chiHoList.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
@@ -674,11 +676,7 @@ function renderTabCuoc(o,chiHoList,editable,loi){
   <button class="btn btn-teal" style="width:100%;justify-content:center;margin-bottom:8px" onclick="saveCuoc('`+o.id+`','`+o.co_doi_lenh+`','`+o.co_to_khai+`')">
     <i class="ti ti-device-floppy"></i> Lưu cước & thanh toán
   </button>
-  `:''}
-  ${o.locked&&canSee(['quan_ly','ceo'])?`
-  <button class="btn btn-danger btn-sm" style="width:100%;justify-content:center;margin-top:6px" onclick="unlockOrder('`+o.id+`')">
-    <i class="ti ti-lock-open"></i> Mở khóa để sửa nội dung xe / chi hộ
-  </button>`:''}`;
+  `:''}`;
 }
 
 async function switchTab(tab,id){
