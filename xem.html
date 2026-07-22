@@ -41,7 +41,7 @@ tfoot td{font-weight:700;background:var(--bg)}
     <div class="b">BN <span>CHAIN</span></div>
     <div class="s">LOGISTICS &amp; SOLUTIONS</div>
   </div>
-  <div id="content" class="card"><div class="loading">⏳ Đang tải bảng kê...</div></div>
+  <div id="content"><div class="card"><div class="loading">⏳ Đang tải bảng kê...</div></div></div>
 </div>
 
 <script>
@@ -55,41 +55,62 @@ function lcTag(lc){
   const co={'Thường':'#166534','Kết hợp':'#1d4ed8','Kẹp ghép':'#854d0e'};
   return `<span class="tag" style="background:${bg[lc]||'#e2e8f0'};color:${co[lc]||'#334155'}">${lc}</span>`;
 }
+function thangCua(ngay){return (ngay||'').slice(0,7);} // 'YYYY-MM'
+function tenThang(ym){const[y,m]=ym.split('-');return `Tháng ${+m}/${y}`;}
+let CUR_DATA=null;
+let CUR_THANGS=null;
+function onChonThang(){
+  const ym=document.getElementById('sel-thang').value;
+  render(CUR_DATA,ym,CUR_THANGS);
+}
 
 async function load(){
   const el=document.getElementById('content');
   const params=new URLSearchParams(location.search);
   const token=(params.get('token')||'').trim();
   if(!token){
-    el.innerHTML='<div class="error">⚠️ Link không hợp lệ — thiếu mã truy cập.</div>';
+    el.innerHTML='<div class="card"><div class="error">⚠️ Link không hợp lệ — thiếu mã truy cập.</div></div>';
     return;
   }
   try{
     const r=await fetch(`${API_URL}?token=${encodeURIComponent(token)}`);
     const data=await r.json();
     if(!r.ok){
-      el.innerHTML=`<div class="error">⚠️ ${data.error||'Không tải được dữ liệu'}</div>`;
+      el.innerHTML=`<div class="card"><div class="error">⚠️ ${data.error||'Không tải được dữ liệu'}</div></div>`;
       return;
     }
-    render(data);
+    CUR_DATA=data;
+    const thangs=[...new Set(data.rows.map(r=>thangCua(r.ngay)))];
+    const thangNay=new Date().toISOString().slice(0,7); // 'YYYY-MM' theo lịch thực tế
+    if(!thangs.includes(thangNay))thangs.push(thangNay); // luôn có tháng hiện tại trong lựa chọn dù chưa có chuyến
+    thangs.sort().reverse();
+    CUR_THANGS=thangs;
+    render(data,thangNay,thangs);
   }catch(err){
-    el.innerHTML=`<div class="error">⚠️ Lỗi kết nối: ${err.message}</div>`;
+    el.innerHTML=`<div class="card"><div class="error">⚠️ Lỗi kết nối: ${err.message}</div></div>`;
   }
 }
 
-function render(data){
+function render(data,ymChon,thangs){
   const el=document.getElementById('content');
-  const rows=[...data.rows].sort((a,b)=>(b.ngay||'').localeCompare(a.ngay||''));
+  thangs=thangs||[...new Set(data.rows.map(r=>thangCua(r.ngay)))].sort().reverse();
+  const rows=[...data.rows]
+    .filter(r=>!ymChon||thangCua(r.ngay)===ymChon)
+    .sort((a,b)=>(b.ngay||'').localeCompare(a.ngay||''));
+  const tongThang=rows.reduce((s,r)=>s+(r.tong||0),0);
+  const selectHtml=`<select id="sel-thang" onchange="onChonThang()" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--r);font-size:12px;background:var(--white)">
+    ${thangs.map(t=>`<option value="${t}" ${t===ymChon?'selected':''}>${tenThang(t)}</option>`).join('')}
+  </select>`;
   if(data.loai==='thau'){
     document.title=`Bảng kê — ${data.ten}`;
-    el.outerHTML=`
+    el.innerHTML=`
     <div class="card">
-      <div class="hd"><h2>📋 Bảng kê trả thầu — ${data.ten}</h2></div>
-      <div class="hd"><span class="muted">3 tháng gần nhất · ${data.rows.length} chuyến đã khóa</span></div>
+      <div class="hd"><h2>📋 Bảng kê trả thầu — ${data.ten}</h2>${selectHtml}</div>
+      <div class="hd"><span class="muted">${rows.length} chuyến đã khóa trong ${ymChon?tenThang(ymChon):'3 tháng gần nhất'}</span></div>
     </div>
-    <div class="total"><div class="lbl">Tổng phải trả</div><div class="val">${fmt(data.tong)}</div></div>
+    <div class="total"><div class="lbl">Tổng phải trả — ${ymChon?tenThang(ymChon):'3 tháng gần nhất'}</div><div class="val">${fmt(tongThang)}</div></div>
     <div class="card">
-      ${!rows.length?'<div class="empty">Chưa có chuyến nào trong 3 tháng gần nhất</div>':`
+      ${!rows.length?'<div class="empty">Không có chuyến nào trong tháng này</div>':`
       <div class="tbl-wrap"><table>
         <thead><tr><th>Ngày</th><th>Mã đơn</th><th>Tuyến đường</th><th>Cont</th><th>Loại</th><th>BKS</th>
           <th class="right">Cước thầu</th><th class="right">Phát sinh</th><th class="right">Trừ lương LX</th><th class="right">Tổng</th></tr></thead>
@@ -102,20 +123,20 @@ function render(data){
           <td class="right">${r.tru_luong_lx?'-'+fmt(r.tru_luong_lx):'—'}</td>
           <td class="right" style="font-weight:600">${fmt(r.tong)}</td>
         </tr>`).join('')}</tbody>
-        <tfoot><tr><td colspan="9">Tổng cộng</td><td class="right">${fmt(data.tong)}</td></tr></tfoot>
+        <tfoot><tr><td colspan="9">Tổng cộng</td><td class="right">${fmt(tongThang)}</td></tr></tfoot>
       </table></div>`}
     </div>
-    <div class="foot-note">Dữ liệu chỉ gồm các chuyến đã chốt (khóa sổ) trong 3 tháng gần nhất. Có thắc mắc, vui lòng liên hệ điều vận/kế toán BN Chain.</div>`;
+    <div class="foot-note">Dữ liệu chỉ gồm các chuyến đã chốt (khóa sổ), tối đa trong 3 tháng gần nhất. Có thắc mắc, vui lòng liên hệ điều vận/kế toán BN Chain.</div>`;
   }else{
     document.title=`Bảng lương — ${data.ten}`;
-    el.outerHTML=`
+    el.innerHTML=`
     <div class="card">
-      <div class="hd"><h2>💰 Bảng lương lái xe — ${data.ten}</h2></div>
-      <div class="hd"><span class="muted">3 tháng gần nhất · ${data.rows.length} chuyến đã khóa</span></div>
+      <div class="hd"><h2>💰 Bảng lương lái xe — ${data.ten}</h2>${selectHtml}</div>
+      <div class="hd"><span class="muted">${rows.length} chuyến đã khóa trong ${ymChon?tenThang(ymChon):'3 tháng gần nhất'}</span></div>
     </div>
-    <div class="total"><div class="lbl">Tổng lương</div><div class="val">${fmt(data.tong)}</div></div>
+    <div class="total"><div class="lbl">Tổng lương — ${ymChon?tenThang(ymChon):'3 tháng gần nhất'}</div><div class="val">${fmt(tongThang)}</div></div>
     <div class="card">
-      ${!rows.length?'<div class="empty">Chưa có chuyến nào trong 3 tháng gần nhất</div>':`
+      ${!rows.length?'<div class="empty">Không có chuyến nào trong tháng này</div>':`
       <div class="tbl-wrap"><table>
         <thead><tr><th>Ngày</th><th>Mã đơn</th><th>BKS</th><th>Tuyến đường</th><th>Loại</th>
           <th class="right">Lương chuyến</th><th class="right">Chi hộ trả LX</th><th class="right">Tổng</th></tr></thead>
@@ -126,10 +147,10 @@ function render(data){
           <td class="right">${r.tra_lx?fmt(r.tra_lx):'—'}</td>
           <td class="right" style="font-weight:600">${fmt(r.tong)}</td>
         </tr>`).join('')}</tbody>
-        <tfoot><tr><td colspan="7">Tổng cộng</td><td class="right">${fmt(data.tong)}</td></tr></tfoot>
+        <tfoot><tr><td colspan="7">Tổng cộng</td><td class="right">${fmt(tongThang)}</td></tr></tfoot>
       </table></div>`}
     </div>
-    <div class="foot-note">Dữ liệu chỉ gồm các chuyến đã chốt (khóa sổ) trong 3 tháng gần nhất. Có thắc mắc, vui lòng liên hệ điều vận/kế toán BN Chain.</div>`;
+    <div class="foot-note">Dữ liệu chỉ gồm các chuyến đã chốt (khóa sổ), tối đa trong 3 tháng gần nhất. Có thắc mắc, vui lòng liên hệ điều vận/kế toán BN Chain.</div>`;
   }
 }
 
