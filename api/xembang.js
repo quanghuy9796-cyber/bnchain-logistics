@@ -3,10 +3,11 @@
 // Dùng SERVICE ROLE KEY (server-side only, KHÔNG lộ ra client) để bypass RLS đọc dữ liệu cần thiết,
 // nhưng chỉ trả về đúng các cột đã whitelist — không trả nguyên bản ghi van_don.
 
-// Import file công thức DÙNG CHUNG với web app (../js/luong-calc.js) — side-effect import: chạy file này
-// để nó tự gắn chuanHoaTen()/tinhTuDiaPhuong()/tinhLuongChuyen() vào globalThis, dùng thẳng bên dưới
+// Lấy công thức lương DÙNG CHUNG với web app (../js/luong-calc.js) — dùng require() tường minh
+// (KHÔNG dùng "import '../js/luong-calc.js'" kiểu side-effect: bundler của Vercel (esbuild) coi import
+// đó là "không dùng gì" nên có thể loại bỏ mất khi build, gây lỗi "chuanHoaTen is not defined" lúc chạy).
 // KHÔNG viết lại công thức ở đây để tránh lệch số với bảng lương nội bộ (loadBangLuong() trong pages.js).
-import '../js/luong-calc.js';
+const { chuanHoaTen, tinhTuDiaPhuong, tinhLuongChuyen } = require('../js/luong-calc.js');
 
 const SUPA_URL = 'https://vcrnlyvdquodiqfwaogj.supabase.co';
 
@@ -21,7 +22,7 @@ async function sbFetch(path, serviceKey) {
   return r.json();
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
