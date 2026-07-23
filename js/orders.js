@@ -687,7 +687,14 @@ async function switchTab(tab,id){
   const o=ORDERS.find(x=>x.id===id);
   if(o)await renderDP(o);
 }
-function closeDp(){SEL=null;document.getElementById('dp').style.display='none';}
+function closeDp(){
+  if(SEL){
+    const old=document.querySelector(`#orders-tbody tr[onclick*="${SEL}"]`);
+    if(old)old.classList.remove('selected');
+  }
+  SEL=null;
+  document.getElementById('dp').style.display='none';
+}
 
 // SAVE FUNCTIONS
 async function saveInfo(id){
