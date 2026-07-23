@@ -250,11 +250,16 @@ async function renderDP(o){
   const totalCH=chiHoList.reduce((s,c)=>s+(+c.so_tien||0),0);
   const loi=(+o.gia_cuoc_khach||0)-(+o.gia_cuoc_thau||0)-totalCH;
 
+  const canUnlockHdr=canSee(['quan_ly','ceo']);
+  const lockBtnHdr=!o.locked&&editable
+    ?`<button class="btn btn-success btn-sm" onclick="lockOrder('${o.id}')"><i class="ti ti-lock"></i> Hoàn thành & Khóa</button>`
+    :(o.locked&&canUnlockHdr?`<button class="btn btn-danger btn-sm" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa</button>`:'');
   dp.innerHTML=`
   <div class="dp-header">
     <span class="dp-code">${o.ma_don}</span>
     <div style="display:flex;align-items:center;gap:6px">
       ${o.locked?'<span class="dp-locked"><i class="ti ti-lock"></i>Đã khóa</span>':''}
+      ${lockBtnHdr}
       <button class="btn btn-sm" onclick="closeDp()"><i class="ti ti-x"></i></button>
     </div>
   </div>
@@ -277,7 +282,7 @@ function renderTabInfo(o,editable){
   const isNhap=o.loai_hang==='Nhập';
   const canDelete=canSee(['quan_ly','ceo']);
   return`
-  ${o.locked?`<div class="lock-notice" style="display:flex;justify-content:space-between;align-items:center"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span>${canSee(['quan_ly','ceo'])?`<button class="btn btn-xs btn-danger" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa để sửa</button>`:''}</div>`:''}
+  ${o.locked?`<div class="lock-notice"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>`:''}
   <div class="form-section">
     <div class="form-section-title"><i class="ti ti-file-description"></i>Thông tin cơ bản</div>
     <div class="form-grid">
@@ -352,7 +357,7 @@ function renderTabInfo(o,editable){
 function renderTabXe(o,editable){
   const dis=!editable?'disabled':'';
   const _lxVal=o.loai_cont||o.loai_xe_hang||'';
-  const lockBar=o.locked&&canSee(['quan_ly','ceo'])?`<div class="lock-notice" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span><button class="btn btn-xs btn-danger" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa để sửa</button></div>`:(o.locked?'<div class="lock-notice" style="margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>':'');
+  const lockBar=o.locked?'<div class="lock-notice" style="margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>':'';
   const lxOpts=LX.map(l=>`<option value="${l.ho_ten}">`).join('');
   const tpOpts=TP.map(t=>`<option value="${t.ma_thau}">${t.ten_cong_ty}</option>`).join('');
   const bienOpts=(XE||[]).map(x=>`<option value="${x.bien_so}">${x.bien_so}${x.ma_thau_phu?' — '+x.ma_thau_phu:''}</option>`).join('');
@@ -422,13 +427,8 @@ function renderTabXe(o,editable){
     </div>
   </div>
   ${editable?`
-  <button class="btn btn-teal" style="width:100%;justify-content:center;margin-bottom:8px" onclick="saveXe('`+o.id+`')"><i class="ti ti-device-floppy"></i> Lưu xe & cont</button>
-  ${!o.locked?`
-  <button class="btn btn-success" style="width:100%;justify-content:center" onclick="lockOrder('`+o.id+`')">
-    <i class="ti ti-lock"></i> Hoàn thành & Khóa vận đơn
-  </button>
-  <p style="font-size:10.5px;color:var(--text-muted);text-align:center;margin-top:5px">⚠️ Xe đã giao hàng xong — khóa lại để kế toán chốt</p>
-  `:''}
+  <button class="btn btn-teal" style="width:100%;justify-content:center" onclick="saveXe('`+o.id+`')"><i class="ti ti-device-floppy"></i> Lưu xe & cont</button>
+  ${!o.locked?`<p style="font-size:10.5px;color:var(--text-muted);text-align:center;margin-top:5px">⚠️ Xe đã giao hàng xong? Bấm "Hoàn thành & Khóa" ở góc trên</p>`:''}
   `:''}`;
 }
 
@@ -437,7 +437,7 @@ function renderTabChiHo(o,list,editable,isOpsHP=false){
   const listThamChieu=list.filter(c=>c.la_tham_chieu);
   const total=listThat.reduce((s,c)=>s+(+c.so_tien||0),0);
   const coHD=list.some(c=>c.hoa_don_id);
-  const lockBar=o.locked&&canSee(['quan_ly','ceo'])?`<div class="lock-notice" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span><button class="btn btn-xs btn-danger" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa để sửa</button></div>`:(o.locked?'<div class="lock-notice" style="margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>':'');
+  const lockBar=o.locked?'<div class="lock-notice" style="margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>':'';
   // ops_hp chỉ xem, không thêm/sửa/xóa chi hộ
   const canEditCH=editable&&!isOpsHP;
   return`${lockBar}
@@ -537,12 +537,10 @@ function applyGoiYCuoc(inputId,gia){
 function renderTabCuoc(o,chiHoList,editable,loi){
   // ke_toan/ceo: khi locked vẫn nhập cước được — chỉ hiện banner nhắc nhở
   // Nút "Mở khóa" chỉ hiện cho quan_ly/ceo (đúng quyền thật của unlockOrder()) — ke_toan thấy banner nhưng không có nút vì bấm sẽ báo lỗi không có quyền
-  const canUnlock=canSee(['quan_ly','ceo']);
   const lockBar=o.locked&&canSee(['ke_toan','ceo','quan_ly'])
     ?`<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--r);padding:8px 12px;margin-bottom:10px;font-size:12px;color:#1d4ed8;display:flex;align-items:center;gap:6px">
         <i class="ti ti-lock" style="font-size:14px"></i>
         Điều vận đã hoàn thành chuyến. Nhập cước & lưu để chốt sổ.
-        ${canUnlock?`<button class="btn btn-xs btn-danger" style="margin-left:auto" onclick="unlockOrder('${o.id}')"><i class="ti ti-lock-open"></i> Mở khóa sửa nội dung</button>`:''}
       </div>`
     :(o.locked?'<div class="lock-notice" style="margin-bottom:8px"><span><i class="ti ti-lock"></i> Đã khóa — chỉ xem.</span></div>':'');
   const totalCH=chiHoList.reduce((s,c)=>s+(+(c.tien_thu_khach||c.so_tien)||0),0);
