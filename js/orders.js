@@ -503,18 +503,36 @@ function renderTabChiHo(o,list,editable,isOpsHP=false){
 }
 
 // Gợi ý điền cước — tra ORDERS[] (RAM, không query DB thêm), chỉ lấy đơn locked=true, loại trừ chính đơn đang xem
-// loai: 'khach' → key ten_khach+diem_lay+diem_tra+loai_chuyen | 'thau' → key ten_khach+ma_thau_phu+diem_lay+diem_tra+loai_chuyen
+// loai: 'khach' → giữ nguyên logic cũ (có thể nới lỏng loai_chuyen nếu không tìm được)
+// loai: 'thau'  → thứ tự ưu tiên CỐ ĐỊNH: hành trình > loại cont > loại chuyến > thầu phụ (bắt buộc, không nới lỏng)
+//                 chỉ được phép nới lỏng "khách hàng" nếu không tìm được đơn nào trùng (v3.0)
 function _timGiaGanNhat(o,loai){
   if(!o.diem_lay||!o.diem_tra)return null;
-  if(loai==='thau'&&!o.ma_thau_phu)return null;
+  if(loai==='thau'){
+    if(!o.ma_thau_phu)return null;
+    const matchThau=(x,coKhach)=>{
+      if(x.id===o.id||!x.locked)return false;
+      if(x.diem_lay!==o.diem_lay||x.diem_tra!==o.diem_tra)return false;
+      if(x.loai_cont!==o.loai_cont)return false;
+      if(x.loai_chuyen!==o.loai_chuyen)return false;
+      if(x.ma_thau_phu!==o.ma_thau_phu)return false;
+      if((+x.gia_cuoc_thau||0)<=0)return false;
+      if(coKhach&&x.ten_khach!==o.ten_khach)return false;
+      return true;
+    };
+    let list=ORDERS.filter(x=>matchThau(x,true));
+    if(!list.length)list=ORDERS.filter(x=>matchThau(x,false));
+    if(!list.length)return null;
+    list.sort((a,b)=>(b.ngay||'').localeCompare(a.ngay||''));
+    const best=list[0];
+    return{gia:best.gia_cuoc_thau,ma_don:best.ma_don,ngay:best.ngay};
+  }
   const match=(x,coLoaiChuyen)=>{
     if(x.id===o.id||!x.locked)return false;
     if(x.diem_lay!==o.diem_lay||x.diem_tra!==o.diem_tra)return false;
     if(x.ten_khach!==o.ten_khach)return false;
     if(x.loai_cont!==o.loai_cont)return false;
-    if(loai==='thau'&&x.ma_thau_phu!==o.ma_thau_phu)return false;
-    if(loai==='khach'&&(+x.gia_cuoc_khach||0)<=0)return false;
-    if(loai==='thau'&&(+x.gia_cuoc_thau||0)<=0)return false;
+    if((+x.gia_cuoc_khach||0)<=0)return false;
     if(coLoaiChuyen&&x.loai_chuyen!==o.loai_chuyen)return false;
     return true;
   };
@@ -523,7 +541,7 @@ function _timGiaGanNhat(o,loai){
   if(!list.length)return null;
   list.sort((a,b)=>(b.ngay||'').localeCompare(a.ngay||''));
   const best=list[0];
-  return{gia:loai==='thau'?best.gia_cuoc_thau:best.gia_cuoc_khach,ma_don:best.ma_don,ngay:best.ngay};
+  return{gia:best.gia_cuoc_khach,ma_don:best.ma_don,ngay:best.ngay};
 }
 function _renderGoiYCuoc(o,loai,inputId){
   const g=_timGiaGanNhat(o,loai);
