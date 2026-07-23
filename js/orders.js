@@ -219,7 +219,9 @@ function _goPage(){
 }
 
 // ==================== DETAIL PANEL ====================
+let _dpToken=0;
 async function openDetail(id, tab='info'){
+  const myToken=++_dpToken;
   // Bỏ selected cũ bằng id cụ thể thay vì querySelectorAll toàn bộ
   if(SEL&&SEL!==id){
     const old=document.querySelector(`#orders-tbody tr[onclick*="${SEL}"]`);
@@ -233,10 +235,10 @@ async function openDetail(id, tab='info'){
   const dp=document.getElementById('dp');
   dp.style.display='flex';dp.style.flexDirection='column';
   DP_TAB=tab;
-  await renderDP(o);
+  await renderDP(o,myToken);
 }
 
-async function renderDP(o){
+async function renderDP(o,myToken=null){
   const dp=document.getElementById('dp');
   const canM=canSee(['ke_toan','ceo']);
   const canViewCuoc=canSee(['ke_toan','ceo','thu_quy']); // thủ quỹ chỉ xem Tab Cước để đối chiếu, không sửa
@@ -249,6 +251,9 @@ async function renderDP(o){
   const chiHoCount=chiHoList.length;
   const totalCH=chiHoList.reduce((s,c)=>s+(+c.so_tien||0),0);
   const loi=(+o.gia_cuoc_khach||0)-(+o.gia_cuoc_thau||0)-totalCH;
+
+  // Nếu người dùng đã bấm sang đơn khác trong lúc đang chờ fetch, bỏ qua kết quả này (chống race condition)
+  if(myToken!==null&&myToken!==_dpToken)return;
 
   const canUnlockHdr=canSee(['quan_ly','ceo']);
   const lockBtnHdr=!o.locked&&editable
