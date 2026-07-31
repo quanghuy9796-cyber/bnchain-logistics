@@ -1364,11 +1364,11 @@ function openAddChiHo(vdId,maDon){
         </div>
         <div class="form-grid">
           <div class="form-group">
-            <label>Thu khách (VNĐ) *</label>
+            <label>Thu khách (VNĐ)</label>
             <input type="text" id="ch-thukh" placeholder="0"
               oninput="fmtOnInput(this)"
               style="border-color:var(--teal)">
-            <span style="font-size:10px;color:var(--teal)">Vào bảng kê thu khách</span>
+            <span style="font-size:10px;color:var(--teal)">Vào bảng kê thu khách — để 0 nếu công ty tự chịu</span>
           </div>
           ${coThau?`
           <div class="form-group">
@@ -1449,9 +1449,10 @@ async function editChiHo(chiHoId, vdId, maDon){
         <div style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px"><i class="ti ti-coins"></i> Số tiền</div>
         <div class="form-grid">
           <div class="form-group">
-            <label>Thu khách (VNĐ) *</label>
+            <label>Thu khách (VNĐ)</label>
             <input type="text" id="ch-thukh" value="${fmtInput(data.tien_thu_khach||data.so_tien||0)}"
               oninput="fmtOnInput(this)" style="border-color:var(--teal)">
+            <span style="font-size:10px;color:var(--teal)">Để 0 nếu công ty tự chịu</span>
           </div>
           ${coThau?`<div class="form-group">
             <label>Trả thầu (VNĐ)</label>
@@ -1493,7 +1494,9 @@ async function updateChiHo(chiHoId, vdId){
   const thuKH=parseNum(document.getElementById('ch-thukh').value);
   const traThau=parseNum(document.getElementById('ch-trathau')?.value||'0');
   const traLX=parseNum(document.getElementById('ch-tralaixe')?.value||'0');
-  if(!thuKH){toast('Vui lòng nhập số tiền thu khách','error');return;}
+  // Cho phép Thu khách = 0 (công ty tự chịu, không thu khách).
+  // Chỉ chặn khi cả 3 khoản đều = 0 → bản ghi rỗng không có ý nghĩa.
+  if(!thuKH&&!traThau&&!traLX){toast('Vui lòng nhập ít nhất một khoản tiền (Thu khách / Trả thầu / Trả lái xe)','error');return;}
   const data={
     loai_chi:document.getElementById('ch-loai').value,
     so_tien:thuKH,
@@ -1555,7 +1558,9 @@ async function saveChiHo(vdId,maDon){
   const thuKH=parseNum(document.getElementById('ch-thukh').value);
   const traThau=parseNum(document.getElementById('ch-trathau').value);
   const traLX=parseNum(document.getElementById('ch-tralaixe').value);
-  if(!thuKH){toast('Vui lòng nhập số tiền thu khách','error');return;}
+  // Cho phép Thu khách = 0 (công ty tự chịu, không thu khách).
+  // Chỉ chặn khi cả 3 khoản đều = 0 → bản ghi rỗng không có ý nghĩa.
+  if(!thuKH&&!traThau&&!traLX){toast('Vui lòng nhập ít nhất một khoản tiền (Thu khách / Trả thầu / Trả lái xe)','error');return;}
   const data={
     van_don_id:vdId,
     ma_don:maDon,
